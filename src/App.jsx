@@ -112,7 +112,7 @@ export default function App() {
                 <ChevronDown size={14} />
               </div>
             </div>
-            <ValueControl id="easeStrength" label="Ease strength" min="0" max="100" step="1" value="100" unit="%" />
+            <ValueControl id="easeStrength" label="Ease strength" min="0" max="300" step="1" value="100" unit="%" />
             <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
             <div className="control-row select-row">
               <label htmlFor="axis">Slice axis</label>

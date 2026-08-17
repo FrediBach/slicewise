@@ -12,22 +12,29 @@ const fmt = n => {
   return Number.isInteger(r) ? String(r) : String(r);
 };
 
-function easeLineGap(t, easing, strength=100){
-  let eased;
+function applyLineGapEase(t, easing){
   switch (easing){
-    case "sine-in": eased=1-Math.cos(t*Math.PI/2); break;
-    case "sine-out": eased=Math.sin(t*Math.PI/2); break;
-    case "sine-in-out": eased=-(Math.cos(Math.PI*t)-1)/2; break;
-    case "ease-in": eased=t*t; break;
-    case "ease-out": eased=1-(1-t)*(1-t); break;
-    case "ease-in-out": eased=t<.5 ? 2*t*t : 1-Math.pow(-2*t+2, 2)/2; break;
-    case "cubic-in": eased=t*t*t; break;
-    case "cubic-out": eased=1-Math.pow(1-t, 3); break;
-    case "cubic-in-out": eased=t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2, 3)/2; break;
+    case "sine-in": return 1-Math.cos(t*Math.PI/2);
+    case "sine-out": return Math.sin(t*Math.PI/2);
+    case "sine-in-out": return -(Math.cos(Math.PI*t)-1)/2;
+    case "ease-in": return t*t;
+    case "ease-out": return 1-(1-t)*(1-t);
+    case "ease-in-out": return t<.5 ? 2*t*t : 1-Math.pow(-2*t+2, 2)/2;
+    case "cubic-in": return t*t*t;
+    case "cubic-out": return 1-Math.pow(1-t, 3);
+    case "cubic-in-out": return t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2, 3)/2;
     default: return t;
   }
-  const mix=clamp(strength/100, 0, 1);
-  return t+(eased-t)*mix;
+}
+
+function easeLineGap(t, easing, strength=100){
+  const applications=clamp(strength/100, 0, 3);
+  const whole=Math.floor(applications), mix=applications-whole;
+  let eased=t;
+  for (let i=0;i<whole;i++) eased=applyLineGapEase(eased, easing);
+  if (!mix) return eased;
+  const next=applyLineGapEase(eased, easing);
+  return eased+(next-eased)*mix;
 }
 
 /* ------------------------------------------------------------- parsing */
