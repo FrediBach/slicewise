@@ -790,9 +790,14 @@ ${artwork}
 if (typeof document !== "undefined") {
 function fitBed(W, H){
   const wrap = $("bedwrap"), bed = $("bed");
-  const pad = 52;
-  const availW = Math.max(120, wrap.clientWidth - pad);
-  const availH = Math.max(120, wrap.clientHeight - pad);
+  const style = getComputedStyle(wrap);
+  const horizontalPadding = parseFloat(style.paddingLeft)+parseFloat(style.paddingRight);
+  const verticalPadding = parseFloat(style.paddingTop)+parseFloat(style.paddingBottom);
+  // Keep the registration marks inside the clipped workspace as well as the
+  // sheet itself. Reading computed padding also follows responsive CSS changes.
+  const edgeRoom = 8;
+  const availW = Math.max(120, wrap.clientWidth-horizontalPadding-edgeRoom);
+  const availH = Math.max(120, wrap.clientHeight-verticalPadding-edgeRoom);
   const s = Math.min(availW / W, availH / H);
   bed.style.width  = Math.round(W*s) + "px";
   bed.style.height = Math.round(H*s) + "px";
