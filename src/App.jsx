@@ -113,8 +113,11 @@ export default function App() {
         </div>
 
         <footer className="actions">
-          <Button id="save"><Download size={15} />Export SVG</Button>
-          <Button id="copy" variant="outline" aria-label="Copy SVG markup"><Clipboard size={15} /></Button>
+          <div className="action-buttons">
+            <Button id="save"><Download size={15} />Export SVG</Button>
+            <Button id="copy" variant="outline" aria-label="Copy SVG markup"><Clipboard size={15} /></Button>
+          </div>
+          <p>© 2026 Fredi Bach</p>
         </footer>
       </aside>
 

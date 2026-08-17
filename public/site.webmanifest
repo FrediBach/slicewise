@@ -1,0 +1,12 @@
+{
+  "name": "Slicewise",
+  "short_name": "Slicewise",
+  "description": "Turn 3D meshes into plotter-ready contour SVGs.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#dfe2de",
+  "theme_color": "#dfe2de",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

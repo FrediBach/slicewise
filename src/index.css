@@ -87,7 +87,9 @@ input[type="number"], input[type="text"], select { height: 27px; border: 1px sol
 .sheet-control input { width: 58px; text-align: right; }
 .sheet-control > span:not(.unit) { color: #a0a49f; }
 
-.actions { display: flex; gap: 8px; margin-top: auto; padding: 14px 20px; border-top: 1px solid var(--line); background: rgba(247,248,245,.96); }
+.actions { display: flex; flex-direction: column; gap: 10px; margin-top: auto; padding: 14px 20px 11px; border-top: 1px solid var(--line); background: rgba(247,248,245,.96); }
+.action-buttons { display: flex; gap: 8px; }
+.actions p { margin: 0; color: #a0a49f; font-size: 7.5px; letter-spacing: .09em; text-align: center; text-transform: uppercase; }
 .button { height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--ink); background: var(--ink); color: white; cursor: pointer; font-size: 9px; font-weight: 500; letter-spacing: .12em; text-transform: uppercase; transition: .16s ease; }
 .button:hover { border-color: var(--blue); background: var(--blue); }
 .button--default { flex: 1; }
@@ -95,7 +97,7 @@ input[type="number"], input[type="text"], select { height: 27px; border: 1px sol
 .button--outline:hover { color: white; }
 
 .workspace { min-width: 0; height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; background: #dfe2de; }
-.topbar { height: 70px; display: flex; align-items: center; justify-content: space-between; padding: 0 25px; border-bottom: 1px solid #c8ccc6; background: rgba(229,232,227,.72); backdrop-filter: blur(8px); }
+.topbar { height: 66px; display: flex; align-items: center; justify-content: space-between; padding: 0 25px; border-bottom: 1px solid #c8ccc6; background: rgba(229,232,227,.72); backdrop-filter: blur(8px); }
 .workspace-title { display: flex; align-items: center; gap: 8px; font-size: 9px; letter-spacing: .12em; text-transform: uppercase; }
 .workspace-title > span:last-child { color: #989d97; }
 .readout { display: flex; align-items: center; gap: 22px; color: #878c86; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
