@@ -619,7 +619,7 @@ function silhouetteEdges(mesh, P){
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
   az: 35, el: 24, roll: 0, zoom: 1,
-  lines: 40, quality: 7, axis: "up", hide: true, sil: true,
+  lines: 40, quality: 7, axis: "up", cutAz: 0, cutEl: 90, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
@@ -644,10 +644,21 @@ function project(mesh, cam, W, H, margin, zoom){
   return {sx, sy, sd, dmin, dmax, scale, ox, oy, f, r, u};
 }
 
-function scalarField(mesh, P, axis){
+function scalarField(mesh, P, axis, cutAz, cutEl){
   const {V} = mesh;
   const n = V.length/3;
   if (axis === "cam") return {S: P.sd, min: P.dmin, max: P.dmax, dir: P.f};
+  if (axis === "custom"){
+    const az=cutAz*Math.PI/180, el=cutEl*Math.PI/180;
+    const dir=[Math.cos(el)*Math.cos(az), Math.cos(el)*Math.sin(az), Math.sin(el)];
+    const S=new Float32Array(n);
+    let mn=Infinity, mx=-Infinity;
+    for (let i=0, v=0; v<n; i+=3, v++){
+      const s=V[i]*dir[0]+V[i+1]*dir[1]+V[i+2]*dir[2];
+      S[v]=s; if (s<mn) mn=s; if (s>mx) mx=s;
+    }
+    return {S, min:mn, max:mx, dir};
+  }
   // the mesh is always stored Z-up, so "height" is component 2
   const comp = axis === "x" ? 0 : axis === "y" ? 1 : 2;
   const S = new Float32Array(n);
@@ -665,7 +676,7 @@ export function computeContours(mesh, settings, quick){
   const W = settings.pw, H = settings.ph;
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
   const P = project(mesh, cam, W, H, settings.margin, settings.zoom);
-  const field = scalarField(mesh, P, settings.axis);
+  const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);
   const NV = mesh.V.length/3;
 
   let vis = null, visOutline = null, step = 0.6;
@@ -749,8 +760,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
+  const {az,el,roll,zoom,lines,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lines,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -892,8 +903,13 @@ function bindPair(id, key, after){
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom");
 bindPair("lines","lines"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
+bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
 
-$("axis").addEventListener("change", e => { state.axis = e.target.value; redraw(false); });
+$("axis").addEventListener("change", e => {
+  state.axis = e.target.value;
+  $("customAxis").hidden = state.axis !== "custom";
+  redraw(false);
+});
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });
@@ -909,6 +925,11 @@ $("colorHex").addEventListener("input", e => {
 });
 $("colorHex").addEventListener("change", () => redraw(false));
 function setInk(v, quick){ state.color = v; $("swatch").style.background = v; redraw(quick); }
+function activateCustomAxis(){
+  state.axis = "custom";
+  $("axis").value = "custom";
+  $("customAxis").hidden = false;
+}
 for (const id of ["pw","ph"]) $(id).addEventListener("input", e => {
   const v = clamp(parseFloat(e.target.value)||10, 10, 2000);
   state[id] = v; redraw(true);

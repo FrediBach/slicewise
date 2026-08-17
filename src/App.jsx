@@ -84,9 +84,14 @@ export default function App() {
                   <option value="cam">View depth · camera</option>
                   <option value="x">Model width</option>
                   <option value="y">Model depth</option>
+                  <option value="custom">Custom plane angle</option>
                 </select>
                 <ChevronDown size={14} />
               </div>
+            </div>
+            <div className="custom-axis" id="customAxis" hidden>
+              <ValueControl id="cutAz" label="Azimuth" min="-180" max="180" step="1" value="0" />
+              <ValueControl id="cutEl" label="Elevation" min="-90" max="90" step="1" value="90" />
             </div>
             <div className="check-grid">
               <Checkbox id="hide" defaultChecked>Remove hidden lines</Checkbox>

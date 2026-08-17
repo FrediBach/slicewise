@@ -73,6 +73,8 @@ input[type="number"], input[type="text"], select { height: 27px; border: 1px sol
 .select-wrap { position: relative; }
 .select-wrap select { width: 100%; appearance: none; padding-right: 28px; }
 .select-wrap svg { position: absolute; top: 7px; right: 8px; pointer-events: none; color: #858a84; }
+.custom-axis { margin: 8px 0 2px 7px; padding: 5px 0 5px 12px; border-left: 1px solid #c9cdc7; }
+.custom-axis[hidden] { display: none; }
 .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 12px; }
 .checkbox-row { display: flex; align-items: center; gap: 7px; color: #616660; font-size: 8.5px; cursor: pointer; }
 .checkbox-row input { position: absolute; opacity: 0; pointer-events: none; }
