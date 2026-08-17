@@ -3,13 +3,13 @@ import { Box, Check, ChevronDown, Clipboard, Download, FileUp, Rotate3d } from "
 import { Button } from "./components/ui/button";
 import { Section } from "./components/ui/section";
 
-function ValueControl({ id, label, min, max, step, value, unit }) {
+function ValueControl({ id, label, min, max, step, value, unit, disabled = false }) {
   return (
-    <div className="control-row">
+    <div className={`control-row${disabled ? " is-disabled" : ""}`} id={`${id}Control`}>
       <label htmlFor={id}>{label}</label>
       <div className="control-inputs">
-        <input type="range" id={id} min={min} max={max} step={step} defaultValue={value} />
-        <input type="number" id={`${id}N`} min={min} max={max} step={step} defaultValue={value} />
+        <input type="range" id={id} min={min} max={max} step={step} defaultValue={value} disabled={disabled} />
+        <input type="number" id={`${id}N`} min={min} max={max} step={step} defaultValue={value} disabled={disabled} />
         {unit && <span className="unit">{unit}</span>}
       </div>
     </div>
@@ -116,6 +116,7 @@ export default function App() {
               </div>
             </div>
             <ValueControl id="easeStrength" label="Ease strength" min="0" max="300" step="1" value="100" unit="%" />
+            <ValueControl id="easeCenter" label="Ease centre" min="5" max="95" step="1" value="50" unit="%" disabled />
             <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
             <div className="control-row select-row">
               <label htmlFor="axis">Slice axis</label>
