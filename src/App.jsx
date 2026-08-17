@@ -97,16 +97,19 @@ export default function App() {
                     <option value="sine-in">Sine · in</option>
                     <option value="sine-out">Sine · out</option>
                     <option value="sine-in-out">Sine · in &amp; out</option>
+                    <option value="sine-out-in">Sine · out &amp; in</option>
                   </optgroup>
                   <optgroup label="Quadratic">
                     <option value="ease-in">Quadratic · in</option>
                     <option value="ease-out">Quadratic · out</option>
                     <option value="ease-in-out">Quadratic · in &amp; out</option>
+                    <option value="ease-out-in">Quadratic · out &amp; in</option>
                   </optgroup>
                   <optgroup label="Cubic">
                     <option value="cubic-in">Cubic · in</option>
                     <option value="cubic-out">Cubic · out</option>
                     <option value="cubic-in-out">Cubic · in &amp; out</option>
+                    <option value="cubic-out-in">Cubic · out &amp; in</option>
                   </optgroup>
                 </select>
                 <ChevronDown size={14} />

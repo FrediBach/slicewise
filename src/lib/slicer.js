@@ -17,12 +17,15 @@ function applyLineGapEase(t, easing){
     case "sine-in": return 1-Math.cos(t*Math.PI/2);
     case "sine-out": return Math.sin(t*Math.PI/2);
     case "sine-in-out": return -(Math.cos(Math.PI*t)-1)/2;
+    case "sine-out-in": return t<.5 ? Math.sin(Math.PI*t)/2 : 1-Math.cos(Math.PI*(t-.5))/2;
     case "ease-in": return t*t;
     case "ease-out": return 1-(1-t)*(1-t);
     case "ease-in-out": return t<.5 ? 2*t*t : 1-Math.pow(-2*t+2, 2)/2;
+    case "ease-out-in": return t<.5 ? (1-Math.pow(1-2*t, 2))/2 : (1+Math.pow(2*t-1, 2))/2;
     case "cubic-in": return t*t*t;
     case "cubic-out": return 1-Math.pow(1-t, 3);
     case "cubic-in-out": return t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2, 3)/2;
+    case "cubic-out-in": return t<.5 ? (1-Math.pow(1-2*t, 3))/2 : (1+Math.pow(2*t-1, 3))/2;
     default: return t;
   }
 }
