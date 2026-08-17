@@ -103,6 +103,7 @@ input[type="number"], input[type="text"], select { height: 27px; border: 1px sol
 .readout { display: flex; align-items: center; gap: 22px; color: #878c86; font-size: 8px; letter-spacing: .08em; text-transform: uppercase; }
 .readout b { margin-left: 4px; color: #333633; font-weight: 500; font-variant-numeric: tabular-nums; }
 .bedwrap { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden; padding: 54px; }
+.bedwrap.busy { cursor: progress; }
 .canvas-grid { position: absolute; inset: 0; opacity: .34; background-image: linear-gradient(rgba(35,39,35,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(35,39,35,.07) 1px, transparent 1px); background-size: 24px 24px; mask-image: radial-gradient(circle, black 10%, transparent 75%); }
 .bed { position: relative; max-width: 100%; max-height: 100%; background: white; box-shadow: 0 1px 1px rgba(20,23,20,.08), 0 24px 60px -28px rgba(24,28,24,.55); touch-action: none; cursor: grab; z-index: 1; }
 .bed.dragging { cursor: grabbing; }

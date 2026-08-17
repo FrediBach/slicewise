@@ -659,19 +659,18 @@ function scalarField(mesh, P, axis){
   return {S, min: mn, max: mx, dir};
 }
 
-function build(quick){
-  if (!state.mesh) return;
+export function computeContours(mesh, settings, quick){
   const t0 = performance.now();
-  const W = state.pw, H = state.ph;
-  const cam = cameraBasis(state.az, state.el, state.roll);
-  const P = project(state.mesh, cam, W, H, state.margin, state.zoom);
-  const field = scalarField(state.mesh, P, state.axis);
-  const NV = state.mesh.V.length/3;
+  const W = settings.pw, H = settings.ph;
+  const cam = cameraBasis(settings.az, settings.el, settings.roll);
+  const P = project(mesh, cam, W, H, settings.margin, settings.zoom);
+  const field = scalarField(mesh, P, settings.axis);
+  const NV = mesh.V.length/3;
 
   let vis = null, visOutline = null, step = 0.6;
-  if (state.hide){
+  if (settings.hide){
     const res = quick ? 320 : 1100;
-    const D = buildDepth(P, state.mesh.T, W, H, res);
+    const D = buildDepth(P, mesh.T, W, H, res);
     const depthRange = (P.dmax - P.dmin) || 1;
     vis = makeVisibleTest(D, depthRange * 0.006 + 1e-6, 1);
     // outlines sit exactly on the depth cliff, so they need a wider, kinder test
@@ -680,18 +679,18 @@ function build(quick){
   }
 
   const out = [];
-  const N = state.lines;
-  const quality = clamp(Math.round(state.quality), 1, 10);
+  const N = settings.lines;
+  const quality = clamp(Math.round(settings.quality), 1, 10);
   const curveStrength = (quality-1)/9;
   const span = field.max - field.min;
   for (let i=0;i<N;i++){
     const level = field.min + span * (i + 0.5) / N;
-    const {pts, segs} = sliceLevel(P, state.mesh, field.S, level, NV, field.dir, curveStrength);
+    const {pts, segs} = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
     if (!segs.length) continue;
     for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out);
   }
-  if (state.sil){
-    const {pts, segs} = silhouetteEdges(state.mesh, P);
+  if (settings.sil){
+    const {pts, segs} = silhouetteEdges(mesh, P);
     if (segs.length){
       for (const poly of chain(pts, segs)) emitPath(poly, pts, visOutline, step, out);
     }
@@ -707,27 +706,18 @@ function build(quick){
     d += serialiseRun(run, quality);
     nodes += run.length/2; paths++;
   }
-  const bg = state.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
+  const bg = settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
   const svg =
 `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
-${bg}<g fill="none" stroke="${state.color}" stroke-width="${state.sw}" stroke-linecap="round" stroke-linejoin="round">
+${bg}<g fill="none" stroke="${settings.color}" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round">
 <path d="${d}"/>
 </g>
 </svg>`;
-  state.svg = svg;
-
-  const bed = $("bed");
-  fitBed(W, H);
-  bed.innerHTML = svg;
-
   const ms = performance.now() - t0;
-  $("rPaths").textContent = paths.toLocaleString();
-  $("rPts").textContent = Math.round(nodes).toLocaleString();
-  $("rSize").textContent = (new Blob([svg]).size/1024).toFixed(1) + " kB";
-  $("rMs").textContent = Math.round(ms) + " ms";
-  return ms;
+  return {svg, paths, nodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick};
 }
 
+if (typeof document !== "undefined") {
 function fitBed(W, H){
   const wrap = $("bedwrap"), bed = $("bed");
   const pad = 52;
@@ -738,18 +728,83 @@ function fitBed(W, H){
   bed.style.height = Math.round(H*s) + "px";
 }
 
-/* --------------------------------------------------- adaptive redraw */
-let lastMs = 0, pending = false, quickMode = false;
-function redraw(quick){
-  if (pending) return;
-  pending = true;
-  requestAnimationFrame(() => {
-    pending = false;
-    lastMs = build(quick && lastMs > 45) || 0;
-  });
+/* ------------------------------------------------ worker + smart redraw */
+const renderWorker = new Worker(new URL("./slicer-worker.js", import.meta.url), {type:"module"});
+let requestId = 0, queuedRender = null, renderInFlight = false;
+let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
+
+function settingsSnapshot(){
+  const {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg} = state;
+  return {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg};
 }
+function throttleDelay(){
+  const triangles = state.mesh ? state.mesh.T.length/3 : 0;
+  const visibilityCost = state.hide ? 1.55 : 1;
+  const curveCost = 1 + Math.max(0, state.quality-1)*.055;
+  const score = triangles * state.lines * visibilityCost * curveCost;
+  let complexityDelay = 150;
+  if (score < 450000) complexityDelay = 16;
+  else if (score < 1500000) complexityDelay = 32;
+  else if (score < 4000000) complexityDelay = 60;
+  else if (score < 9000000) complexityDelay = 100;
+  // Adapt when a particular device or mesh is slower than the static estimate.
+  return Math.min(180, Math.max(complexityDelay, observedRenderMs*.4));
+}
+function applyRender(result){
+  observedRenderMs = observedRenderMs ? observedRenderMs*.72+result.ms*.28 : result.ms;
+  state.svg = result.svg;
+  fitBed(result.W, result.H);
+  $("bed").innerHTML = result.svg;
+  $("rPaths").textContent = result.paths.toLocaleString();
+  $("rPts").textContent = Math.round(result.nodes).toLocaleString();
+  $("rSize").textContent = (result.bytes/1024).toFixed(1) + " kB";
+  $("rMs").textContent = Math.round(result.ms) + " ms";
+}
+function dispatchRender(){
+  if (renderInFlight || !queuedRender) return;
+  const request = queuedRender;
+  queuedRender = null;
+  renderInFlight = true;
+  lastDispatch = performance.now();
+  $("bedwrap").classList.add("busy");
+  renderWorker.postMessage({type:"render", ...request});
+}
+function scheduleRender(){
+  if (renderInFlight || !queuedRender) return;
+  clearTimeout(renderTimer);
+  const wait = queuedRender.quick ? Math.max(0, throttleDelay()-(performance.now()-lastDispatch)) : 0;
+  if (wait > 1) renderTimer = setTimeout(dispatchRender, wait);
+  else requestAnimationFrame(dispatchRender);
+}
+function redraw(quick){
+  if (!state.mesh) return;
+  // Preserve a queued final-quality request; otherwise only the latest input
+  // matters. This coalesces pointer and slider events while the worker is busy.
+  const renderQuick = quick && queuedRender?.quick !== false;
+  queuedRender = {id:++requestId, meshVersion, quick:renderQuick, settings:settingsSnapshot()};
+  scheduleRender();
+}
+renderWorker.addEventListener("message", ({data}) => {
+  renderInFlight = false;
+  if (data.meshVersion === meshVersion && data.type === "result") applyRender(data.result);
+  else if (data.meshVersion === meshVersion && data.type === "error") showError(data.message);
+  if (!queuedRender) $("bedwrap").classList.remove("busy");
+  scheduleRender();
+});
+renderWorker.addEventListener("error", () => {
+  renderInFlight = false;
+  $("bedwrap").classList.remove("busy");
+  showError("The contour worker stopped unexpectedly — reload the page to restart it");
+});
 
 /* --------------------------------------------------------- load model */
+function sendMeshToWorker(mesh){
+  const V=mesh.V.slice(), T=mesh.T.slice(), N=mesh.N.slice();
+  renderWorker.postMessage(
+    {type:"mesh", meshVersion:++meshVersion, mesh:{V:V.buffer, T:T.buffer, N:N.buffer}},
+    [V.buffer, T.buffer, N.buffer]
+  );
+}
 function setMesh(raw, name){
   try{
     let m = weld(raw);
@@ -762,11 +817,11 @@ function setMesh(raw, name){
     }
     state.mesh = m;
     state.mesh.N = vertexNormals(state.mesh.V, state.mesh.T);
+    sendMeshToWorker(state.mesh);
     state.name = name;
     $("mName").textContent = name;
     $("mTris").textContent = (m.T.length/3).toLocaleString();
     $("mErr").hidden = true;
-    lastMs = 0;
     redraw(false);
   } catch(e){ showError(e.message); }
 }
@@ -812,10 +867,12 @@ function bindPair(id, key, after){
     if (from !== "s") s.value = clamp(v, parseFloat(s.min), parseFloat(s.max));
     if (from !== "n") n.value = v;
     if (after) after();
-    redraw(false);
+    redraw(true);
   };
   s.addEventListener("input", e => apply(e.target.value, "s"));
   n.addEventListener("input", e => apply(e.target.value, "n"));
+  s.addEventListener("change", () => redraw(false));
+  n.addEventListener("change", () => redraw(false));
 }
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom");
 bindPair("lines","lines"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
@@ -824,19 +881,22 @@ $("axis").addEventListener("change", e => { state.axis = e.target.value; redraw(
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });
-$("color").addEventListener("input", e => { setInk(e.target.value); $("colorHex").value = e.target.value; });
+$("color").addEventListener("input", e => { setInk(e.target.value, true); $("colorHex").value = e.target.value; });
+$("color").addEventListener("change", () => redraw(false));
 $("colorHex").addEventListener("input", e => {
   const v = e.target.value.trim();
   if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(v)){
     const full = v.length===4 ? "#"+v[1]+v[1]+v[2]+v[2]+v[3]+v[3] : v;
-    $("color").value = full; setInk(v);
+    $("color").value = full; setInk(v, true);
   }
 });
-function setInk(v){ state.color = v; $("swatch").style.background = v; redraw(false); }
+$("colorHex").addEventListener("change", () => redraw(false));
+function setInk(v, quick){ state.color = v; $("swatch").style.background = v; redraw(quick); }
 for (const id of ["pw","ph"]) $(id).addEventListener("input", e => {
   const v = clamp(parseFloat(e.target.value)||10, 10, 2000);
-  state[id] = v; redraw(false);
+  state[id] = v; redraw(true);
 });
+for (const id of ["pw","ph"]) $(id).addEventListener("change", () => redraw(false));
 $("upZ").addEventListener("click", () => setUp(false));
 $("upY").addEventListener("click", () => setUp(true));
 function setUp(y){
@@ -867,6 +927,7 @@ document.addEventListener("drop", e => {
 (function orbit(){
   const bed = $("bed");
   let sx=0, sy=0, az0=0, el0=0, ro0=0, shift=false, id=null;
+  let wheelEnd = 0;
   bed.addEventListener("pointerdown", e => {
     id = e.pointerId; bed.setPointerCapture(id);
     sx = e.clientX; sy = e.clientY; az0 = state.az; el0 = state.el; ro0 = state.roll;
@@ -903,6 +964,8 @@ document.addEventListener("drop", e => {
     state.zoom = Math.round(z*100)/100;
     $("zoom").value = state.zoom; $("zoomN").value = state.zoom;
     redraw(true);
+    clearTimeout(wheelEnd);
+    wheelEnd = setTimeout(() => redraw(false), 140);
   }, {passive:false});
 })();
 
@@ -934,3 +997,4 @@ function toast(msg){
 rawCache = torusKnot();
 setMesh(rawCache, "demo · torus knot");
 window.addEventListener("resize", () => redraw(true));
+}
