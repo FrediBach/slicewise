@@ -469,28 +469,53 @@ function simplify(run, tol){
   return out;
 }
 
-/* --------------------------------------- corner-cut contour smoothing */
-function smoothRun(run, passes){
-  // Chaikin subdivision rounds the piecewise-linear intersections produced by
-  // a triangle mesh. Endpoints remain fixed; closed contours stay closed.
-  let out = run;
-  for (let pass=0; pass<passes; pass++){
-    const n = out.length/2;
-    if (n < 3) break;
-    const closed = Math.hypot(out[0]-out[(n-1)*2], out[1]-out[(n-1)*2+1]) < 1e-5;
-    const next = [];
-    if (!closed) next.push(out[0], out[1]);
-    const limit = closed ? n-1 : n-1;
-    for (let i=0; i<limit; i++){
-      const j = (i+1) % n;
-      const ax=out[i*2], ay=out[i*2+1], bx=out[j*2], by=out[j*2+1];
-      next.push(ax*.75+bx*.25, ay*.75+by*.25, ax*.25+bx*.75, ay*.25+by*.75);
+/* ------------------------------------------ adaptive SVG curve output */
+function serialiseRun(run, quality){
+  const n = run.length/2;
+  if (n < 2) return "";
+  const closed = n > 3 && Math.hypot(run[0]-run[(n-1)*2], run[1]-run[(n-1)*2+1]) < 1e-5;
+  const count = closed ? n-1 : n;
+  if (count < 2) return "";
+  const point = (i) => {
+    if (closed) i = (i % count + count) % count;
+    else i = clamp(i, 0, count-1);
+    return [run[i*2], run[i*2+1]];
+  };
+  const curvature = (i) => {
+    if (!closed && (i <= 0 || i >= count-1)) return 0;
+    const a=point(i-1), b=point(i), c=point(i+1);
+    const ux=b[0]-a[0], uy=b[1]-a[1], vx=c[0]-b[0], vy=c[1]-b[1];
+    const den = Math.hypot(ux,uy) * Math.hypot(vx,vy);
+    return den ? Math.abs(ux*vy-uy*vx)/den : 0;
+  };
+
+  // Catmull–Rom tangents become cubic controls. Nearly straight spans stay as
+  // compact line commands; curved spans gain smooth controls without inserting
+  // uniformly spaced on-curve nodes.
+  const tension = 0.62 + quality*0.038;
+  const bendThreshold = 0.045 - quality*0.003;
+  const segments = closed ? count : count-1;
+  let d = "M" + fmt(run[0]) + " " + fmt(run[1]);
+  for (let i=0; i<segments; i++){
+    const p0=point(i-1), p1=point(i), p2=point(i+1), p3=point(i+2);
+    const bend = Math.max(curvature(i), curvature(i+1));
+    if (quality === 1 || bend < bendThreshold){
+      d += "L" + fmt(p2[0]) + " " + fmt(p2[1]);
+      continue;
     }
-    if (closed) next.push(next[0], next[1]);
-    else next.push(out[(n-1)*2], out[(n-1)*2+1]);
-    out = next;
+    const k = tension/6;
+    const segLen = Math.hypot(p2[0]-p1[0], p2[1]-p1[1]);
+    const cap = segLen*.45;
+    let t1x=(p2[0]-p0[0])*k, t1y=(p2[1]-p0[1])*k;
+    let t2x=(p3[0]-p1[0])*k, t2y=(p3[1]-p1[1])*k;
+    const t1l=Math.hypot(t1x,t1y), t2l=Math.hypot(t2x,t2y);
+    if (t1l > cap){ t1x*=cap/t1l; t1y*=cap/t1l; }
+    if (t2l > cap){ t2x*=cap/t2l; t2y*=cap/t2l; }
+    const c1x=p1[0]+t1x, c1y=p1[1]+t1y;
+    const c2x=p2[0]-t2x, c2y=p2[1]-t2y;
+    d += "C" + fmt(c1x) + " " + fmt(c1y) + " " + fmt(c2x) + " " + fmt(c2y) + " " + fmt(p2[0]) + " " + fmt(p2[1]);
   }
-  return out;
+  return d + (closed ? "Z" : "");
 }
 
 /* ------------------------------------------------------- silhouette */
@@ -610,16 +635,15 @@ function build(quick){
     }
   }
 
-  // ---- serialise: simplify first, then progressively smooth mesh facets.
+  // ---- serialise: RDP concentrates anchors where deviation is greatest;
+  // curved spans use Béziers while flat spans remain compact straight lines.
   let d = "", nodes = 0, paths = 0;
   for (const raw of out){
     const quality = clamp(Math.round(state.quality), 1, 10);
     const tolerance = 0.06 * Math.pow(0.72, quality-1);
-    const smoothingPasses = Math.min(4, Math.floor((quality-1)/2));
-    const run = smoothRun(simplify(raw, tolerance), smoothingPasses);
+    const run = simplify(raw, tolerance);
     if (run.length < 4) continue;
-    d += "M" + fmt(run[0]) + " " + fmt(run[1]);
-    for (let i=2;i<run.length;i+=2) d += "L" + fmt(run[i]) + " " + fmt(run[i+1]);
+    d += serialiseRun(run, quality);
     nodes += run.length/2; paths++;
   }
   const bg = state.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
