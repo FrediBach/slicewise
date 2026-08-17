@@ -200,6 +200,24 @@ function weld(raw){
   return {V, T: t2.subarray(0,n)};
 }
 
+function vertexNormals(V, T){
+  const N = new Float32Array(V.length);
+  for (let i=0;i<T.length;i+=3){
+    const a=T[i]*3, b=T[i+1]*3, c=T[i+2]*3;
+    const abx=V[b]-V[a], aby=V[b+1]-V[a+1], abz=V[b+2]-V[a+2];
+    const acx=V[c]-V[a], acy=V[c+1]-V[a+1], acz=V[c+2]-V[a+2];
+    const nx=aby*acz-abz*acy, ny=abz*acx-abx*acz, nz=abx*acy-aby*acx;
+    N[a]+=nx; N[a+1]+=ny; N[a+2]+=nz;
+    N[b]+=nx; N[b+1]+=ny; N[b+2]+=nz;
+    N[c]+=nx; N[c+1]+=ny; N[c+2]+=nz;
+  }
+  for (let i=0;i<N.length;i+=3){
+    const len=Math.hypot(N[i],N[i+1],N[i+2]) || 1;
+    N[i]/=len; N[i+1]/=len; N[i+2]/=len;
+  }
+  return N;
+}
+
 /* ------------------------------------------------------ demo geometry */
 function torusKnot(p=2, q=3, R=1, r=0.26, tubeSeg=360, radSeg=28){
   const verts = [], tris = [];
@@ -268,18 +286,56 @@ function cameraBasis(azDeg, elDeg, rollDeg){
 }
 
 /* ------------------------------------------------- marching triangles */
-function sliceLevel(P, T, S, level, NV){
+function sliceLevel(P, mesh, S, level, NV, scalarDir, curveStrength){
   // returns {pts:[x,y,d,...], segs:[i,j,...]} for one cutting plane
+  const {T, V, N} = mesh;
   const idx = new Map();          // edge key -> point index
   const pts = [], segs = [];
-  const {sx, sy, sd} = P;
+  const {sx, sy, sd, r, u, f, scale, ox, oy} = P;
   const getPoint = (a, b) => {
     const key = a < b ? a*NV + b : b*NV + a;
     let id = idx.get(key);
     if (id !== undefined) return id;
-    const t = (level - S[a]) / (S[b] - S[a]);
+    let t = (level - S[a]) / (S[b] - S[a]);
     id = pts.length/3;
-    pts.push(sx[a] + (sx[b]-sx[a])*t, sy[a] + (sy[b]-sy[a])*t, sd[a] + (sd[b]-sd[a])*t);
+    if (!curveStrength || !N){
+      pts.push(sx[a] + (sx[b]-sx[a])*t, sy[a] + (sy[b]-sy[a])*t, sd[a] + (sd[b]-sd[a])*t);
+      idx.set(key, id);
+      return id;
+    }
+
+    const ai=a*3, bi=b*3;
+    const ax=V[ai], ay=V[ai+1], az=V[ai+2];
+    const bx=V[bi], by=V[bi+1], bz=V[bi+2];
+    const ex=bx-ax, ey=by-ay, ez=bz-az;
+    const da=ex*N[ai]+ey*N[ai+1]+ez*N[ai+2];
+    const db=ex*N[bi]+ey*N[bi+1]+ez*N[bi+2];
+    const tax=ex-N[ai]*da, tay=ey-N[ai+1]*da, taz=ez-N[ai+2]*da;
+    const tbx=ex-N[bi]*db, tby=ey-N[bi+1]*db, tbz=ez-N[bi+2]*db;
+    const sample = (q) => {
+      const q2=q*q, q3=q2*q;
+      const h00=2*q3-3*q2+1, h10=q3-2*q2+q;
+      const h01=-2*q3+3*q2, h11=q3-q2;
+      const lx=ax+ex*q, ly=ay+ey*q, lz=az+ez*q;
+      const hx=h00*ax+h10*tax+h01*bx+h11*tbx;
+      const hy=h00*ay+h10*tay+h01*by+h11*tby;
+      const hz=h00*az+h10*taz+h01*bz+h11*tbz;
+      return [lx+(hx-lx)*curveStrength, ly+(hy-ly)*curveStrength, lz+(hz-lz)*curveStrength];
+    };
+    let lo=0, hi=1;
+    const startAbove = S[a] > level;
+    for (let k=0;k<12;k++){
+      t=(lo+hi)*.5;
+      const p=sample(t);
+      const value=p[0]*scalarDir[0]+p[1]*scalarDir[1]+p[2]*scalarDir[2];
+      if ((value > level) === startAbove) lo=t; else hi=t;
+    }
+    const p=sample((lo+hi)*.5);
+    pts.push(
+      ox+(p[0]*r[0]+p[1]*r[1]+p[2]*r[2])*scale,
+      oy-(p[0]*u[0]+p[1]*u[1]+p[2]*u[2])*scale,
+      p[0]*f[0]+p[1]*f[1]+p[2]*f[2]
+    );
     idx.set(key, id);
     return id;
   };
@@ -581,13 +637,13 @@ function project(mesh, cam, W, H, margin, zoom){
     sd[v] = d;
     if (d<dmin) dmin=d; if (d>dmax) dmax=d;
   }
-  return {sx, sy, sd, dmin, dmax, scale};
+  return {sx, sy, sd, dmin, dmax, scale, ox, oy, f, r, u};
 }
 
 function scalarField(mesh, P, axis){
   const {V} = mesh;
   const n = V.length/3;
-  if (axis === "cam") return {S: P.sd, min: P.dmin, max: P.dmax};
+  if (axis === "cam") return {S: P.sd, min: P.dmin, max: P.dmax, dir: P.f};
   // the mesh is always stored Z-up, so "height" is component 2
   const comp = axis === "x" ? 0 : axis === "y" ? 1 : 2;
   const S = new Float32Array(n);
@@ -596,7 +652,8 @@ function scalarField(mesh, P, axis){
     const s = V[i]; S[v]=s;
     if (s<mn) mn=s; if (s>mx) mx=s;
   }
-  return {S, min: mn, max: mx};
+  const dir = comp === 0 ? [1,0,0] : comp === 1 ? [0,1,0] : [0,0,1];
+  return {S, min: mn, max: mx, dir};
 }
 
 function build(quick){
@@ -621,10 +678,12 @@ function build(quick){
 
   const out = [];
   const N = state.lines;
+  const quality = clamp(Math.round(state.quality), 1, 10);
+  const curveStrength = (quality-1)/9;
   const span = field.max - field.min;
   for (let i=0;i<N;i++){
     const level = field.min + span * (i + 0.5) / N;
-    const {pts, segs} = sliceLevel(P, state.mesh.T, field.S, level, NV);
+    const {pts, segs} = sliceLevel(P, state.mesh, field.S, level, NV, field.dir, curveStrength);
     if (!segs.length) continue;
     for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out);
   }
@@ -639,7 +698,6 @@ function build(quick){
   // curved spans use Béziers while flat spans remain compact straight lines.
   let d = "", nodes = 0, paths = 0;
   for (const raw of out){
-    const quality = clamp(Math.round(state.quality), 1, 10);
     const tolerance = 0.06 * Math.pow(0.72, quality-1);
     const run = simplify(raw, tolerance);
     if (run.length < 4) continue;
@@ -700,6 +758,7 @@ function setMesh(raw, name){
       }
     }
     state.mesh = m;
+    state.mesh.N = vertexNormals(state.mesh.V, state.mesh.T);
     state.name = name;
     $("mName").textContent = name;
     $("mTris").textContent = (m.T.length/3).toLocaleString();
