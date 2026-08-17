@@ -469,6 +469,30 @@ function simplify(run, tol){
   return out;
 }
 
+/* --------------------------------------- corner-cut contour smoothing */
+function smoothRun(run, passes){
+  // Chaikin subdivision rounds the piecewise-linear intersections produced by
+  // a triangle mesh. Endpoints remain fixed; closed contours stay closed.
+  let out = run;
+  for (let pass=0; pass<passes; pass++){
+    const n = out.length/2;
+    if (n < 3) break;
+    const closed = Math.hypot(out[0]-out[(n-1)*2], out[1]-out[(n-1)*2+1]) < 1e-5;
+    const next = [];
+    if (!closed) next.push(out[0], out[1]);
+    const limit = closed ? n-1 : n-1;
+    for (let i=0; i<limit; i++){
+      const j = (i+1) % n;
+      const ax=out[i*2], ay=out[i*2+1], bx=out[j*2], by=out[j*2+1];
+      next.push(ax*.75+bx*.25, ay*.75+by*.25, ax*.25+bx*.75, ay*.25+by*.75);
+    }
+    if (closed) next.push(next[0], next[1]);
+    else next.push(out[(n-1)*2], out[(n-1)*2+1]);
+    out = next;
+  }
+  return out;
+}
+
 /* ------------------------------------------------------- silhouette */
 function silhouetteEdges(mesh, P){
   const {T} = mesh;
@@ -511,7 +535,7 @@ function silhouetteEdges(mesh, P){
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
   az: 35, el: 24, roll: 0, zoom: 1,
-  lines: 40, axis: "up", hide: true, sil: true,
+  lines: 40, quality: 7, axis: "up", hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   svg: "", dragging: false
 };
@@ -586,10 +610,13 @@ function build(quick){
     }
   }
 
-  // ---- serialise (drop nodes that sit within 0.02 mm of a straight line)
+  // ---- serialise: simplify first, then progressively smooth mesh facets.
   let d = "", nodes = 0, paths = 0;
   for (const raw of out){
-    const run = simplify(raw, 0.02);
+    const quality = clamp(Math.round(state.quality), 1, 10);
+    const tolerance = 0.06 * Math.pow(0.72, quality-1);
+    const smoothingPasses = Math.min(4, Math.floor((quality-1)/2));
+    const run = smoothRun(simplify(raw, tolerance), smoothingPasses);
     if (run.length < 4) continue;
     d += "M" + fmt(run[0]) + " " + fmt(run[1]);
     for (let i=2;i<run.length;i+=2) d += "L" + fmt(run[i]) + " " + fmt(run[i+1]);
@@ -705,7 +732,7 @@ function bindPair(id, key, after){
   n.addEventListener("input", e => apply(e.target.value, "n"));
 }
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom");
-bindPair("lines","lines"); bindPair("sw","sw"); bindPair("margin","margin");
+bindPair("lines","lines"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 
 $("axis").addEventListener("change", e => { state.axis = e.target.value; redraw(false); });
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });

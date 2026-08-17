@@ -75,6 +75,7 @@ export default function App() {
 
           <Section title="Contours" badge="02">
             <ValueControl id="lines" label="Line count" min="1" max="200" step="1" value="40" />
+            <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
             <div className="control-row select-row">
               <label htmlFor="axis">Slice axis</label>
               <div className="select-wrap">
