@@ -88,6 +88,18 @@ export default function App() {
 
           <Section title="Contours" badge="02">
             <ValueControl id="lines" label="Line count" min="1" max="200" step="1" value="40" />
+            <div className="control-row select-row">
+              <label htmlFor="gapEase">Gap easing</label>
+              <div className="select-wrap">
+                <select id="gapEase" defaultValue="linear">
+                  <option value="linear">Linear</option>
+                  <option value="ease-in">Ease in</option>
+                  <option value="ease-out">Ease out</option>
+                  <option value="ease-in-out">Ease in &amp; out</option>
+                </select>
+                <ChevronDown size={14} />
+              </div>
+            </div>
             <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
             <div className="control-row select-row">
               <label htmlFor="axis">Slice axis</label>

@@ -12,6 +12,15 @@ const fmt = n => {
   return Number.isInteger(r) ? String(r) : String(r);
 };
 
+function easeLineGap(t, easing){
+  switch (easing){
+    case "ease-in": return t*t;
+    case "ease-out": return 1-(1-t)*(1-t);
+    case "ease-in-out": return t<.5 ? 2*t*t : 1-Math.pow(-2*t+2, 2)/2;
+    default: return t;
+  }
+}
+
 /* ------------------------------------------------------------- parsing */
 function parseSTL(buf){
   const dv = new DataView(buf);
@@ -663,7 +672,7 @@ function silhouetteEdges(mesh, P){
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
   az: 35, el: 24, roll: 0, zoom: 1,
-  lines: 40, quality: 7, axis: "up", cutAz: 0, cutEl: 90, hide: true, sil: true,
+  lines: 40, gapEase: "linear", quality: 7, axis: "up", cutAz: 0, cutEl: 90, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
@@ -740,7 +749,8 @@ export function computeContours(mesh, settings, quick){
   const curveStrength = (quality-1)/9;
   const span = field.max - field.min;
   for (let i=0;i<N;i++){
-    const level = field.min + span * (i + 0.5) / N;
+    const position = easeLineGap((i + 0.5) / N, settings.gapEase);
+    const level = field.min + span * position;
     const {pts, segs} = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
     if (!segs.length) continue;
     for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out);
@@ -809,8 +819,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lines,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lines,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
+  const {az,el,roll,zoom,lines,gapEase,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lines,gapEase,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -978,6 +988,7 @@ $("axis").addEventListener("change", e => {
   $("customAxis").hidden = state.axis !== "custom";
   redraw(false);
 });
+$("gapEase").addEventListener("change", e => { state.gapEase = e.target.value; redraw(false); });
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });
