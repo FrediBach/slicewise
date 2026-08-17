@@ -68,7 +68,7 @@ export default function App() {
 
           <Section title="View" badge={<><Rotate3d size={12} /> drag canvas</>}>
             <ValueControl id="az" label="Azimuth" min="-180" max="180" step="1" value="35" />
-            <ValueControl id="el" label="Elevation" min="-89" max="89" step="1" value="24" />
+            <ValueControl id="el" label="Elevation" min="-180" max="180" step="1" value="24" />
             <ValueControl id="rl" label="Roll" min="-180" max="180" step="1" value="0" />
             <ValueControl id="zoom" label="Scale" min="0.2" max="3" step="0.01" value="1" />
           </Section>

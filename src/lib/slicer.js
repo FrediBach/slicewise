@@ -272,9 +272,9 @@ function cameraBasis(azDeg, elDeg, rollDeg){
   // camera sits on the unit sphere, looks at the origin. Z is up.
   const c = [Math.cos(el)*Math.cos(az), Math.cos(el)*Math.sin(az), Math.sin(el)];
   const f = [-c[0], -c[1], -c[2]];                 // view direction
-  let up = Math.abs(f[2]) > 0.999 ? [0,1,0] : [0,0,1];
-  let r = [f[1]*up[2]-f[2]*up[1], f[2]*up[0]-f[0]*up[2], f[0]*up[1]-f[1]*up[0]];
-  let rl = Math.hypot(...r); r = r.map(v=>v/rl);
+  // An analytical horizontal axis stays defined at the poles and remains
+  // continuous as elevation travels through a full rotation.
+  let r = [-Math.sin(az), Math.cos(az), 0];
   let u = [r[1]*f[2]-r[2]*f[1], r[2]*f[0]-r[0]*f[2], r[0]*f[1]-r[1]*f[0]];
   if (ro){
     const cr = Math.cos(ro), sr = Math.sin(ro);
@@ -882,7 +882,9 @@ document.addEventListener("drop", e => {
       let a = az0 - dx*0.45;
       a = ((a + 180) % 360 + 360) % 360 - 180;
       state.az = Math.round(a);
-      state.el = clamp(Math.round(el0 + dy*0.45), -89, 89);
+      let e = el0 + dy*0.45;
+      e = ((e + 180) % 360 + 360) % 360 - 180;
+      state.el = Math.round(e);
       $("az").value = state.az; $("azN").value = state.az;
       $("el").value = state.el; $("elN").value = state.el;
     }
