@@ -476,7 +476,10 @@ function emitPath(poly, pts, visible, step, out){
         if (visible(ax+(bx-ax)*t, ay+(by-ay)*t, ad+(bd-ad)*t)) break;
         s++;
       }
-      if (s >= n) break;
+      // A completely hidden segment breaks continuity. Keeping the previous
+      // run open would make a later visible segment bridge this gap with one
+      // long, view-dependent straight line.
+      if (s >= n){ flush(); break; }
       let e = s;
       while (e < n){
         const t = (e+0.5)/n;
