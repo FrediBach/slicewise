@@ -109,6 +109,9 @@ export default function App() {
             </div>
             <ValueControl id="margin" label="Margin" min="0" max="40" step="1" value="14" unit="mm" />
             <Checkbox id="bg">Include white sheet background</Checkbox>
+            <div className="effect-divider" />
+            <Checkbox id="chroma">Chromatic aberration</Checkbox>
+            <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" />
           </Section>
         </div>
 

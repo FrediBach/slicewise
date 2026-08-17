@@ -621,6 +621,7 @@ const state = {
   az: 35, el: 24, roll: 0, zoom: 1,
   lines: 40, quality: 7, axis: "up", hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
+  chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
 };
 
@@ -706,15 +707,29 @@ export function computeContours(mesh, settings, quick){
     d += serialiseRun(run, quality);
     nodes += run.length/2; paths++;
   }
-  const bg = settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
-  const svg =
-`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
-${bg}<g fill="none" stroke="${settings.color}" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round">
+  let artwork, renderedPaths=paths, renderedNodes=nodes;
+  if (settings.chroma){
+    const amount=clamp(settings.chromaAmount, .1, 6);
+    const rotation=amount*.12, cx=W/2, cy=H/2;
+    const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:screen"`;
+    artwork=`<rect width="${W}" height="${H}" fill="#000000"/>
+<g style="isolation:isolate">
+<path d="${d}" stroke="#ff2020" transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}/>
+<path d="${d}" stroke="#25ff48" transform="translate(0 ${fmt(amount*.08)})" ${attrs}/>
+<path d="${d}" stroke="#2548ff" transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}/>
+</g>`;
+    renderedPaths*=3; renderedNodes*=3;
+  } else {
+    const bg=settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
+    artwork=`${bg}<g fill="none" stroke="${settings.color}" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round">
 <path d="${d}"/>
-</g>
+</g>`;
+  }
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
+${artwork}
 </svg>`;
   const ms = performance.now() - t0;
-  return {svg, paths, nodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick};
+  return {svg, paths:renderedPaths, nodes:renderedNodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick};
 }
 
 if (typeof document !== "undefined") {
@@ -734,8 +749,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg} = state;
-  return {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg};
+  const {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lines,quality,axis,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -876,11 +891,13 @@ function bindPair(id, key, after){
 }
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom");
 bindPair("lines","lines"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
+bindPair("chromaAmount","chromaAmount");
 
 $("axis").addEventListener("change", e => { state.axis = e.target.value; redraw(false); });
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });
+$("chroma").addEventListener("change", e => { state.chroma = e.target.checked; redraw(false); });
 $("color").addEventListener("input", e => { setInk(e.target.value, true); $("colorHex").value = e.target.value; });
 $("color").addEventListener("change", () => redraw(false));
 $("colorHex").addEventListener("input", e => {
