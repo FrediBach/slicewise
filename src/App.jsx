@@ -93,13 +93,26 @@ export default function App() {
               <div className="select-wrap">
                 <select id="gapEase" defaultValue="linear">
                   <option value="linear">Linear</option>
-                  <option value="ease-in">Ease in</option>
-                  <option value="ease-out">Ease out</option>
-                  <option value="ease-in-out">Ease in &amp; out</option>
+                  <optgroup label="Sine">
+                    <option value="sine-in">Sine · in</option>
+                    <option value="sine-out">Sine · out</option>
+                    <option value="sine-in-out">Sine · in &amp; out</option>
+                  </optgroup>
+                  <optgroup label="Quadratic">
+                    <option value="ease-in">Quadratic · in</option>
+                    <option value="ease-out">Quadratic · out</option>
+                    <option value="ease-in-out">Quadratic · in &amp; out</option>
+                  </optgroup>
+                  <optgroup label="Cubic">
+                    <option value="cubic-in">Cubic · in</option>
+                    <option value="cubic-out">Cubic · out</option>
+                    <option value="cubic-in-out">Cubic · in &amp; out</option>
+                  </optgroup>
                 </select>
                 <ChevronDown size={14} />
               </div>
             </div>
+            <ValueControl id="easeStrength" label="Ease strength" min="0" max="100" step="1" value="100" unit="%" />
             <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
             <div className="control-row select-row">
               <label htmlFor="axis">Slice axis</label>

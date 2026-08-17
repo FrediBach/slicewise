@@ -12,13 +12,22 @@ const fmt = n => {
   return Number.isInteger(r) ? String(r) : String(r);
 };
 
-function easeLineGap(t, easing){
+function easeLineGap(t, easing, strength=100){
+  let eased;
   switch (easing){
-    case "ease-in": return t*t;
-    case "ease-out": return 1-(1-t)*(1-t);
-    case "ease-in-out": return t<.5 ? 2*t*t : 1-Math.pow(-2*t+2, 2)/2;
+    case "sine-in": eased=1-Math.cos(t*Math.PI/2); break;
+    case "sine-out": eased=Math.sin(t*Math.PI/2); break;
+    case "sine-in-out": eased=-(Math.cos(Math.PI*t)-1)/2; break;
+    case "ease-in": eased=t*t; break;
+    case "ease-out": eased=1-(1-t)*(1-t); break;
+    case "ease-in-out": eased=t<.5 ? 2*t*t : 1-Math.pow(-2*t+2, 2)/2; break;
+    case "cubic-in": eased=t*t*t; break;
+    case "cubic-out": eased=1-Math.pow(1-t, 3); break;
+    case "cubic-in-out": eased=t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2, 3)/2; break;
     default: return t;
   }
+  const mix=clamp(strength/100, 0, 1);
+  return t+(eased-t)*mix;
 }
 
 /* ------------------------------------------------------------- parsing */
@@ -672,7 +681,7 @@ function silhouetteEdges(mesh, P){
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
   az: 35, el: 24, roll: 0, zoom: 1,
-  lines: 40, gapEase: "linear", quality: 7, axis: "up", cutAz: 0, cutEl: 90, hide: true, sil: true,
+  lines: 40, gapEase: "linear", easeStrength: 100, quality: 7, axis: "up", cutAz: 0, cutEl: 90, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
@@ -749,7 +758,7 @@ export function computeContours(mesh, settings, quick){
   const curveStrength = (quality-1)/9;
   const span = field.max - field.min;
   for (let i=0;i<N;i++){
-    const position = easeLineGap((i + 0.5) / N, settings.gapEase);
+    const position = easeLineGap((i + 0.5) / N, settings.gapEase, settings.easeStrength);
     const level = field.min + span * position;
     const {pts, segs} = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
     if (!segs.length) continue;
@@ -819,8 +828,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lines,gapEase,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lines,gapEase,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
+  const {az,el,roll,zoom,lines,gapEase,easeStrength,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lines,gapEase,easeStrength,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -979,7 +988,7 @@ function bindPair(id, key, after){
   n.addEventListener("change", () => redraw(false));
 }
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom");
-bindPair("lines","lines"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
+bindPair("lines","lines"); bindPair("easeStrength","easeStrength"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
 
