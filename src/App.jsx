@@ -45,6 +45,19 @@ export default function App() {
           </div>
 
           <Section title="Source model" badge="01">
+            <div className="control-row demo-row">
+              <label htmlFor="demo">Demo</label>
+              <div className="select-wrap">
+                <select id="demo" defaultValue="knot">
+                  <option value="knot">Torus knot</option>
+                  <option value="ripple">Ripple sphere</option>
+                  <option value="cube">Rounded cube</option>
+                  <option value="torus">Ring torus</option>
+                  <option value="upload" hidden>Uploaded model</option>
+                </select>
+                <ChevronDown size={14} />
+              </div>
+            </div>
             <label className="dropzone" id="drop">
               <input type="file" id="file" accept=".stl,.obj,.ply" />
               <span className="drop-icon"><FileUp size={18} /></span>

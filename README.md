@@ -5,6 +5,7 @@ A browser-based contour studio that slices 3D meshes into clean, single-weight S
 ## Features
 
 - Imports binary/ASCII STL, OBJ, and ASCII/binary PLY models
+- Includes torus-knot, rippled-sphere, rounded-cube, and ring-torus demos
 - Generates topographic, camera-depth, width, or depth contours
 - Optional hidden-line removal and silhouette generation
 - Interactive orbit, roll, and zoom controls

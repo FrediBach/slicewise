@@ -266,6 +266,50 @@ function torusKnot(p=2, q=3, R=1, r=0.26, tubeSeg=360, radSeg=28){
   return {verts: Float64Array.from(verts), tris: Uint32Array.from(tris)};
 }
 
+function sphereDemo(kind="ripple", segments=128, rings=64){
+  const verts=[], tris=[];
+  const signedPow=(v,p)=>Math.sign(v)*Math.pow(Math.abs(v),p);
+  for (let i=0;i<=rings;i++){
+    const phi=i/rings*Math.PI, sp=Math.sin(phi), cp=Math.cos(phi);
+    for (let j=0;j<segments;j++){
+      const theta=j/segments*Math.PI*2;
+      let x=sp*Math.cos(theta), y=sp*Math.sin(theta), z=cp;
+      if (kind === "cube"){
+        const p=.52;
+        x=signedPow(x,p); y=signedPow(y,p); z=signedPow(z,p);
+      } else {
+        const radius=1+.095*Math.sin(theta*7)*Math.pow(sp,3)+.035*Math.cos(phi*8);
+        x*=radius; y*=radius; z*=radius;
+      }
+      verts.push(x,y,z);
+    }
+  }
+  for (let i=0;i<rings;i++) for (let j=0;j<segments;j++){
+    const a=i*segments+j, b=i*segments+(j+1)%segments;
+    const c=(i+1)*segments+j, d=(i+1)*segments+(j+1)%segments;
+    tris.push(a,b,d, a,d,c);
+  }
+  return {verts:Float64Array.from(verts), tris:Uint32Array.from(tris)};
+}
+
+function ringTorus(major=.72, minor=.3, majorSeg=192, minorSeg=64){
+  const verts=[], tris=[];
+  for (let i=0;i<majorSeg;i++){
+    const u=i/majorSeg*Math.PI*2, cu=Math.cos(u), su=Math.sin(u);
+    for (let j=0;j<minorSeg;j++){
+      const v=j/minorSeg*Math.PI*2, cv=Math.cos(v), sv=Math.sin(v);
+      const radius=major+minor*cv;
+      verts.push(radius*cu, radius*su, minor*sv);
+    }
+  }
+  for (let i=0;i<majorSeg;i++) for (let j=0;j<minorSeg;j++){
+    const a=i*minorSeg+j, b=i*minorSeg+(j+1)%minorSeg;
+    const c=((i+1)%majorSeg)*minorSeg+j, d=((i+1)%majorSeg)*minorSeg+(j+1)%minorSeg;
+    tris.push(a,b,d, a,d,c);
+  }
+  return {verts:Float64Array.from(verts), tris:Uint32Array.from(tris)};
+}
+
 /* --------------------------------------------------------- projection */
 function cameraBasis(azDeg, elDeg, rollDeg){
   const az = azDeg*Math.PI/180, el = elDeg*Math.PI/180, ro = rollDeg*Math.PI/180;
@@ -858,6 +902,24 @@ function showError(msg){
 }
 
 let rawCache = null;   // keep the parsed-but-unoriented mesh so "up axis" can flip live
+const demoCache = new Map();
+const demos = {
+  knot: {name:"demo · torus knot", create:()=>torusKnot()},
+  ripple: {name:"demo · ripple sphere", create:()=>sphereDemo("ripple")},
+  cube: {name:"demo · rounded cube", create:()=>sphereDemo("cube")},
+  torus: {name:"demo · ring torus", create:()=>ringTorus()}
+};
+function loadDemo(id, announce=true){
+  const demo=demos[id];
+  if (!demo) return;
+  if (!demoCache.has(id)) demoCache.set(id, demo.create());
+  rawCache=demoCache.get(id);
+  state.upY=false;
+  $("upZ").setAttribute("aria-pressed", "true");
+  $("upY").setAttribute("aria-pressed", "false");
+  setMesh(rawCache, demo.name);
+  if (announce) toast("Loaded " + demo.name.replace("demo · ", ""));
+}
 function loadFile(file){
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   const reader = new FileReader();
@@ -870,6 +932,7 @@ function loadFile(file){
       else throw new Error("Unsupported format: ." + ext + " — use STL, OBJ or PLY");
       if (!raw.tris.length) throw new Error("No triangles found in " + file.name);
       rawCache = raw;
+      $("demo").value = "upload";
       // OBJ and PLY usually ship Y-up; STL is almost always Z-up
       const guessY = (ext === "obj" || ext === "ply");
       state.upY = guessY;
@@ -946,6 +1009,7 @@ function setUp(y){
 }
 
 /* file input + drag and drop */
+$("demo").addEventListener("change", e => loadDemo(e.target.value));
 $("file").addEventListener("change", e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
 const drop = $("drop");
 ["dragenter","dragover"].forEach(ev => document.addEventListener(ev, e => {
@@ -1032,7 +1096,6 @@ function toast(msg){
 }
 
 /* boot with the demo knot so the tool works before anything is uploaded */
-rawCache = torusKnot();
-setMesh(rawCache, "demo · torus knot");
+loadDemo("knot", false);
 window.addEventListener("resize", () => redraw(true));
 }
