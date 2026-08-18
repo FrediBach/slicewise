@@ -128,7 +128,7 @@ export default function App() {
         <div className="rail-scroll">
           <div className="intro">
             <p>Transform a 3D model into precise, plotter-ready contour lines.</p>
-            <span>Local processing · SVG output</span>
+            <span>Local processing · SVG + G-code output</span>
           </div>
 
           <Section title="Source model" badge="01">
@@ -289,13 +289,43 @@ export default function App() {
                 <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" disabled />
               </div>
             </FieldGroup>
+            <FieldGroup title="Export format">
+              <div className="control-row select-row">
+                <label htmlFor="exportFormat">File type</label>
+                <div className="select-wrap">
+                  <select id="exportFormat" defaultValue="svg">
+                    <option value="svg">SVG · vector</option>
+                    <option value="gcode">G-code · plotter</option>
+                  </select>
+                  <ChevronDown size={14} />
+                </div>
+              </div>
+              <div className="gcode-controls" id="gcodeControls" hidden>
+                <div className="control-row select-row">
+                  <label htmlFor="gcodeProfile">Machine</label>
+                  <div className="select-wrap">
+                    <select id="gcodeProfile" defaultValue="uunatek3">
+                      <option value="uunatek3">UUNA TEK 3.0 · A3</option>
+                      <option value="generic">Generic Z-axis plotter</option>
+                    </select>
+                    <ChevronDown size={14} />
+                  </div>
+                </div>
+                <ValueControl id="drawFeed" label="Draw speed" min="50" max="12000" step="50" value="3000" unit="mm/m" />
+                <ValueControl id="travelFeed" label="Travel speed" min="50" max="15000" step="50" value="6000" unit="mm/m" />
+                <ValueControl id="penUp" label="Pen up Z" min="-20" max="50" step="0.1" value="0" unit="mm" />
+                <ValueControl id="penDown" label="Pen down Z" min="-20" max="50" step="0.1" value="-3" unit="mm" />
+                <ValueControl id="zFeed" label="Z speed" min="10" max="12000" step="10" value="2000" unit="mm/m" />
+                <p className="gradient-note" id="gcodeProfileNote">UUNA TEK rear-left origin with 3 mm pen drop. Set the machine origin at the sheet’s rear-left corner before plotting.</p>
+              </div>
+            </FieldGroup>
           </Section>
         </div>
 
         <footer className="actions">
           <Button id="randomize" variant="outline" className="randomize-button"><Dices size={15} />Randomize parameters</Button>
           <div className="action-buttons">
-            <Button id="save"><Download size={15} />Export SVG</Button>
+            <Button id="save"><Download size={15} /><span id="exportLabel">Export SVG</span></Button>
             <Button id="copy" variant="outline" aria-label="Copy SVG markup"><Clipboard size={15} /></Button>
           </div>
           <p>© 2026 Fredi Bach</p>

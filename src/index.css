@@ -121,6 +121,10 @@ input[type="number"], input[type="text"], select { height: 27px; border: 1px sol
 .add-stop { justify-self: start; display: inline-flex; align-items: center; gap: 5px; border: 0; border-bottom: 1px solid #aeb2ad; background: transparent; padding: 2px 0; color: #60655f; cursor: pointer; font-size: 8px; }
 .gradient-panel .control-row { grid-template-columns: 80px minmax(0,1fr); margin-top: 1px; }
 .gradient-note { margin: -2px 0 0; color: #8d928c; font-size: 7.5px; line-height: 1.45; }
+.gcode-controls { margin: 8px 0 2px 7px; padding: 5px 0 2px 12px; border-left: 1px solid #c9cdc7; }
+.gcode-controls[hidden] { display: none; }
+.gcode-controls .control-row { grid-template-columns: 80px minmax(0, 1fr); }
+.gcode-controls .gradient-note { margin: 7px 8px 3px 0; }
 
 .actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; padding: 14px 20px 11px; border-top: 1px solid var(--line); background: rgba(247,248,245,.96); }
 .action-buttons { display: flex; gap: 8px; }

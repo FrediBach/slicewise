@@ -1,7 +1,8 @@
 "use strict";
+import { generateGCode } from "./gcode.js";
 /* =====================================================================
-   Slicewise — mesh → contour SVG
-   Pipeline: parse → weld → orient → project → slice → chain → hide → SVG
+   Slicewise — mesh → contour SVG / G-code
+   Pipeline: parse → weld → orient → project → slice → chain → hide → export
    ===================================================================== */
 
 /* ---------------------------------------------------------------- utils */
@@ -791,7 +792,8 @@ const state = {
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
   chroma: false, chromaAmount: 1.5,
-  svg: "", dragging: false
+  exportFormat: "svg", gcodeProfile: "uunatek3", drawFeed: 3000, travelFeed: 6000, penUp: 0, penDown: -3, zFeed: 2000,
+  svg: "", svgBytes: 0, toolpaths: [], dragging: false
 };
 
 function project(mesh, cam, W, H, margin, zoom, panX, panY, lens, lensAmount){
@@ -1031,16 +1033,30 @@ export function computeContours(mesh, settings, quick){
   let nodes=0, paths=0;
   const serialiseGroup=runs=>{
     let d="";
+    const plotRuns=[];
     for (const raw of runs){
       const run=simplify(raw,tolerance);
       if (run.length<4) continue;
       d+=serialiseRun(run,quality);
+      plotRuns.push(run);
       nodes+=run.length/2; paths++;
     }
-    return d;
+    return {d, runs:plotRuns};
   };
-  const colorPaths=out.map(toneGroups=>toneGroups.map(serialiseGroup));
-  const outlinePath=serialiseGroup(outlineOut);
+  const serialised=out.map(toneGroups=>toneGroups.map(serialiseGroup));
+  const colorPaths=serialised.map(toneGroups=>toneGroups.map(group=>group.d));
+  const outlineGroup=serialiseGroup(outlineOut);
+  const outlinePath=outlineGroup.d;
+  const toolpaths=serialised.map((toneGroups,index)=>({
+    color:palette[index],
+    label:settings.gradientEnabled ? `gradient colour ${index+1}` : "contours",
+    runs:toneGroups.flatMap(group=>group.runs)
+  })).filter(group=>group.runs.length);
+  if (outlineGroup.runs.length){
+    const matching=toolpaths.find(group=>group.color.toLowerCase()===settings.color.toLowerCase());
+    if (matching) matching.runs.push(...outlineGroup.runs);
+    else toolpaths.push({color:settings.color,label:"silhouette",runs:outlineGroup.runs});
+  }
   const allPathData=colorPaths.flat().join("")+outlinePath;
   let artwork, renderedPaths=paths, renderedNodes=nodes;
   if (settings.chroma){
@@ -1076,7 +1092,7 @@ export function computeContours(mesh, settings, quick){
 ${artwork}
 </svg>`;
   const ms = performance.now() - t0;
-  return {svg, paths:renderedPaths, nodes:renderedNodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick};
+  return {svg, toolpaths, paths:renderedPaths, nodes:renderedNodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick};
 }
 
 if (typeof document !== "undefined") {
@@ -1120,11 +1136,13 @@ function throttleDelay(){
 function applyRender(result){
   observedRenderMs = observedRenderMs ? observedRenderMs*.72+result.ms*.28 : result.ms;
   state.svg = result.svg;
+  state.svgBytes = result.bytes;
+  state.toolpaths = result.toolpaths || [];
   fitBed(result.W, result.H);
   $("bed").innerHTML = result.svg;
   $("rPaths").textContent = result.paths.toLocaleString();
   $("rPts").textContent = Math.round(result.nodes).toLocaleString();
-  $("rSize").textContent = (result.bytes/1024).toFixed(1) + " kB";
+  updateExportSize();
   $("rMs").textContent = Math.round(result.ms) + " ms";
 }
 function dispatchRender(){
@@ -1260,12 +1278,52 @@ function bindPair(id, key, after){
   s.addEventListener("change", () => redraw(false));
   n.addEventListener("change", () => redraw(false));
 }
+function bindExportPair(id, key){
+  const slider=$(id), number=$(id+"N");
+  const apply=(value, from)=>{
+    const next=clamp(parseFloat(value),parseFloat(number.min),parseFloat(number.max));
+    if (Number.isNaN(next)) return;
+    state[key]=next;
+    if (from!=="s") slider.value=next;
+    if (from!=="n") number.value=next;
+    updateExportSize();
+  };
+  slider.addEventListener("input",event=>apply(event.target.value,"s"));
+  number.addEventListener("input",event=>apply(event.target.value,"n"));
+}
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom"); bindPair("panX","panX"); bindPair("panY","panY"); bindPair("lensAmount","lensAmount");
 bindPair("lines","lines"); bindPair("easeStrength","easeStrength"); bindPair("easeCycles","easeCycles"); bindPair("easeCenter","easeCenter"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
 bindPair("halftoneSize","halftoneSize"); bindPair("halftoneContrast","halftoneContrast"); bindPair("halftoneCycles","halftoneCycles");
 bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
+bindExportPair("drawFeed","drawFeed"); bindExportPair("travelFeed","travelFeed"); bindExportPair("penUp","penUp"); bindExportPair("penDown","penDown"); bindExportPair("zFeed","zFeed");
+
+const gcodeProfiles={
+  uunatek3:{drawFeed:3000,travelFeed:6000,penUp:0,penDown:-3,zFeed:2000,note:"UUNA TEK rear-left origin with 3 mm pen drop. Set the machine origin at the sheet’s rear-left corner before plotting."},
+  generic:{drawFeed:1200,travelFeed:3000,penUp:5,penDown:0,zFeed:600,note:"Generic bottom-left origin. Confirm Z heights, speeds, and origin for your machine before plotting."}
+};
+function setExportPair(id,key,value){
+  state[key]=value;
+  $(id).value=value;
+  $(id+"N").value=value;
+}
+$("gcodeProfile").addEventListener("change",event=>{
+  state.gcodeProfile=event.target.value;
+  const profile=gcodeProfiles[state.gcodeProfile];
+  for (const key of ["drawFeed","travelFeed","penUp","penDown","zFeed"]) setExportPair(key,key,profile[key]);
+  $("gcodeProfileNote").textContent=profile.note;
+  updateExportSize();
+});
+
+$("exportFormat").addEventListener("change",event=>{
+  state.exportFormat=event.target.value;
+  const gcode=state.exportFormat==="gcode";
+  $("gcodeControls").hidden=!gcode;
+  $("exportLabel").textContent=gcode ? "Export G-code" : "Export SVG";
+  $("copy").setAttribute("aria-label",gcode ? "Copy G-code" : "Copy SVG markup");
+  updateExportSize();
+});
 
 $("axis").addEventListener("change", e => {
   state.axis = e.target.value;
@@ -1553,20 +1611,44 @@ $("randomize").addEventListener("click", () => {
 });
 
 /* export */
-$("save").addEventListener("click", () => {
+function currentGCode(){
+  return generateGCode(state.toolpaths,{width:state.pw,height:state.ph},{
+    name:state.name,
+    drawFeed:state.drawFeed,
+    travelFeed:state.travelFeed,
+    penUp:state.penUp,
+    penDown:state.penDown,
+    zFeed:state.zFeed,
+    machine:state.gcodeProfile==="uunatek3" ? "UUNA TEK 3.0 A3" : "Generic Z-axis plotter",
+    origin:state.gcodeProfile==="uunatek3" ? "rear-left" : "bottom-left",
+    effects:{halftone:state.halftone,chroma:state.chroma}
+  });
+}
+function currentExport(){
+  if (state.exportFormat==="gcode") return {content:currentGCode(),extension:"gcode",type:"text/x-gcode"};
+  return {content:state.svg,extension:"svg",type:"image/svg+xml"};
+}
+function updateExportSize(){
   if (!state.svg) return;
+  const bytes=state.exportFormat==="gcode" ? new TextEncoder().encode(currentGCode()).byteLength : state.svgBytes;
+  $("rSize").textContent=(bytes/1024).toFixed(1)+" kB";
+}
+$("save").addEventListener("click", () => {
+  const exported=currentExport();
+  if (!exported.content) return;
   const base = state.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g,"-").replace(/^-|-$/g,"") || "contours";
-  const blob = new Blob([state.svg], {type:"image/svg+xml"});
+  const blob = new Blob([exported.content], {type:exported.type});
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = base + "-contours.svg";
+  a.download = base + "-contours." + exported.extension;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   toast("Saved " + a.download);
 });
 $("copy").addEventListener("click", async () => {
-  try{ await navigator.clipboard.writeText(state.svg); toast("SVG markup copied"); }
-  catch{ toast("Copy blocked — use Save SVG"); }
+  const exported=currentExport();
+  try{ await navigator.clipboard.writeText(exported.content); toast(exported.extension==="svg" ? "SVG markup copied" : "G-code copied"); }
+  catch{ toast("Copy blocked — use Export " + (exported.extension==="svg" ? "SVG" : "G-code")); }
 });
 let toastT;
 function toast(msg){
