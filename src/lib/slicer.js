@@ -314,6 +314,9 @@ function sphereDemo(kind="ripple", segments=128, rings=64){
       if (kind === "cube"){
         const p=.52;
         x=signedPow(x,p); y=signedPow(y,p); z=signedPow(z,p);
+      } else if (kind === "diamond"){
+        const p=1.65;
+        x=signedPow(x,p); y=signedPow(y,p); z=signedPow(z,p);
       } else {
         const radius=1+.095*Math.sin(theta*7)*Math.pow(sp,3)+.035*Math.cos(phi*8);
         x*=radius; y*=radius; z*=radius;
@@ -345,6 +348,40 @@ function ringTorus(major=.72, minor=.3, majorSeg=192, minorSeg=64){
     tris.push(a,b,d, a,d,c);
   }
   return {verts:Float64Array.from(verts), tris:Uint32Array.from(tris)};
+}
+
+function radialColumnDemo(kind, segments=160, rings=80){
+  const verts=[], tris=[];
+  for (let i=0;i<=rings;i++){
+    const t=i/rings, z=t*2-1;
+    for (let j=0;j<segments;j++){
+      const theta=j/segments*Math.PI*2;
+      let radius;
+      if (kind === "twist"){
+        const profile=.68+.08*Math.cos(z*Math.PI);
+        radius=profile*(1+.18*Math.cos(theta*5+z*Math.PI*1.35));
+      } else {
+        radius=.34+.4*Math.pow(Math.abs(z),1.55)+.035*Math.cos(z*Math.PI*3);
+      }
+      verts.push(radius*Math.cos(theta),radius*Math.sin(theta),z);
+    }
+  }
+  for (let i=0;i<rings;i++) for (let j=0;j<segments;j++){
+    const a=i*segments+j, b=i*segments+(j+1)%segments;
+    const c=(i+1)*segments+j, d=(i+1)*segments+(j+1)%segments;
+    tris.push(a,b,d,a,d,c);
+  }
+  const bottom=verts.length/3;
+  verts.push(0,0,-1);
+  const top=verts.length/3;
+  verts.push(0,0,1);
+  const topRing=rings*segments;
+  for (let j=0;j<segments;j++){
+    const next=(j+1)%segments;
+    tris.push(bottom,next,j);
+    tris.push(top,topRing+j,topRing+next);
+  }
+  return {verts:Float64Array.from(verts),tris:Uint32Array.from(tris)};
 }
 
 /* --------------------------------------------------------- projection */
@@ -1317,7 +1354,10 @@ const demos = {
   knot: {name:"demo · torus knot", create:()=>torusKnot()},
   ripple: {name:"demo · ripple sphere", create:()=>sphereDemo("ripple")},
   cube: {name:"demo · rounded cube", create:()=>sphereDemo("cube")},
-  torus: {name:"demo · ring torus", create:()=>ringTorus()}
+  diamond: {name:"demo · soft diamond", create:()=>sphereDemo("diamond")},
+  torus: {name:"demo · ring torus", create:()=>ringTorus()},
+  twist: {name:"demo · twisted bloom", create:()=>radialColumnDemo("twist")},
+  hourglass: {name:"demo · hourglass", create:()=>radialColumnDemo("hourglass")}
 };
 function loadDemo(id, announce=true){
   const demo=demos[id];

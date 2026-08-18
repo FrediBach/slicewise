@@ -256,7 +256,10 @@ export default function App() {
                   <option value="knot">Torus knot</option>
                   <option value="ripple">Ripple sphere</option>
                   <option value="cube">Rounded cube</option>
+                  <option value="diamond">Soft diamond</option>
                   <option value="torus">Ring torus</option>
+                  <option value="twist">Twisted bloom</option>
+                  <option value="hourglass">Hourglass</option>
                   <option value="upload" hidden>Uploaded model</option>
                 </select>
                 <ChevronDown size={14} />
