@@ -365,13 +365,36 @@ function cameraBasis(azDeg, elDeg, rollDeg){
   return {f, r, u};
 }
 
+const LENS_CURVE = {
+  clean: 0,
+  wide: -0.18,
+  fisheye: -0.4,
+  tele: 0.16
+};
+
+function distortLens(x, y, lens, amount){
+  const curve = (LENS_CURVE[lens] || 0) * clamp(amount/100, 0, 2);
+  if (!curve) return [x, y];
+  const radius2 = x*x + y*y;
+  // Radial optical distortion around the image centre. Keeping this in camera
+  // space makes the effect independent of sheet size, margin, and output scale.
+  // The rational barrel curve stays smooth and monotonic at the 200% maximum.
+  const factor = curve < 0 ? 1/(1-curve*radius2) : 1+curve*radius2;
+  return [x*factor, y*factor];
+}
+
+function projectCameraPoint(x, y, scale, ox, oy, lens, lensAmount){
+  const warped = distortLens(x, y, lens, lensAmount);
+  return [ox + warped[0]*scale, oy - warped[1]*scale];
+}
+
 /* ------------------------------------------------- marching triangles */
 function sliceLevel(P, mesh, S, level, NV, scalarDir, curveStrength){
   // returns {pts:[x,y,d,...], segs:[i,j,...]} for one cutting plane
   const {T, V, N} = mesh;
   const idx = new Map();          // edge key -> point index
   const pts = [], segs = [];
-  const {sx, sy, sd, r, u, f, scale, ox, oy} = P;
+  const {sx, sy, sd, r, u, f, scale, ox, oy, lens, lensAmount} = P;
   const getPoint = (a, b) => {
     const key = a < b ? a*NV + b : b*NV + a;
     let id = idx.get(key);
@@ -379,7 +402,16 @@ function sliceLevel(P, mesh, S, level, NV, scalarDir, curveStrength){
     let t = (level - S[a]) / (S[b] - S[a]);
     id = pts.length/3;
     if (!curveStrength || !N){
-      pts.push(sx[a] + (sx[b]-sx[a])*t, sy[a] + (sy[b]-sy[a])*t, sd[a] + (sd[b]-sd[a])*t);
+      const ai=a*3, bi=b*3;
+      const x=V[ai]+(V[bi]-V[ai])*t;
+      const y=V[ai+1]+(V[bi+1]-V[ai+1])*t;
+      const z=V[ai+2]+(V[bi+2]-V[ai+2])*t;
+      const screen=projectCameraPoint(
+        x*r[0]+y*r[1]+z*r[2],
+        x*u[0]+y*u[1]+z*u[2],
+        scale, ox, oy, lens, lensAmount
+      );
+      pts.push(screen[0], screen[1], x*f[0]+y*f[1]+z*f[2]);
       idx.set(key, id);
       return id;
     }
@@ -411,11 +443,12 @@ function sliceLevel(P, mesh, S, level, NV, scalarDir, curveStrength){
       if ((value > level) === startAbove) lo=t; else hi=t;
     }
     const p=sample((lo+hi)*.5);
-    pts.push(
-      ox+(p[0]*r[0]+p[1]*r[1]+p[2]*r[2])*scale,
-      oy-(p[0]*u[0]+p[1]*u[1]+p[2]*u[2])*scale,
-      p[0]*f[0]+p[1]*f[1]+p[2]*f[2]
+    const screen=projectCameraPoint(
+      p[0]*r[0]+p[1]*r[1]+p[2]*r[2],
+      p[0]*u[0]+p[1]*u[1]+p[2]*u[2],
+      scale, ox, oy, lens, lensAmount
     );
+    pts.push(screen[0], screen[1], p[0]*f[0]+p[1]*f[1]+p[2]*f[2]);
     idx.set(key, id);
     return id;
   };
@@ -698,14 +731,14 @@ function silhouetteEdges(mesh, P){
 /* =================================================================== app */
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
-  az: 35, el: 24, roll: 0, zoom: 1,
+  az: 35, el: 24, roll: 0, zoom: 1, lens: "clean", lensAmount: 100,
   lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
 };
 
-function project(mesh, cam, W, H, margin, zoom){
+function project(mesh, cam, W, H, margin, zoom, lens, lensAmount){
   const {V} = mesh;
   const n = V.length/3;
   const sx = new Float32Array(n), sy = new Float32Array(n), sd = new Float32Array(n);
@@ -715,13 +748,18 @@ function project(mesh, cam, W, H, margin, zoom){
   let dmin = Infinity, dmax = -Infinity;
   for (let i=0, v=0; i<V.length; i+=3, v++){
     const x=V[i], y=V[i+1], z=V[i+2];
-    sx[v] = ox + (x*r[0] + y*r[1] + z*r[2]) * scale;
-    sy[v] = oy - (x*u[0] + y*u[1] + z*u[2]) * scale;   // SVG y grows downward
+    const screen=projectCameraPoint(
+      x*r[0] + y*r[1] + z*r[2],
+      x*u[0] + y*u[1] + z*u[2],
+      scale, ox, oy, lens, lensAmount
+    );
+    sx[v] = screen[0];
+    sy[v] = screen[1];   // SVG y grows downward
     const d = x*f[0] + y*f[1] + z*f[2];
     sd[v] = d;
     if (d<dmin) dmin=d; if (d>dmax) dmax=d;
   }
-  return {sx, sy, sd, dmin, dmax, scale, ox, oy, f, r, u};
+  return {sx, sy, sd, dmin, dmax, scale, ox, oy, f, r, u, lens, lensAmount};
 }
 
 function scalarField(mesh, P, axis, cutAz, cutEl){
@@ -866,7 +904,7 @@ export function computeContours(mesh, settings, quick){
   const t0 = performance.now();
   const W = settings.pw, H = settings.ph;
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
-  const P = project(mesh, cam, W, H, settings.margin, settings.zoom);
+  const P = project(mesh, cam, W, H, settings.margin, settings.zoom, settings.lens, settings.lensAmount);
   const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);
   const NV = mesh.V.length/3;
 
@@ -962,8 +1000,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
+  const {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1121,7 +1159,7 @@ function bindPair(id, key, after){
   s.addEventListener("change", () => redraw(false));
   n.addEventListener("change", () => redraw(false));
 }
-bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom");
+bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom"); bindPair("lensAmount","lensAmount");
 bindPair("lines","lines"); bindPair("easeStrength","easeStrength"); bindPair("easeCycles","easeCycles"); bindPair("easeCenter","easeCenter"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
@@ -1129,6 +1167,17 @@ bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateC
 $("axis").addEventListener("change", e => {
   state.axis = e.target.value;
   $("customAxis").hidden = state.axis !== "custom";
+  redraw(false);
+});
+function syncLensAmount(){
+  const enabled=state.lens !== "clean";
+  $("lensAmount").disabled=!enabled;
+  $("lensAmountN").disabled=!enabled;
+  $("lensAmountControl").classList.toggle("is-disabled", !enabled);
+}
+$("lens").addEventListener("change", e => {
+  state.lens=e.target.value;
+  syncLensAmount();
   redraw(false);
 });
 function syncEaseCenter(){

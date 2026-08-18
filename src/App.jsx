@@ -84,6 +84,20 @@ export default function App() {
             <ValueControl id="el" label="Elevation" min="-180" max="180" step="1" value="24" />
             <ValueControl id="rl" label="Roll" min="-180" max="180" step="1" value="0" />
             <ValueControl id="zoom" label="Scale" min="0.2" max="3" step="0.01" value="1" />
+            <div className="effect-divider" />
+            <div className="control-row select-row">
+              <label htmlFor="lens">Camera lens</label>
+              <div className="select-wrap">
+                <select id="lens" defaultValue="clean">
+                  <option value="clean">50 mm · clean</option>
+                  <option value="wide">24 mm · wide barrel</option>
+                  <option value="fisheye">12 mm · fisheye</option>
+                  <option value="tele">85 mm · pincushion</option>
+                </select>
+                <ChevronDown size={14} />
+              </div>
+            </div>
+            <ValueControl id="lensAmount" label="Distortion" min="0" max="200" step="1" value="100" unit="%" disabled />
           </Section>
 
           <Section title="Contours" badge="02">
