@@ -784,7 +784,7 @@ function silhouetteEdges(mesh, P){
 /* =================================================================== app */
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
-  az: 35, el: 24, roll: 0, zoom: 1, lens: "clean", lensAmount: 100,
+  az: 35, el: 24, roll: 0, zoom: 1, panX: 0, panY: 0, lens: "clean", lensAmount: 100,
   lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   gradientEnabled: false, gradientColors: 6,
@@ -794,13 +794,13 @@ const state = {
   svg: "", dragging: false
 };
 
-function project(mesh, cam, W, H, margin, zoom, lens, lensAmount){
+function project(mesh, cam, W, H, margin, zoom, panX, panY, lens, lensAmount){
   const {V} = mesh;
   const n = V.length/3;
   const sx = new Float32Array(n), sy = new Float32Array(n), sd = new Float32Array(n);
   const {f, r, u} = cam;
   const scale = (Math.min(W, H)/2 - margin) * zoom;   // radius-1 model, rotation-stable fit
-  const ox = W/2, oy = H/2;
+  const ox = W/2 + (panX ?? 0), oy = H/2 + (panY ?? 0);
   let dmin = Infinity, dmax = -Infinity;
   for (let i=0, v=0; i<V.length; i+=3, v++){
     const x=V[i], y=V[i+1], z=V[i+2];
@@ -962,7 +962,7 @@ export function computeContours(mesh, settings, quick){
   const t0 = performance.now();
   const W = settings.pw, H = settings.ph;
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
-  const P = project(mesh, cam, W, H, settings.margin, settings.zoom, settings.lens, settings.lensAmount);
+  const P = project(mesh, cam, W, H, settings.margin, settings.zoom, settings.panX, settings.panY, settings.lens, settings.lensAmount);
   const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);
   const NV = mesh.V.length/3;
 
@@ -1101,8 +1101,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount};
+  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1260,7 +1260,7 @@ function bindPair(id, key, after){
   s.addEventListener("change", () => redraw(false));
   n.addEventListener("change", () => redraw(false));
 }
-bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom"); bindPair("lensAmount","lensAmount");
+bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom"); bindPair("panX","panX"); bindPair("panY","panY"); bindPair("lensAmount","lensAmount");
 bindPair("lines","lines"); bindPair("easeStrength","easeStrength"); bindPair("easeCycles","easeCycles"); bindPair("easeCenter","easeCenter"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
 bindPair("halftoneSize","halftoneSize"); bindPair("halftoneContrast","halftoneContrast"); bindPair("halftoneCycles","halftoneCycles");
@@ -1387,17 +1387,46 @@ document.addEventListener("drop", e => {
 /* orbit by dragging the sheet */
 (function orbit(){
   const bed = $("bed");
-  let sx=0, sy=0, az0=0, el0=0, ro0=0, shift=false, id=null;
+  let sx=0, sy=0, az0=0, el0=0, ro0=0, panX0=0, panY0=0, mode="orbit", id=null;
+  let spaceDown = false;
   let wheelEnd = 0;
+  const isEditable = target => target instanceof HTMLElement &&
+    (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName));
+  const setSpaceDown = active => {
+    spaceDown = active;
+    bed.classList.toggle("space-pan", active && !state.dragging);
+  };
+  const syncPair = (id, value) => {
+    $(id).value = value;
+    $(id + "N").value = value;
+  };
+  document.addEventListener("keydown", e => {
+    if (e.code !== "Space" || isEditable(e.target)) return;
+    e.preventDefault();
+    setSpaceDown(true);
+  });
+  document.addEventListener("keyup", e => {
+    if (e.code !== "Space") return;
+    setSpaceDown(false);
+  });
+  window.addEventListener("blur", () => setSpaceDown(false));
   bed.addEventListener("pointerdown", e => {
     id = e.pointerId; bed.setPointerCapture(id);
     sx = e.clientX; sy = e.clientY; az0 = state.az; el0 = state.el; ro0 = state.roll;
-    shift = e.shiftKey; state.dragging = true; bed.classList.add("dragging");
+    panX0 = state.panX; panY0 = state.panY;
+    mode = spaceDown ? "pan" : e.shiftKey ? "roll" : "orbit";
+    state.dragging = true; bed.classList.remove("space-pan");
+    bed.classList.add("dragging", `dragging-${mode}`);
   });
   bed.addEventListener("pointermove", e => {
     if (!state.dragging) return;
     const dx = e.clientX - sx, dy = e.clientY - sy;
-    if (shift){
+    if (mode === "pan"){
+      state.panX = clamp(Math.round((panX0 + dx * state.pw / bed.clientWidth)*10)/10, -2000, 2000);
+      state.panY = clamp(Math.round((panY0 + dy * state.ph / bed.clientHeight)*10)/10, -2000, 2000);
+      syncPair("panX", state.panX);
+      syncPair("panY", state.panY);
+    } else if (mode === "roll"){
       state.roll = clamp(Math.round(ro0 + dx*0.5), -180, 180);
       $("rl").value = state.roll; $("rlN").value = state.roll;
     } else {
@@ -1414,11 +1443,23 @@ document.addEventListener("drop", e => {
   });
   const end = () => {
     if (!state.dragging) return;
-    state.dragging = false; bed.classList.remove("dragging");
+    state.dragging = false;
+    bed.classList.remove("dragging", "dragging-pan", "dragging-roll", "dragging-orbit");
+    bed.classList.toggle("space-pan", spaceDown);
     redraw(false);
   };
   bed.addEventListener("pointerup", end);
   bed.addEventListener("pointercancel", end);
+  bed.addEventListener("dblclick", e => {
+    e.preventDefault();
+    state.zoom = 1;
+    state.panX = 0;
+    state.panY = 0;
+    syncPair("zoom", state.zoom);
+    syncPair("panX", state.panX);
+    syncPair("panY", state.panY);
+    redraw(false);
+  });
   bed.addEventListener("wheel", e => {
     e.preventDefault();
     const z = clamp(state.zoom * (e.deltaY > 0 ? 0.94 : 1.06), 0.2, 3);

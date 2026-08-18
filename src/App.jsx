@@ -174,6 +174,8 @@ export default function App() {
             </FieldGroup>
             <FieldGroup title="Framing & lens">
               <ValueControl id="zoom" label="Scale" min="0.2" max="3" step="0.01" value="1" unit="×" />
+              <ValueControl id="panX" label="Offset X" min="-2000" max="2000" step="0.1" value="0" unit="mm" />
+              <ValueControl id="panY" label="Offset Y" min="-2000" max="2000" step="0.1" value="0" unit="mm" />
               <div className="control-row select-row">
                 <label htmlFor="lens">Camera lens</label>
                 <div className="select-wrap">
@@ -315,7 +317,7 @@ export default function App() {
           <div className="canvas-label canvas-label--top">210 × 210 MM</div>
           <div className="canvas-label canvas-label--side">VECTOR PREVIEW</div>
           <div className="bed" id="bed" aria-label="Contour SVG preview" />
-          <div className="orbit-hint"><Rotate3d size={14} />Drag to orbit <kbd>Shift</kbd> + drag to roll</div>
+          <div className="orbit-hint"><Rotate3d size={14} />Drag to orbit <kbd>Shift</kbd> + drag to roll <kbd>Space</kbd> + drag to pan · Double-click to fit</div>
           <div className="toast" id="toast" />
         </div>
       </main>
