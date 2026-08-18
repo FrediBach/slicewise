@@ -668,11 +668,36 @@ function gradientPalette(settings){
 }
 
 /* ------------------------------------ Ramer–Douglas–Peucker (iterative) */
+function sharpVertices(run){
+  const n=run.length/2;
+  const sharp=new Uint8Array(n);
+  const closed=n>3 && Math.hypot(run[0]-run[(n-1)*2],run[1]-run[(n-1)*2+1])<1e-5;
+  const count=closed ? n-1 : n;
+  const threshold=35*Math.PI/180;
+  const point=i=>{
+    if (closed) i=(i%count+count)%count;
+    else i=clamp(i,0,count-1);
+    return [run[i*2],run[i*2+1]];
+  };
+  for (let i=closed ? 0 : 1;i<(closed ? count : count-1);i++){
+    const a=point(i-1),b=point(i),c=point(i+1);
+    const ux=b[0]-a[0],uy=b[1]-a[1],vx=c[0]-b[0],vy=c[1]-b[1];
+    const den=Math.hypot(ux,uy)*Math.hypot(vx,vy);
+    if (!den) continue;
+    const turn=Math.atan2(Math.abs(ux*vy-uy*vx),ux*vx+uy*vy);
+    if (turn>=threshold) sharp[i]=1;
+  }
+  if (closed) sharp[n-1]=sharp[0];
+  return sharp;
+}
+
 function simplify(run, tol){
   const n = run.length/2;
-  if (n < 3) return run;
+  const sourceSharp=sharpVertices(run);
+  if (n < 3) return {run,sharp:sourceSharp};
   const keep = new Uint8Array(n);
   keep[0] = keep[n-1] = 1;
+  for (let i=1;i<n-1;i++) if (sourceSharp[i]) keep[i]=1;
   const stack = [[0, n-1]];
   const t2 = tol*tol;
   while (stack.length){
@@ -690,13 +715,16 @@ function simplify(run, tol){
     }
     if (far > 0){ keep[far] = 1; stack.push([i0, far], [far, i1]); }
   }
-  const out = [];
-  for (let i=0;i<n;i++) if (keep[i]) out.push(run[i*2], run[i*2+1]);
-  return out;
+  const out = [], sharp=[];
+  for (let i=0;i<n;i++) if (keep[i]){
+    out.push(run[i*2],run[i*2+1]);
+    sharp.push(sourceSharp[i]);
+  }
+  return {run:out,sharp:Uint8Array.from(sharp)};
 }
 
 /* ------------------------------------------ adaptive SVG curve output */
-function serialiseRun(run, quality){
+function serialiseRun(run, quality, sharp){
   const n = run.length/2;
   if (n < 2) return "";
   const closed = n > 3 && Math.hypot(run[0]-run[(n-1)*2], run[1]-run[(n-1)*2+1]) < 1e-5;
@@ -725,7 +753,7 @@ function serialiseRun(run, quality){
   for (let i=0; i<segments; i++){
     const p0=point(i-1), p1=point(i), p2=point(i+1), p3=point(i+2);
     const bend = Math.max(curvature(i), curvature(i+1));
-    if (quality === 1 || bend < bendThreshold){
+    if (quality === 1 || sharp[i] || sharp[(i+1)%count] || bend < bendThreshold){
       d += "L" + fmt(p2[0]) + " " + fmt(p2[1]);
       continue;
     }
@@ -1036,9 +1064,10 @@ export function computeContours(mesh, settings, quick){
     let d="";
     const plotRuns=[];
     for (const raw of runs){
-      const run=simplify(raw,tolerance);
+      const simplified=simplify(raw,tolerance);
+      const run=simplified.run;
       if (run.length<4) continue;
-      d+=serialiseRun(run,quality);
+      d+=serialiseRun(run,quality,simplified.sharp);
       plotRuns.push(run);
       nodes+=run.length/2; paths++;
     }
