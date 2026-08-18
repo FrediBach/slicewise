@@ -114,7 +114,14 @@ function GradientChooser() {
 }
 
 export default function App() {
-  useEffect(() => { import("./lib/slicer.js"); }, []);
+  useEffect(() => {
+    globalThis.slicewiseParseSVG = async (...args) => {
+      const { parseSVG } = await import("./lib/svg-mesh.js");
+      return parseSVG(...args);
+    };
+    import("./lib/slicer.js");
+    return () => { delete globalThis.slicewiseParseSVG; };
+  }, []);
 
   return (
     <div className="app-shell">
@@ -146,11 +153,19 @@ export default function App() {
               </div>
             </div>
             <label className="dropzone" id="drop">
-              <input type="file" id="file" accept=".stl,.obj,.ply" />
+              <input type="file" id="file" accept=".stl,.obj,.ply,.svg,image/svg+xml" />
               <span className="drop-icon"><FileUp size={18} /></span>
               <strong>Drop a model here</strong>
-              <em>or click to browse · STL, OBJ, PLY</em>
+              <em>or click to browse · STL, OBJ, PLY, SVG</em>
             </label>
+            <FieldGroup title="SVG extrusion" className="svg-extrusion">
+              <div id="svgExtrusion" hidden>
+                <ValueControl id="svgDepth" label="Extrusion" min="0.5" max="100" step="0.1" value="12" unit="%" />
+                <Checkbox id="svgRounded">Round extruded edges</Checkbox>
+                <ValueControl id="svgRoundness" label="Roundness" min="0" max="100" step="0.5" value="25" unit="%" disabled />
+                <p className="gradient-note">Depth is proportional to the SVG span. Roundness is relative to the largest safe edge radius.</p>
+              </div>
+            </FieldGroup>
             <div className="model-card">
               <div className="model-icon"><Box size={17} /></div>
               <div className="model-copy"><strong id="mName">demo · torus knot</strong><span><b id="mTris">—</b> triangles</span></div>

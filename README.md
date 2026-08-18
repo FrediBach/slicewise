@@ -4,7 +4,8 @@ A browser-based contour studio that slices 3D meshes into clean, single-weight S
 
 ## Features
 
-- Imports binary/ASCII STL, OBJ, and ASCII/binary PLY models
+- Imports binary/ASCII STL, OBJ, ASCII/binary PLY, and filled SVG artwork
+- Proportionally extrudes SVGs with fine depth control and optional rounded edges
 - Includes torus-knot, rippled-sphere, rounded-cube, and ring-torus demos
 - Generates topographic, camera-depth, width, or depth contours
 - Optional continuous helicoidal slicing for pen-down spiral paths

@@ -785,6 +785,7 @@ function silhouetteEdges(mesh, P){
 /* =================================================================== app */
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
+  svgSource: null, svgSourceName: "", svgDepth: 12, svgRounded: false, svgRoundness: 25,
   az: 35, el: 24, roll: 0, zoom: 1, panX: 0, panY: 0, lens: "clean", lensAmount: 100,
   lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
@@ -1229,6 +1230,9 @@ function loadDemo(id, announce=true){
   if (!demo) return;
   if (!demoCache.has(id)) demoCache.set(id, demo.create());
   rawCache=demoCache.get(id);
+  state.svgSource=null;
+  state.svgSourceName="";
+  syncSVGControls();
   state.upY=false;
   $("upZ").setAttribute("aria-pressed", "true");
   $("upY").setAttribute("aria-pressed", "false");
@@ -1238,14 +1242,24 @@ function loadDemo(id, announce=true){
 function loadFile(file){
   const ext = (file.name.split(".").pop() || "").toLowerCase();
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try{
       let raw;
-      if (ext === "stl") raw = parseSTL(reader.result);
+      if (ext === "svg"){
+        const text=new TextDecoder().decode(new Uint8Array(reader.result));
+        raw=await globalThis.slicewiseParseSVG(text,state.svgDepth,state.svgRounded,state.svgRoundness);
+        state.svgSource=text;
+        state.svgSourceName=file.name;
+      }
+      else if (ext === "stl") raw = parseSTL(reader.result);
       else if (ext === "obj") raw = parseOBJ(new TextDecoder().decode(new Uint8Array(reader.result)));
       else if (ext === "ply") raw = parsePLY(reader.result);
-      else throw new Error("Unsupported format: ." + ext + " — use STL, OBJ or PLY");
+      else throw new Error("Unsupported format: ." + ext + " — use STL, OBJ, PLY or SVG");
       if (!raw.tris.length) throw new Error("No triangles found in " + file.name);
+      if (ext!=="svg"){
+        state.svgSource=null;
+        state.svgSourceName="";
+      }
       rawCache = raw;
       $("demo").value = "upload";
       // OBJ and PLY usually ship Y-up; STL is almost always Z-up
@@ -1253,6 +1267,7 @@ function loadFile(file){
       state.upY = guessY;
       $("upZ").setAttribute("aria-pressed", String(!guessY));
       $("upY").setAttribute("aria-pressed", String(guessY));
+      syncSVGControls();
       setMesh(raw, file.name);
       toast("Loaded " + file.name);
     } catch(e){ showError(e.message); }
@@ -1298,6 +1313,51 @@ bindPair("halftoneSize","halftoneSize"); bindPair("halftoneContrast","halftoneCo
 bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
 bindExportPair("drawFeed","drawFeed"); bindExportPair("travelFeed","travelFeed"); bindExportPair("penUp","penUp"); bindExportPair("penDown","penDown"); bindExportPair("zFeed","zFeed");
+
+async function rebuildSVG(){
+  if (!state.svgSource) return;
+  const source=state.svgSource, name=state.svgSourceName;
+  try{
+    const raw=await globalThis.slicewiseParseSVG(source,state.svgDepth,state.svgRounded,state.svgRoundness);
+    if (source!==state.svgSource) return;
+    rawCache=raw;
+    setMesh(rawCache,name);
+  } catch(e){ showError(e.message); }
+}
+let svgRebuildTimer=0;
+function bindSVGPair(id,key){
+  const slider=$(id), number=$(id+"N");
+  const apply=(value,from,final=false)=>{
+    const next=clamp(parseFloat(value),parseFloat(number.min),parseFloat(number.max));
+    if (Number.isNaN(next)) return;
+    state[key]=next;
+    if (from!=="s") slider.value=next;
+    if (from!=="n") number.value=next;
+    if (!state.svgSource) return;
+    clearTimeout(svgRebuildTimer);
+    if (final) rebuildSVG();
+    else svgRebuildTimer=setTimeout(rebuildSVG,90);
+  };
+  slider.addEventListener("input",event=>apply(event.target.value,"s"));
+  number.addEventListener("input",event=>apply(event.target.value,"n"));
+  slider.addEventListener("change",event=>apply(event.target.value,"s",true));
+  number.addEventListener("change",event=>apply(event.target.value,"n",true));
+}
+bindSVGPair("svgDepth","svgDepth");
+bindSVGPair("svgRoundness","svgRoundness");
+function syncSVGControls(){
+  const active=Boolean(state.svgSource);
+  $("svgExtrusion").hidden=!active;
+  const roundnessActive=active && state.svgRounded;
+  $("svgRoundness").disabled=!roundnessActive;
+  $("svgRoundnessN").disabled=!roundnessActive;
+  $("svgRoundnessControl").classList.toggle("is-disabled",!roundnessActive);
+}
+$("svgRounded").addEventListener("change",event=>{
+  state.svgRounded=event.target.checked;
+  syncSVGControls();
+  rebuildSVG();
+});
 
 const gcodeProfiles={
   uunatek3:{drawFeed:3000,travelFeed:6000,penUp:0,penDown:-3,zFeed:2000,note:"UUNA TEK rear-left origin with 3 mm pen drop. Set the machine origin at the sheet’s rear-left corner before plotting."},
