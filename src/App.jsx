@@ -260,6 +260,7 @@ export default function App() {
                   <option value="torus">Ring torus</option>
                   <option value="twist">Twisted bloom</option>
                   <option value="hourglass">Hourglass</option>
+                  <option value="tetrapod">Tetrapod</option>
                   <option value="upload" hidden>Uploaded model</option>
                 </select>
                 <ChevronDown size={14} />

@@ -384,6 +384,41 @@ function radialColumnDemo(kind, segments=160, rings=80){
   return {verts:Float64Array.from(verts),tris:Uint32Array.from(tris)};
 }
 
+function tetrapodDemo(segments=160,rings=80){
+  const verts=[],tris=[];
+  const tripodRadius=Math.sqrt(8/9);
+  const directions=[
+    [0,0,1],
+    [tripodRadius,0,-1/3],
+    [tripodRadius*Math.cos(Math.PI*2/3),tripodRadius*Math.sin(Math.PI*2/3),-1/3],
+    [tripodRadius*Math.cos(Math.PI*4/3),tripodRadius*Math.sin(Math.PI*4/3),-1/3]
+  ];
+  for (let i=0;i<=rings;i++){
+    const phi=i/rings*Math.PI,sp=Math.sin(phi),cp=Math.cos(phi);
+    for (let j=0;j<segments;j++){
+      const theta=j/segments*Math.PI*2;
+      const x=sp*Math.cos(theta),y=sp*Math.sin(theta),z=cp;
+      let alignment=-1;
+      for (const direction of directions){
+        alignment=Math.max(alignment,x*direction[0]+y*direction[1]+z*direction[2]);
+      }
+      // Envelope of four tapered cones. Capping the radial distance at the
+      // axial leg length produces the tetrapod's characteristic flat feet.
+      const perpendicular=Math.sqrt(Math.max(0,1-alignment*alignment));
+      const coneRadius=.52/(perpendicular+.28*alignment);
+      const flatEndRadius=1/alignment;
+      const radius=Math.min(coneRadius,flatEndRadius);
+      verts.push(x*radius,y*radius,z*radius);
+    }
+  }
+  for (let i=0;i<rings;i++) for (let j=0;j<segments;j++){
+    const a=i*segments+j,b=i*segments+(j+1)%segments;
+    const c=(i+1)*segments+j,d=(i+1)*segments+(j+1)%segments;
+    tris.push(a,b,d,a,d,c);
+  }
+  return {verts:Float64Array.from(verts),tris:Uint32Array.from(tris)};
+}
+
 /* --------------------------------------------------------- projection */
 function cameraBasis(azDeg, elDeg, rollDeg){
   const az = azDeg*Math.PI/180, el = elDeg*Math.PI/180, ro = rollDeg*Math.PI/180;
@@ -1357,7 +1392,8 @@ const demos = {
   diamond: {name:"demo · soft diamond", create:()=>sphereDemo("diamond")},
   torus: {name:"demo · ring torus", create:()=>ringTorus()},
   twist: {name:"demo · twisted bloom", create:()=>radialColumnDemo("twist")},
-  hourglass: {name:"demo · hourglass", create:()=>radialColumnDemo("hourglass")}
+  hourglass: {name:"demo · hourglass", create:()=>radialColumnDemo("hourglass")},
+  tetrapod: {name:"demo · tetrapod", create:()=>tetrapodDemo()}
 };
 function loadDemo(id, announce=true){
   const demo=demos[id];
