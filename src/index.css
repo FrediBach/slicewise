@@ -93,6 +93,25 @@ input[type="number"], input[type="text"], select { height: 27px; border: 1px sol
 .swatch input { width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .sheet-control input { width: 58px; text-align: right; }
 .sheet-control > span:not(.unit) { color: #a0a49f; }
+.gradient-editor { margin: 9px 0 8px; padding: 10px; border: 1px solid var(--line); background: #eef0ec; }
+.gradient-editor > .checkbox-row { font-size: 9px; }
+.gradient-panel { display: grid; gap: 9px; margin-top: 11px; }
+.gradient-editor:not(.enabled) .gradient-panel { display: none; }
+.gradient-preview { height: 25px; border: 1px solid rgba(22,25,23,.2); box-shadow: inset 0 0 0 1px rgba(255,255,255,.3); }
+.gradient-presets { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.gradient-presets button { min-width: 0; display: grid; gap: 4px; border: 1px solid #d4d7d2; background: white; padding: 4px 3px 5px; color: #777c76; cursor: pointer; font-size: 6.8px; text-align: center; }
+.gradient-presets button span { width: 100%; height: 10px; border: 1px solid rgba(22,25,23,.1); }
+.gradient-presets button:hover, .gradient-presets button.active { border-color: var(--ink); color: var(--ink); }
+.gradient-stops { display: grid; gap: 5px; }
+.gradient-stop { display: grid; grid-template-columns: 23px minmax(0,1fr) 29px 24px; align-items: center; gap: 6px; }
+.gradient-stop input[type="color"] { width: 23px; height: 23px; border: 1px solid #c7cac5; background: white; padding: 2px; cursor: pointer; }
+.gradient-stop span { color: #777c76; font-size: 8px; text-align: right; font-variant-numeric: tabular-nums; }
+.gradient-stop button { width: 24px; height: 23px; display: grid; place-items: center; border: 1px solid #d4d7d2; background: white; color: #777c76; cursor: pointer; }
+.gradient-stop button:hover:not(:disabled) { border-color: #a22b25; color: #a22b25; }
+.gradient-stop button:disabled { opacity: .35; cursor: not-allowed; }
+.add-stop { justify-self: start; display: inline-flex; align-items: center; gap: 5px; border: 0; border-bottom: 1px solid #aeb2ad; background: transparent; padding: 2px 0; color: #60655f; cursor: pointer; font-size: 8px; }
+.gradient-panel .control-row { grid-template-columns: 80px minmax(0,1fr); margin-top: 1px; }
+.gradient-note { margin: -2px 0 0; color: #8d928c; font-size: 7.5px; line-height: 1.45; }
 
 .actions { flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; padding: 14px 20px 11px; border-top: 1px solid var(--line); background: rgba(247,248,245,.96); }
 .action-buttons { display: flex; gap: 8px; }

@@ -613,6 +613,59 @@ function emitPath(poly, pts, visible, step, out){
   flush();
 }
 
+function splitPolylineByBands(poly, pts, values, bandCount){
+  const chunks=[];
+  let current=null;
+  const pointAt=(a,b,t)=>[
+    pts[a*3]+(pts[b*3]-pts[a*3])*t,
+    pts[a*3+1]+(pts[b*3+1]-pts[a*3+1])*t,
+    pts[a*3+2]+(pts[b*3+2]-pts[a*3+2])*t
+  ];
+  const finish=()=>{ if (current && current.pts.length>=6) chunks.push(current); current=null; };
+  for (let i=0;i+1<poly.length;i++){
+    const a=poly[i], b=poly[i+1], va=clamp(values[a],0,1), vb=clamp(values[b],0,1);
+    const cuts=[0,1];
+    if (Math.abs(vb-va)>1e-9){
+      for (let k=1;k<bandCount;k++){
+        const t=(k/bandCount-va)/(vb-va);
+        if (t>1e-7 && t<1-1e-7) cuts.push(t);
+      }
+    }
+    cuts.sort((x,y)=>x-y);
+    for (let c=0;c+1<cuts.length;c++){
+      const t0=cuts[c], t1=cuts[c+1];
+      const middle=va+(vb-va)*(t0+t1)/2;
+      const band=clamp(Math.floor(middle*bandCount),0,bandCount-1);
+      const p0=pointAt(a,b,t0), p1=pointAt(a,b,t1);
+      if (!current || current.band!==band){ finish(); current={band,pts:[...p0,...p1]}; }
+      else current.pts.push(...p1);
+    }
+  }
+  finish();
+  return chunks;
+}
+
+function gradientPalette(settings){
+  if (!settings.gradientEnabled) return [settings.color];
+  const stops=(settings.gradientStops || []).slice().sort((a,b)=>a.position-b.position);
+  if (stops.length<2) return [settings.color];
+  const count=clamp(Math.round(settings.gradientColors),2,24);
+  const rgb=hex=>{
+    const value=parseInt(hex.slice(1),16);
+    return [(value>>16)&255,(value>>8)&255,value&255];
+  };
+  const hex=channels=>"#"+channels.map(v=>Math.round(v).toString(16).padStart(2,"0")).join("");
+  return Array.from({length:count},(_,i)=>{
+    const t=i/(count-1);
+    let right=stops.findIndex(stop=>stop.position>=t);
+    if (right<0) right=stops.length-1;
+    const b=stops[right], a=stops[Math.max(0,right-1)];
+    const mix=a===b ? 0 : clamp((t-a.position)/(b.position-a.position || 1),0,1);
+    const ca=rgb(a.color), cb=rgb(b.color);
+    return hex(ca.map((value,j)=>value+(cb[j]-value)*mix));
+  });
+}
+
 /* ------------------------------------ Ramer–Douglas–Peucker (iterative) */
 function simplify(run, tol){
   const n = run.length/2;
@@ -734,6 +787,8 @@ const state = {
   az: 35, el: 24, roll: 0, zoom: 1, lens: "clean", lensAmount: 100,
   lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
+  gradientEnabled: false, gradientColors: 6,
+  gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
 };
@@ -804,9 +859,10 @@ function spiralContours(P, mesh, field, settings){
   const {V,T}=mesh;
   const count=Math.max(1, Math.round(settings.lines));
   const span=field.max-field.min || 1;
-  const q=new Float32Array(V.length/3);
+  const q=new Float32Array(V.length/3), gradientValue=new Float32Array(V.length/3);
   for (let v=0;v<q.length;v++){
     const position=clamp((field.S[v]-field.min)/span, 0, 1);
+    gradientValue[v]=position;
     q[v]=inverseLineGapEase(position, settings);
   }
 
@@ -831,7 +887,7 @@ function spiralContours(P, mesh, field, settings){
     angle[v]=Math.atan2(ry,rx)/(Math.PI*2);
   }
 
-  const pts=[], segs=[], pointIndex=new Map();
+  const pts=[], values=[], segs=[], pointIndex=new Map();
   const unwrap=(value,anchor)=>value+Math.round(anchor-value);
   const crossesAxis=(ids)=>{
     const x0=radialX[ids[0]], y0=radialY[ids[0]];
@@ -871,6 +927,7 @@ function spiralContours(P, mesh, field, settings){
       P.sy[a]+(P.sy[b]-P.sy[a])*t,
       P.sd[a]+(P.sd[b]-P.sd[a])*t
     );
+    values.push(gradientValue[a]+(gradientValue[b]-gradientValue[a])*t);
     pointIndex.set(key,id);
     return id;
   };
@@ -897,7 +954,7 @@ function spiralContours(P, mesh, field, settings){
       if (crossings.length===2 && crossings[0]!==crossings[1]) segs.push(crossings[0],crossings[1]);
     }
   }
-  return {pts,segs};
+  return {pts,values,segs};
 }
 
 export function computeContours(mesh, settings, quick){
@@ -919,40 +976,57 @@ export function computeContours(mesh, settings, quick){
     step = Math.max(0.25, W / D.rw);
   }
 
-  const out = [];
+  const palette=gradientPalette(settings);
+  const out=Array.from({length:palette.length},()=>[]);
+  const outlineOut=[];
   const N = settings.lines;
   const quality = clamp(Math.round(settings.quality), 1, 10);
   const curveStrength = (quality-1)/9;
   const span = field.max - field.min;
   if (settings.spiral){
-    const {pts,segs}=spiralContours(P,mesh,field,settings);
-    if (segs.length) for (const poly of chain(pts,segs)) emitPath(poly,pts,vis,step,out);
+    const {pts,values,segs}=spiralContours(P,mesh,field,settings);
+    if (segs.length) for (const poly of chain(pts,segs)){
+      if (settings.gradientEnabled){
+        for (const chunk of splitPolylineByBands(poly,pts,values,palette.length)){
+          const indexes=Array.from({length:chunk.pts.length/3},(_,i)=>i);
+          emitPath(indexes,chunk.pts,vis,step,out[chunk.band]);
+        }
+      } else emitPath(poly,pts,vis,step,out[0]);
+    }
   } else {
     for (let i=0;i<N;i++){
       const position = easeLineGap((i + 0.5) / N, settings.gapEase, settings.easeStrength, settings.easeCenter, settings.easeCycles);
       const level = field.min + span * position;
       const {pts, segs} = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
       if (!segs.length) continue;
-      for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out);
+      const band=settings.gradientEnabled ? clamp(Math.floor(position*palette.length),0,palette.length-1) : 0;
+      for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out[band]);
     }
   }
   if (settings.sil){
     const {pts, segs} = silhouetteEdges(mesh, P);
     if (segs.length){
-      for (const poly of chain(pts, segs)) emitPath(poly, pts, visOutline, step, out);
+      for (const poly of chain(pts, segs)) emitPath(poly, pts, visOutline, step, outlineOut);
     }
   }
 
   // ---- serialise: RDP concentrates anchors where deviation is greatest;
   // curved spans use Béziers while flat spans remain compact straight lines.
-  let d = "", nodes = 0, paths = 0;
-  for (const raw of out){
-    const tolerance = 0.06 * Math.pow(0.72, quality-1);
-    const run = simplify(raw, tolerance);
-    if (run.length < 4) continue;
-    d += serialiseRun(run, quality);
-    nodes += run.length/2; paths++;
-  }
+  const tolerance = 0.06 * Math.pow(0.72, quality-1);
+  let nodes=0, paths=0;
+  const serialiseGroup=runs=>{
+    let d="";
+    for (const raw of runs){
+      const run=simplify(raw,tolerance);
+      if (run.length<4) continue;
+      d+=serialiseRun(run,quality);
+      nodes+=run.length/2; paths++;
+    }
+    return d;
+  };
+  const colorPaths=out.map(serialiseGroup);
+  const outlinePath=serialiseGroup(outlineOut);
+  const allPathData=colorPaths.join("")+outlinePath;
   let artwork, renderedPaths=paths, renderedNodes=nodes;
   if (settings.chroma){
     const amount=clamp(settings.chromaAmount, .1, 6);
@@ -960,16 +1034,17 @@ export function computeContours(mesh, settings, quick){
     const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:screen"`;
     artwork=`<rect width="${W}" height="${H}" fill="#000000"/>
 <g style="isolation:isolate">
-<path d="${d}" stroke="#ff2020" transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}/>
-<path d="${d}" stroke="#25ff48" transform="translate(0 ${fmt(amount*.08)})" ${attrs}/>
-<path d="${d}" stroke="#2548ff" transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}/>
+<path d="${allPathData}" stroke="#ff2020" transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}/>
+<path d="${allPathData}" stroke="#25ff48" transform="translate(0 ${fmt(amount*.08)})" ${attrs}/>
+<path d="${allPathData}" stroke="#2548ff" transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}/>
 </g>`;
     renderedPaths*=3; renderedNodes*=3;
   } else {
     const bg=settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
-    artwork=`${bg}<g fill="none" stroke="${settings.color}" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round">
-<path d="${d}"/>
-</g>`;
+    const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
+    const groups=colorPaths.map((d,i)=>d ? `<path d="${d}" stroke="${palette[i]}" ${attrs}/>` : "").join("\n");
+    const outline=outlinePath ? `<path d="${outlinePath}" stroke="${settings.color}" ${attrs}/>` : "";
+    artwork=`${bg}${groups}${outline}`;
   }
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
@@ -1000,8 +1075,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
+  const {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1162,6 +1237,7 @@ function bindPair(id, key, after){
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom"); bindPair("lensAmount","lensAmount");
 bindPair("lines","lines"); bindPair("easeStrength","easeStrength"); bindPair("easeCycles","easeCycles"); bindPair("easeCenter","easeCenter"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
+bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
 
 $("axis").addEventListener("change", e => {
@@ -1191,7 +1267,25 @@ $("spiral").addEventListener("change", e => { state.spiral = e.target.checked; r
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });
-$("chroma").addEventListener("change", e => { state.chroma = e.target.checked; redraw(false); });
+$("chroma").addEventListener("change", e => {
+  state.chroma = e.target.checked;
+  if (state.chroma && state.gradientEnabled){
+    state.gradientEnabled=false;
+    $("gradientEnabled").checked=false;
+    $("gradientEditor").classList.remove("enabled");
+  }
+  redraw(false);
+});
+$("gradientEnabled").addEventListener("change", e => {
+  state.gradientEnabled=e.target.checked;
+  $("gradientEditor").classList.toggle("enabled",state.gradientEnabled);
+  if (state.gradientEnabled && state.chroma){ state.chroma=false; $("chroma").checked=false; }
+  redraw(false);
+});
+$("gradientEditor").addEventListener("gradientchange", e => {
+  state.gradientStops=e.detail.stops;
+  if (state.gradientEnabled) redraw(true);
+});
 $("color").addEventListener("input", e => { setInk(e.target.value, true); $("colorHex").value = e.target.value; });
 $("color").addEventListener("change", () => redraw(false));
 $("colorHex").addEventListener("input", e => {
