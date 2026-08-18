@@ -821,6 +821,7 @@ const state = {
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
   chroma: false, chromaAmount: 1.5,
+  morphSteps: 4, morphTargets: {},
   exportFormat: "svg", gcodeProfile: "uunatek3", drawFeed: 3000, travelFeed: 6000, penUp: 0, penDown: -3, zFeed: 2000,
   svg: "", svgBytes: 0, toolpaths: [], dragging: false
 };
@@ -989,7 +990,7 @@ function spiralContours(P, mesh, field, settings){
   return {pts,values,segs};
 }
 
-export function computeContours(mesh, settings, quick){
+function computeContourInstance(mesh, settings, quick){
   const t0 = performance.now();
   const W = settings.pw, H = settings.ph;
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
@@ -1093,7 +1094,7 @@ export function computeContours(mesh, settings, quick){
     const amount=clamp(settings.chromaAmount, .1, 6);
     const rotation=amount*.12, cx=W/2, cy=H/2;
     const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:screen"`;
-    artwork=`<rect width="${W}" height="${H}" fill="#000000"/>
+    artwork=`${settings.suppressBackground ? "" : `<rect width="${W}" height="${H}" fill="#000000"/>`}
 <g style="isolation:isolate">
 <path d="${allPathData}" stroke="#ff2020" transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}/>
 <path d="${allPathData}" stroke="#25ff48" transform="translate(0 ${fmt(amount*.08)})" ${attrs}/>
@@ -1101,7 +1102,7 @@ export function computeContours(mesh, settings, quick){
 </g>`;
     renderedPaths*=3; renderedNodes*=3;
   } else {
-    const bg=settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
+    const bg=settings.bg && !settings.suppressBackground ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
     const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
     const spacing=clamp(settings.halftoneSize || 2.4,.5,8);
     const contrast=clamp((settings.halftoneContrast || 0)/100,0,1);
@@ -1123,6 +1124,58 @@ ${artwork}
 </svg>`;
   const ms = performance.now() - t0;
   return {svg, toolpaths, paths:renderedPaths, nodes:renderedNodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick};
+}
+
+function svgArtwork(svg){
+  const start=svg.indexOf(">");
+  const end=svg.lastIndexOf("</svg>");
+  return start>=0 && end>start ? svg.slice(start+1,end).trim() : "";
+}
+
+export function computeContours(mesh, settings, quick){
+  const targets=Object.entries(settings.morphTargets || {}).filter(([key,value]) =>
+    Number.isFinite(Number(value)) && Number.isFinite(Number(settings[key]))
+  );
+  if (!targets.length) return computeContourInstance(mesh,settings,quick);
+
+  const started=performance.now();
+  const steps=clamp(Math.round(settings.morphSteps || 2),2,24);
+  const results=[];
+  for (let index=0;index<steps;index++){
+    const amount=steps===1 ? 0 : index/(steps-1);
+    const instance={...settings,suppressBackground:true};
+    for (const [key,target] of targets){
+      const start=Number(settings[key]);
+      instance[key]=start+(Number(target)-start)*amount;
+    }
+    results.push(computeContourInstance(mesh,instance,quick));
+  }
+
+  const W=settings.pw, H=settings.ph;
+  const background=settings.chroma
+    ? `<rect width="${W}" height="${H}" fill="#000000"/>`
+    : settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
+  const layers=results.map((result,index)=>`<g data-morph-step="${index+1}" data-morph-position="${fmt(index/(steps-1))}">${svgArtwork(result.svg)}</g>`).join("\n");
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
+${background}${layers}
+</svg>`;
+
+  const groups=new Map();
+  for (const result of results) for (const group of result.toolpaths){
+    const key=group.color.toLowerCase();
+    const existing=groups.get(key);
+    if (existing) existing.runs.push(...group.runs);
+    else groups.set(key,{color:group.color,label:"morphed contours",runs:[...group.runs]});
+  }
+  return {
+    svg,
+    toolpaths:[...groups.values()],
+    paths:results.reduce((sum,result)=>sum+result.paths,0),
+    nodes:results.reduce((sum,result)=>sum+result.nodes,0),
+    bytes:new TextEncoder().encode(svg).byteLength,
+    ms:performance.now()-started,
+    W,H,quick
+  };
 }
 
 if (typeof document !== "undefined") {
@@ -1147,14 +1200,15 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount};
+  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphSteps,morphTargets} = state;
+  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphSteps,morphTargets:{...morphTargets}};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
   const visibilityCost = state.hide ? 1.55 : 1;
   const curveCost = 1 + Math.max(0, state.quality-1)*.055;
-  const score = triangles * state.lines * visibilityCost * curveCost;
+  const morphCost = Object.keys(state.morphTargets).length ? state.morphSteps : 1;
+  const score = triangles * state.lines * visibilityCost * curveCost * morphCost;
   let complexityDelay = 150;
   if (score < 450000) complexityDelay = 16;
   else if (score < 1500000) complexityDelay = 32;
@@ -1306,7 +1360,9 @@ function loadFile(file){
 }
 
 /* -------------------------------------------------------------- wiring */
+const morphKeyById=new Map();
 function bindPair(id, key, after){
+  morphKeyById.set(id,key);
   const s = $(id), n = $(id + "N");
   const apply = (v, from) => {
     v = clamp(parseFloat(v), parseFloat(n.min), parseFloat(n.max));
@@ -1341,7 +1397,17 @@ bindPair("chromaAmount","chromaAmount");
 bindPair("halftoneSize","halftoneSize"); bindPair("halftoneContrast","halftoneContrast"); bindPair("halftoneCycles","halftoneCycles");
 bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
+bindPair("morphSteps","morphSteps");
 bindExportPair("drawFeed","drawFeed"); bindExportPair("travelFeed","travelFeed"); bindExportPair("penUp","penUp"); bindExportPair("penDown","penDown"); bindExportPair("zFeed","zFeed");
+
+document.addEventListener("morphchange",event=>{
+  const {id,active,value}=event.detail || {};
+  const key=morphKeyById.get(id);
+  if (!key) return;
+  if (active && Number.isFinite(Number(value))) state.morphTargets[key]=Number(value);
+  else delete state.morphTargets[key];
+  redraw(false);
+});
 
 async function rebuildSVG(){
   if (!state.svgSource) return;

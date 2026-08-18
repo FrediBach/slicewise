@@ -3,17 +3,61 @@ import { Box, Check, ChevronDown, Clipboard, Dices, Download, FileUp, Plus, Rota
 import { Button } from "./components/ui/button";
 import { Section } from "./components/ui/section";
 
-function ValueControl({ id, label, min, max, step, value, unit, disabled = false }) {
+function MorphIcon({ size = 13 }) {
   return (
-    <div className={`control-row${disabled ? " is-disabled" : ""}`} id={`${id}Control`}>
-      <label htmlFor={id}>{label}</label>
-      <div className="control-inputs">
-        <input type="range" id={id} min={min} max={max} step={step} defaultValue={value} disabled={disabled} />
-        <span className={`value-field${unit ? " has-unit" : ""}`}>
-          <input type="number" id={`${id}N`} min={min} max={max} step={step} defaultValue={value} disabled={disabled}
-            aria-label={`${label}${unit ? ` in ${unit}` : ""}`} />
-          <span className="unit" aria-hidden="true">{unit || ""}</span>
-        </span>
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M2 4h7m0 0L7 2m2 2L7 6M14 12H7m0 0 2-2m-2 2 2 2" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ValueControl({ id, label, min, max, step, value, unit, disabled = false, morphable = true }) {
+  const [morphing, setMorphing] = useState(false);
+  const [morphValue, setMorphValue] = useState(Number(value));
+
+  const announceMorph = (active, nextValue = morphValue) => {
+    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active, value: Number(nextValue) } }));
+  };
+  const toggleMorph = () => {
+    const active = !morphing;
+    const mainValue = Number(document.getElementById(id)?.value ?? value);
+    if (active) setMorphValue(mainValue);
+    setMorphing(active);
+    announceMorph(active, active ? mainValue : morphValue);
+  };
+  const changeMorphValue = next => {
+    const parsed = Math.min(Number(max), Math.max(Number(min), Number(next)));
+    if (!Number.isFinite(parsed)) return;
+    setMorphValue(parsed);
+    announceMorph(true, parsed);
+  };
+
+  return (
+    <div className={`control-row${disabled ? " is-disabled" : ""}${morphing ? " is-morphing" : ""}`} id={`${id}Control`}>
+      <div className="control-label">
+        <label htmlFor={id}>{label}</label>
+        {morphable && <button type="button" className="morph-toggle" aria-pressed={morphing}
+          aria-label={`${morphing ? "Remove" : "Add"} ${label} ${morphing ? "from" : "to"} morphing`} title={morphing ? "Remove morph target" : "Add morph target"}
+          onClick={toggleMorph}><MorphIcon /></button>}
+      </div>
+      <div className="control-stack">
+        <div className="control-inputs">
+          <input type="range" id={id} min={min} max={max} step={step} defaultValue={value} disabled={disabled} />
+          <span className={`value-field${unit ? " has-unit" : ""}`}>
+            <input type="number" id={`${id}N`} min={min} max={max} step={step} defaultValue={value} disabled={disabled}
+              aria-label={`${label}${unit ? ` in ${unit}` : ""}`} />
+            <span className="unit" aria-hidden="true">{unit || ""}</span>
+          </span>
+        </div>
+        {morphing && <div className="control-inputs morph-inputs">
+          <input type="range" id={`${id}Morph`} min={min} max={max} step={step} value={morphValue}
+            aria-label={`${label} morph target`} onChange={event => changeMorphValue(event.target.value)} />
+          <span className={`value-field${unit ? " has-unit" : ""}`}>
+            <input type="number" id={`${id}MorphN`} min={min} max={max} step={step} value={morphValue}
+              aria-label={`${label} morph target${unit ? ` in ${unit}` : ""}`} onChange={event => changeMorphValue(event.target.value)} />
+            <span className="unit" aria-hidden="true">{unit || ""}</span>
+          </span>
+        </div>}
       </div>
     </div>
   );
@@ -160,9 +204,9 @@ export default function App() {
             </label>
             <FieldGroup title="SVG extrusion" className="svg-extrusion">
               <div id="svgExtrusion" hidden>
-                <ValueControl id="svgDepth" label="Extrusion" min="0.5" max="100" step="0.1" value="12" unit="%" />
+                <ValueControl id="svgDepth" label="Extrusion" min="0.5" max="100" step="0.1" value="12" unit="%" morphable={false} />
                 <Checkbox id="svgRounded">Round extruded edges</Checkbox>
-                <ValueControl id="svgRoundness" label="Roundness" min="0" max="100" step="0.5" value="25" unit="%" disabled />
+                <ValueControl id="svgRoundness" label="Roundness" min="0" max="100" step="0.5" value="25" unit="%" disabled morphable={false} />
                 <p className="gradient-note">Depth is proportional to the SVG span. Roundness is relative to the largest safe edge radius.</p>
               </div>
             </FieldGroup>
@@ -272,6 +316,13 @@ export default function App() {
             </FieldGroup>
           </Section>
 
+          <Section title="Morph" badge="multi instance">
+            <FieldGroup title="Parameter interpolation">
+              <ValueControl id="morphSteps" label="Morph steps" min="2" max="24" step="1" value="4" morphable={false} />
+              <p className="gradient-note morph-note">Use the arrow icon beside any numeric parameter to reveal its target slider. All selected values are interpolated together from the main settings.</p>
+            </FieldGroup>
+          </Section>
+
           <Section title="Output" badge="03">
             <FieldGroup title="Line style">
               <ValueControl id="sw" label="Stroke" min="0.05" max="2" step="0.05" value="0.35" unit="mm" />
@@ -326,11 +377,11 @@ export default function App() {
                     <ChevronDown size={14} />
                   </div>
                 </div>
-                <ValueControl id="drawFeed" label="Draw speed" min="50" max="12000" step="50" value="3000" unit="mm/m" />
-                <ValueControl id="travelFeed" label="Travel speed" min="50" max="15000" step="50" value="6000" unit="mm/m" />
-                <ValueControl id="penUp" label="Pen up Z" min="-20" max="50" step="0.1" value="0" unit="mm" />
-                <ValueControl id="penDown" label="Pen down Z" min="-20" max="50" step="0.1" value="-3" unit="mm" />
-                <ValueControl id="zFeed" label="Z speed" min="10" max="12000" step="10" value="2000" unit="mm/m" />
+                <ValueControl id="drawFeed" label="Draw speed" min="50" max="12000" step="50" value="3000" unit="mm/m" morphable={false} />
+                <ValueControl id="travelFeed" label="Travel speed" min="50" max="15000" step="50" value="6000" unit="mm/m" morphable={false} />
+                <ValueControl id="penUp" label="Pen up Z" min="-20" max="50" step="0.1" value="0" unit="mm" morphable={false} />
+                <ValueControl id="penDown" label="Pen down Z" min="-20" max="50" step="0.1" value="-3" unit="mm" morphable={false} />
+                <ValueControl id="zFeed" label="Z speed" min="10" max="12000" step="10" value="2000" unit="mm/m" morphable={false} />
                 <p className="gradient-note" id="gcodeProfileNote">UUNA TEK rear-left origin with 3 mm pen drop. Set the machine origin at the sheet’s rear-left corner before plotting.</p>
               </div>
             </FieldGroup>

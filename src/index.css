@@ -70,9 +70,22 @@ button { -webkit-tap-highlight-color: transparent; }
 .error { margin: 9px 0 0; color: #a22b25; font-size: 10px; line-height: 1.5; }
 
 .control-row { display: grid; grid-template-columns: 80px minmax(0, 1fr); align-items: center; min-height: 31px; gap: 10px; }
-.control-row.is-disabled { opacity: .45; }
-.control-row > label { color: #6f746e; font-size: 10.5px; }
+.control-row.is-disabled > .control-label label, .control-row.is-disabled > .control-stack > .control-inputs:first-child { opacity: .45; }
+.control-label { min-width: 0; display: flex; align-items: center; gap: 5px; }
+.control-label > label { min-width: 0; flex: 1; color: #6f746e; font-size: 10.5px; }
+.control-stack { min-width: 0; display: grid; gap: 3px; }
 .control-inputs { display: flex; align-items: center; gap: 8px; }
+.morph-toggle { width: 20px; height: 20px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid transparent; background: transparent; color: #a0a49f; padding: 0; cursor: pointer; }
+.morph-toggle:hover { border-color: #b8bcb6; color: var(--ink); }
+.morph-toggle[aria-pressed="true"] { border-color: var(--blue); background: var(--blue); color: white; }
+.morph-toggle:disabled { cursor: not-allowed; }
+.morph-inputs { position: relative; padding-top: 3px; }
+.morph-inputs::before { content: "TO"; position: absolute; left: -24px; top: 7px; color: var(--blue); font-size: 7px; letter-spacing: .08em; }
+.morph-inputs input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--blue), #b9bce9); }
+.morph-inputs input[type="range"]::-webkit-slider-thumb { border-color: var(--blue); }
+.morph-inputs input[type="range"]::-moz-range-track { background: #747ee5; }
+.morph-inputs input[type="range"]::-moz-range-thumb { border-color: var(--blue); }
+.morph-note { margin: 7px 6px 2px 0; }
 input[type="range"] { appearance: none; min-width: 0; flex: 1; height: 16px; background: transparent; }
 input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, #282b29, #cdd0cc); }
 input[type="range"]::-webkit-slider-thumb { appearance: none; width: 11px; height: 11px; margin-top: -4.5px; border: 2px solid var(--ink); border-radius: 50%; background: var(--panel); cursor: grab; }
