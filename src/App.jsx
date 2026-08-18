@@ -83,7 +83,7 @@ function GradientChooser() {
         </div>
         <div className="gradient-stops">
           {stops.map(([position, color], index) => (
-            <div className="gradient-stop" key={`${index}-${color}`}>
+            <div className="gradient-stop" key={index}>
               <input type="color" value={color} aria-label={`Stop ${index+1} colour`}
                 onChange={e => updateStop(index, [position, e.target.value])} />
               <input type="range" min="0" max="100" step="1" value={Math.round(position*100)} aria-label={`Stop ${index+1} position`}
