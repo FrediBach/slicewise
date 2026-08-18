@@ -816,7 +816,7 @@ const state = {
   svgSource: null, svgSourceName: "", svgDepth: 12, svgRounded: false, svgRoundness: 25,
   az: 35, el: 24, roll: 0, zoom: 1, panX: 0, panY: 0, lens: "clean", lensAmount: 100,
   lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
-  sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
+  sw: 0.35, color: "#15181a", backgroundColor: "#ffffff", pw: 210, ph: 210, margin: 14, bg: false,
   gradientEnabled: false, gradientColors: 6,
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
@@ -1102,7 +1102,7 @@ function computeContourInstance(mesh, settings, quick){
 </g>`;
     renderedPaths*=3; renderedNodes*=3;
   } else {
-    const bg=settings.bg && !settings.suppressBackground ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
+    const bg=settings.bg && !settings.suppressBackground ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || "#ffffff"}"/>` : "";
     const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
     const spacing=clamp(settings.halftoneSize || 2.4,.5,8);
     const contrast=clamp((settings.halftoneContrast || 0)/100,0,1);
@@ -1163,7 +1163,7 @@ export function computeContours(mesh, settings, quick){
   const W=settings.pw, H=settings.ph;
   const background=settings.chroma
     ? `<rect width="${W}" height="${H}" fill="#000000"/>`
-    : settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
+    : settings.bg ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || "#ffffff"}"/>` : "";
   const layers=results.map((result,index)=>`<g data-morph-step="${index+1}" data-morph-position="${fmt(index/(steps-1))}">${svgArtwork(result.svg)}</g>`).join("\n");
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${background}${layers}
@@ -1209,8 +1209,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets} = state;
-  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets:{...morphTargets}};
+  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets} = state;
+  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets:{...morphTargets}};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1232,6 +1232,7 @@ function applyRender(result){
   state.svgBytes = result.bytes;
   state.toolpaths = result.toolpaths || [];
   fitBed(result.W, result.H);
+  $("bed").style.background = state.backgroundColor;
   $("bed").innerHTML = result.svg;
   $("rPaths").textContent = result.paths.toLocaleString();
   $("rPts").textContent = Math.round(result.nodes).toLocaleString();
@@ -1582,6 +1583,22 @@ $("colorHex").addEventListener("input", e => {
 });
 $("colorHex").addEventListener("change", () => redraw(false));
 function setInk(v, quick){ state.color = v; $("swatch").style.background = v; redraw(quick); }
+$("backgroundColor").addEventListener("input", e => { setBackgroundColor(e.target.value, true); $("backgroundColorHex").value = e.target.value; });
+$("backgroundColor").addEventListener("change", () => redraw(false));
+$("backgroundColorHex").addEventListener("input", e => {
+  const v = e.target.value.trim();
+  if (/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(v)){
+    const full = v.length===4 ? "#"+v[1]+v[1]+v[2]+v[2]+v[3]+v[3] : v;
+    $("backgroundColor").value = full; setBackgroundColor(full, true);
+  }
+});
+$("backgroundColorHex").addEventListener("change", () => redraw(false));
+function setBackgroundColor(v, quick){
+  state.backgroundColor = v;
+  $("backgroundSwatch").style.background = v;
+  $("bed").style.background = v;
+  redraw(quick);
+}
 function activateCustomAxis(){
   state.axis = "custom";
   $("axis").value = "custom";

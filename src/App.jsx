@@ -111,6 +111,24 @@ function InkColorControl() {
   );
 }
 
+function BackgroundColorControl() {
+  return (
+    <div className="control-row color-row" id="backgroundColorControl">
+      <div className="control-label">
+        <label htmlFor="backgroundColorHex">Background colour</label>
+      </div>
+      <div className="control-stack">
+        <div className="color-control">
+          <span className="swatch" id="backgroundSwatch" style={{ background: "#ffffff" }}>
+            <input type="color" id="backgroundColor" defaultValue="#ffffff" />
+          </span>
+          <input type="text" id="backgroundColorHex" defaultValue="#ffffff" spellCheck="false" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FieldGroup({ title, children, className = "" }) {
   return (
     <div className={`field-group ${className}`}>
@@ -378,6 +396,7 @@ export default function App() {
             <FieldGroup title="Line style">
               <ValueControl id="sw" label="Stroke" min="0.05" max="2" step="0.05" value="0.35" unit="mm" />
               <InkColorControl />
+              <BackgroundColorControl />
               <GradientChooser />
             </FieldGroup>
             <FieldGroup title="Artboard">
@@ -386,7 +405,7 @@ export default function App() {
                 <div className="sheet-control"><input type="number" id="pw" min="10" max="2000" step="1" defaultValue="210" /><span>×</span><input type="number" id="ph" min="10" max="2000" step="1" defaultValue="210" /><span className="unit">mm</span></div>
               </div>
               <ValueControl id="margin" label="Margin" min="0" max="40" step="1" value="14" unit="mm" />
-              <Checkbox id="bg">Include white sheet background</Checkbox>
+              <Checkbox id="bg">Include sheet background</Checkbox>
             </FieldGroup>
             <FieldGroup title="Post-processing">
               <Checkbox id="halftone">Halftone stroke</Checkbox>

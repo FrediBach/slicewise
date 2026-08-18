@@ -11,7 +11,7 @@ A browser-based contour studio that slices 3D meshes into clean, single-weight S
 - Optional continuous helicoidal slicing for pen-down spiral paths
 - Optional hidden-line removal and silhouette generation
 - Interactive orbit, roll, and zoom controls
-- Configurable sheet size, margin, ink colour, and stroke width
+- Configurable sheet size, margin, ink and background colours, and stroke width
 - Local-only mesh processing with SVG and configurable plotter G-code download or clipboard export
 - Built-in UUNA TEK 3.0 A3 G-code profile with rear-left origin and Z-axis pen control
 - Responsive React interface with shadcn-compatible component structure
