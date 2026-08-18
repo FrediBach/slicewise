@@ -400,8 +400,31 @@ export default function App() {
               <GradientChooser />
             </FieldGroup>
             <FieldGroup title="Artboard">
+              <div className="control-row select-row">
+                <label htmlFor="paperPreset">Paper size</label>
+                <div className="select-wrap">
+                  <select id="paperPreset" defaultValue="custom">
+                    <option value="custom">Custom</option>
+                    <optgroup label="ISO A series">
+                      <option value="a6">A6 · 105 × 148 mm</option>
+                      <option value="a5">A5 · 148 × 210 mm</option>
+                      <option value="a4">A4 · 210 × 297 mm</option>
+                      <option value="a3">A3 · 297 × 420 mm</option>
+                      <option value="a2">A2 · 420 × 594 mm</option>
+                      <option value="a1">A1 · 594 × 841 mm</option>
+                      <option value="a0">A0 · 841 × 1189 mm</option>
+                    </optgroup>
+                    <optgroup label="US sizes">
+                      <option value="letter">Letter · 216 × 279 mm</option>
+                      <option value="legal">Legal · 216 × 356 mm</option>
+                      <option value="tabloid">Tabloid · 279 × 432 mm</option>
+                    </optgroup>
+                  </select>
+                  <ChevronDown size={14} />
+                </div>
+              </div>
               <div className="control-row">
-                <label htmlFor="pw">Sheet size</label>
+                <label htmlFor="pw">Dimensions</label>
                 <div className="sheet-control"><input type="number" id="pw" min="10" max="2000" step="1" defaultValue="210" /><span>×</span><input type="number" id="ph" min="10" max="2000" step="1" defaultValue="210" /><span className="unit">mm</span></div>
               </div>
               <ValueControl id="margin" label="Margin" min="0" max="40" step="1" value="14" unit="mm" />
@@ -474,7 +497,7 @@ export default function App() {
         </header>
         <div className="bedwrap" id="bedwrap">
           <div className="canvas-grid" />
-          <div className="canvas-label canvas-label--top">210 × 210 MM</div>
+          <div className="canvas-label canvas-label--top" id="artboardDimensions">210 × 210 MM</div>
           <div className="canvas-label canvas-label--side">VECTOR PREVIEW</div>
           <div className="bed" id="bed" aria-label="Contour SVG preview" />
           <div className="orbit-hint"><Rotate3d size={14} />Drag to orbit <kbd>Shift</kbd> + drag to roll <kbd>Space</kbd> + drag to pan · Double-click to fit</div>

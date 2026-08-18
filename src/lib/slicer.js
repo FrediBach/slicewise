@@ -1232,6 +1232,7 @@ function applyRender(result){
   state.svgBytes = result.bytes;
   state.toolpaths = result.toolpaths || [];
   fitBed(result.W, result.H);
+  $("artboardDimensions").textContent = `${result.W} × ${result.H} MM`;
   $("bed").style.background = state.backgroundColor;
   $("bed").innerHTML = result.svg;
   $("rPaths").textContent = result.paths.toLocaleString();
@@ -1604,9 +1605,27 @@ function activateCustomAxis(){
   $("axis").value = "custom";
   $("customAxis").hidden = false;
 }
+const paperSizes={
+  a6:[105,148], a5:[148,210], a4:[210,297], a3:[297,420], a2:[420,594], a1:[594,841], a0:[841,1189],
+  letter:[216,279], legal:[216,356], tabloid:[279,432]
+};
+function syncPaperPreset(){
+  const match=Object.entries(paperSizes).find(([,size])=>size[0]===state.pw && size[1]===state.ph);
+  $("paperPreset").value=match?.[0] || "custom";
+}
+$("paperPreset").addEventListener("change",e=>{
+  const size=paperSizes[e.target.value];
+  if (!size) return;
+  [state.pw,state.ph]=size;
+  $("pw").value=state.pw;
+  $("ph").value=state.ph;
+  redraw(false);
+});
 for (const id of ["pw","ph"]) $(id).addEventListener("input", e => {
   const v = clamp(parseFloat(e.target.value)||10, 10, 2000);
-  state[id] = v; redraw(true);
+  state[id] = v;
+  syncPaperPreset();
+  redraw(true);
 });
 for (const id of ["pw","ph"]) $(id).addEventListener("change", () => redraw(false));
 $("upZ").addEventListener("click", () => setUp(false));
