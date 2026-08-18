@@ -699,7 +699,7 @@ function silhouetteEdges(mesh, P){
 const state = {
   mesh: null, name: "demo · torus knot", upY: false,
   az: 35, el: 24, roll: 0, zoom: 1,
-  lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, hide: true, sil: true,
+  lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
@@ -751,6 +751,117 @@ function scalarField(mesh, P, axis, cutAz, cutEl){
   return {S, min: mn, max: mx, dir};
 }
 
+function inverseLineGapEase(value, settings){
+  if (settings.gapEase === "linear" || !settings.easeStrength) return value;
+  let lo=0, hi=1;
+  for (let i=0;i<18;i++){
+    const mid=(lo+hi)/2;
+    const eased=easeLineGap(mid, settings.gapEase, settings.easeStrength, settings.easeCenter, settings.easeCycles);
+    if (eased < value) lo=mid; else hi=mid;
+  }
+  return (lo+hi)/2;
+}
+
+function spiralContours(P, mesh, field, settings){
+  const {V,T}=mesh;
+  const count=Math.max(1, Math.round(settings.lines));
+  const span=field.max-field.min || 1;
+  const q=new Float32Array(V.length/3);
+  for (let v=0;v<q.length;v++){
+    const position=clamp((field.S[v]-field.min)/span, 0, 1);
+    q[v]=inverseLineGapEase(position, settings);
+  }
+
+  // A polar frame around the slicing direction turns parallel levels into a
+  // helicoidal field. Integer isolines of that field join across its angle seam.
+  const dir=field.dir;
+  const ref=Math.abs(dir[2])<.9 ? [0,0,1] : [0,1,0];
+  let ax=ref[1]*dir[2]-ref[2]*dir[1];
+  let ay=ref[2]*dir[0]-ref[0]*dir[2];
+  let az=ref[0]*dir[1]-ref[1]*dir[0];
+  const al=Math.hypot(ax,ay,az) || 1;
+  ax/=al; ay/=al; az/=al;
+  const bx=dir[1]*az-dir[2]*ay;
+  const by=dir[2]*ax-dir[0]*az;
+  const bz=dir[0]*ay-dir[1]*ax;
+  const angle=new Float32Array(q.length);
+  const radialX=new Float32Array(q.length), radialY=new Float32Array(q.length);
+  for (let v=0,i=0;v<q.length;v++,i+=3){
+    const x=V[i], y=V[i+1], z=V[i+2];
+    const rx=x*ax+y*ay+z*az, ry=x*bx+y*by+z*bz;
+    radialX[v]=rx; radialY[v]=ry;
+    angle[v]=Math.atan2(ry,rx)/(Math.PI*2);
+  }
+
+  const pts=[], segs=[], pointIndex=new Map();
+  const unwrap=(value,anchor)=>value+Math.round(anchor-value);
+  const crossesAxis=(ids)=>{
+    const x0=radialX[ids[0]], y0=radialY[ids[0]];
+    const x1=radialX[ids[1]], y1=radialY[ids[1]];
+    const x2=radialX[ids[2]], y2=radialY[ids[2]];
+    const c0=x0*y1-y0*x1, c1=x1*y2-y1*x2, c2=x2*y0-y2*x0;
+    const scale=Math.max(x0*x0+y0*y0,x1*x1+y1*y1,x2*x2+y2*y2,1e-12);
+    const eps=scale*1e-7;
+    const area=c0+c1+c2;
+    if (Math.abs(area)>eps){
+      return (c0>=-eps && c1>=-eps && c2>=-eps) || (c0<=eps && c1<=eps && c2<=eps);
+    }
+    const edgeHitsOrigin=(px,py,qx,qy)=>{
+      const dx=qx-px, dy=qy-py, length2=dx*dx+dy*dy;
+      if (!length2) return px*px+py*py<=eps;
+      const t=clamp(-(px*dx+py*dy)/length2,0,1);
+      const ex=px+dx*t, ey=py+dy*t;
+      return ex*ex+ey*ey<=eps;
+    };
+    return edgeHitsOrigin(x0,y0,x1,y1) || edgeHitsOrigin(x1,y1,x2,y2) || edgeHitsOrigin(x2,y2,x0,y0);
+  };
+  const pointOnEdge=(a,b,pa,pb,level)=>{
+    let t=clamp((level-pa)/(pb-pa),0,1);
+    let key;
+    if (t<1e-7) key="v"+a;
+    else if (t>1-1e-7) key="v"+b;
+    else {
+      const forward=a<b;
+      const edgeT=forward ? t : 1-t;
+      key=(forward ? a+"_"+b : b+"_"+a)+"_"+Math.round(edgeT*1e7);
+    }
+    let id=pointIndex.get(key);
+    if (id !== undefined) return id;
+    id=pts.length/3;
+    pts.push(
+      P.sx[a]+(P.sx[b]-P.sx[a])*t,
+      P.sy[a]+(P.sy[b]-P.sy[a])*t,
+      P.sd[a]+(P.sd[b]-P.sd[a])*t
+    );
+    pointIndex.set(key,id);
+    return id;
+  };
+
+  for (let i=0;i<T.length;i+=3){
+    const ids=[T[i],T[i+1],T[i+2]];
+    // Polar phase is undefined where the winding axis pierces the surface.
+    // Treat those triangles as branch boundaries instead of drawing arbitrary
+    // segments across the singularity.
+    if (crossesAxis(ids)) continue;
+    const a0=angle[ids[0]];
+    const angles=[a0,unwrap(angle[ids[1]],a0),unwrap(angle[ids[2]],a0)];
+    const phase=ids.map((v,j)=>count*q[v]-angles[j]-.5);
+    const first=Math.ceil(Math.min(...phase));
+    const last=Math.floor(Math.max(...phase));
+    for (let level=first;level<=last;level++){
+      const crossings=[];
+      for (let e=0;e<3;e++){
+        const n=(e+1)%3, p0=phase[e], p1=phase[n];
+        if ((p0<level && p1>=level) || (p1<level && p0>=level)){
+          crossings.push(pointOnEdge(ids[e],ids[n],p0,p1,level));
+        }
+      }
+      if (crossings.length===2 && crossings[0]!==crossings[1]) segs.push(crossings[0],crossings[1]);
+    }
+  }
+  return {pts,segs};
+}
+
 export function computeContours(mesh, settings, quick){
   const t0 = performance.now();
   const W = settings.pw, H = settings.ph;
@@ -775,12 +886,17 @@ export function computeContours(mesh, settings, quick){
   const quality = clamp(Math.round(settings.quality), 1, 10);
   const curveStrength = (quality-1)/9;
   const span = field.max - field.min;
-  for (let i=0;i<N;i++){
-    const position = easeLineGap((i + 0.5) / N, settings.gapEase, settings.easeStrength, settings.easeCenter, settings.easeCycles);
-    const level = field.min + span * position;
-    const {pts, segs} = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
-    if (!segs.length) continue;
-    for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out);
+  if (settings.spiral){
+    const {pts,segs}=spiralContours(P,mesh,field,settings);
+    if (segs.length) for (const poly of chain(pts,segs)) emitPath(poly,pts,vis,step,out);
+  } else {
+    for (let i=0;i<N;i++){
+      const position = easeLineGap((i + 0.5) / N, settings.gapEase, settings.easeStrength, settings.easeCenter, settings.easeCycles);
+      const level = field.min + span * position;
+      const {pts, segs} = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
+      if (!segs.length) continue;
+      for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out);
+    }
   }
   if (settings.sil){
     const {pts, segs} = silhouetteEdges(mesh, P);
@@ -846,8 +962,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
+  const {az,el,roll,zoom,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,pw,ph,margin,bg,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1022,6 +1138,7 @@ function syncEaseCenter(){
   $("easeCenterControl").classList.toggle("is-disabled", !enabled);
 }
 $("gapEase").addEventListener("change", e => { state.gapEase = e.target.value; syncEaseCenter(); redraw(false); });
+$("spiral").addEventListener("change", e => { state.spiral = e.target.checked; redraw(false); });
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });

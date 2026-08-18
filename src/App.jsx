@@ -137,6 +137,7 @@ export default function App() {
               <ValueControl id="cutEl" label="Elevation" min="-90" max="90" step="1" value="90" />
             </div>
             <div className="check-grid">
+              <Checkbox id="spiral">Continuous spiral</Checkbox>
               <Checkbox id="hide" defaultChecked>Remove hidden lines</Checkbox>
               <Checkbox id="sil" defaultChecked>Add outer silhouette</Checkbox>
             </div>
