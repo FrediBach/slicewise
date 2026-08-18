@@ -116,6 +116,7 @@ export default function App() {
               </div>
             </div>
             <ValueControl id="easeStrength" label="Ease strength" min="0" max="300" step="1" value="100" unit="%" />
+            <ValueControl id="easeCycles" label="Ease cycles" min="1" max="12" step="1" value="1" />
             <ValueControl id="easeCenter" label="Ease centre" min="5" max="95" step="1" value="50" unit="%" disabled />
             <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
             <div className="control-row select-row">
