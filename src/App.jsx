@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Check, ChevronDown, Clipboard, Download, FileUp, Plus, Rotate3d, Trash2 } from "lucide-react";
+import { Box, Check, ChevronDown, Clipboard, Dices, Download, FileUp, Plus, Rotate3d, Trash2 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Section } from "./components/ui/section";
 
@@ -9,9 +9,21 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
       <label htmlFor={id}>{label}</label>
       <div className="control-inputs">
         <input type="range" id={id} min={min} max={max} step={step} defaultValue={value} disabled={disabled} />
-        <input type="number" id={`${id}N`} min={min} max={max} step={step} defaultValue={value} disabled={disabled} />
-        {unit && <span className="unit">{unit}</span>}
+        <span className={`value-field${unit ? " has-unit" : ""}`}>
+          <input type="number" id={`${id}N`} min={min} max={max} step={step} defaultValue={value} disabled={disabled}
+            aria-label={`${label}${unit ? ` in ${unit}` : ""}`} />
+          <span className="unit" aria-hidden="true">{unit || ""}</span>
+        </span>
       </div>
+    </div>
+  );
+}
+
+function FieldGroup({ title, children, className = "" }) {
+  return (
+    <div className={`field-group ${className}`}>
+      <div className="field-group-title"><span>{title}</span></div>
+      <div className="field-group-body">{children}</div>
     </div>
   );
 }
@@ -155,106 +167,123 @@ export default function App() {
           </Section>
 
           <Section title="View" badge={<><Rotate3d size={12} /> drag canvas</>}>
-            <ValueControl id="az" label="Azimuth" min="-180" max="180" step="1" value="35" />
-            <ValueControl id="el" label="Elevation" min="-180" max="180" step="1" value="24" />
-            <ValueControl id="rl" label="Roll" min="-180" max="180" step="1" value="0" />
-            <ValueControl id="zoom" label="Scale" min="0.2" max="3" step="0.01" value="1" />
-            <div className="effect-divider" />
-            <div className="control-row select-row">
-              <label htmlFor="lens">Camera lens</label>
-              <div className="select-wrap">
-                <select id="lens" defaultValue="clean">
-                  <option value="clean">50 mm · clean</option>
-                  <option value="wide">24 mm · wide barrel</option>
-                  <option value="fisheye">12 mm · fisheye</option>
-                  <option value="tele">85 mm · pincushion</option>
-                </select>
-                <ChevronDown size={14} />
+            <FieldGroup title="Orientation">
+              <ValueControl id="az" label="Azimuth" min="-180" max="180" step="1" value="35" unit="°" />
+              <ValueControl id="el" label="Elevation" min="-180" max="180" step="1" value="24" unit="°" />
+              <ValueControl id="rl" label="Roll" min="-180" max="180" step="1" value="0" unit="°" />
+            </FieldGroup>
+            <FieldGroup title="Framing & lens">
+              <ValueControl id="zoom" label="Scale" min="0.2" max="3" step="0.01" value="1" unit="×" />
+              <div className="control-row select-row">
+                <label htmlFor="lens">Camera lens</label>
+                <div className="select-wrap">
+                  <select id="lens" defaultValue="clean">
+                    <option value="clean">50 mm · clean</option>
+                    <option value="wide">24 mm · wide barrel</option>
+                    <option value="fisheye">12 mm · fisheye</option>
+                    <option value="tele">85 mm · pincushion</option>
+                  </select>
+                  <ChevronDown size={14} />
+                </div>
               </div>
-            </div>
-            <ValueControl id="lensAmount" label="Distortion" min="0" max="200" step="1" value="100" unit="%" disabled />
+              <ValueControl id="lensAmount" label="Distortion" min="0" max="200" step="1" value="100" unit="%" disabled />
+            </FieldGroup>
           </Section>
 
           <Section title="Contours" badge="02">
-            <ValueControl id="lines" label="Line count" min="1" max="200" step="1" value="40" />
-            <div className="control-row select-row">
-              <label htmlFor="gapEase">Gap easing</label>
-              <div className="select-wrap">
-                <select id="gapEase" defaultValue="linear">
-                  <option value="linear">Linear</option>
-                  <optgroup label="Sine">
-                    <option value="sine-in">Sine · in</option>
-                    <option value="sine-out">Sine · out</option>
-                    <option value="sine-in-out">Sine · in &amp; out</option>
-                    <option value="sine-out-in">Sine · out &amp; in</option>
-                  </optgroup>
-                  <optgroup label="Quadratic">
-                    <option value="ease-in">Quadratic · in</option>
-                    <option value="ease-out">Quadratic · out</option>
-                    <option value="ease-in-out">Quadratic · in &amp; out</option>
-                    <option value="ease-out-in">Quadratic · out &amp; in</option>
-                  </optgroup>
-                  <optgroup label="Cubic">
-                    <option value="cubic-in">Cubic · in</option>
-                    <option value="cubic-out">Cubic · out</option>
-                    <option value="cubic-in-out">Cubic · in &amp; out</option>
-                    <option value="cubic-out-in">Cubic · out &amp; in</option>
-                  </optgroup>
-                </select>
-                <ChevronDown size={14} />
+            <FieldGroup title="Density & finish">
+              <ValueControl id="lines" label="Line count" min="1" max="200" step="1" value="40" />
+              <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
+            </FieldGroup>
+            <FieldGroup title="Line spacing">
+              <div className="control-row select-row">
+                <label htmlFor="gapEase">Gap easing</label>
+                <div className="select-wrap">
+                  <select id="gapEase" defaultValue="linear">
+                    <option value="linear">Linear</option>
+                    <optgroup label="Sine">
+                      <option value="sine-in">Sine · in</option>
+                      <option value="sine-out">Sine · out</option>
+                      <option value="sine-in-out">Sine · in &amp; out</option>
+                      <option value="sine-out-in">Sine · out &amp; in</option>
+                    </optgroup>
+                    <optgroup label="Quadratic">
+                      <option value="ease-in">Quadratic · in</option>
+                      <option value="ease-out">Quadratic · out</option>
+                      <option value="ease-in-out">Quadratic · in &amp; out</option>
+                      <option value="ease-out-in">Quadratic · out &amp; in</option>
+                    </optgroup>
+                    <optgroup label="Cubic">
+                      <option value="cubic-in">Cubic · in</option>
+                      <option value="cubic-out">Cubic · out</option>
+                      <option value="cubic-in-out">Cubic · in &amp; out</option>
+                      <option value="cubic-out-in">Cubic · out &amp; in</option>
+                    </optgroup>
+                  </select>
+                  <ChevronDown size={14} />
+                </div>
               </div>
-            </div>
-            <ValueControl id="easeStrength" label="Ease strength" min="0" max="300" step="1" value="100" unit="%" />
-            <ValueControl id="easeCycles" label="Ease cycles" min="1" max="12" step="1" value="1" />
-            <ValueControl id="easeCenter" label="Ease centre" min="5" max="95" step="1" value="50" unit="%" disabled />
-            <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
-            <div className="control-row select-row">
-              <label htmlFor="axis">Slice axis</label>
-              <div className="select-wrap">
-                <select id="axis" defaultValue="up">
-                  <option value="up">Height · topographic</option>
-                  <option value="cam">View depth · camera</option>
-                  <option value="x">Model width</option>
-                  <option value="y">Model depth</option>
-                  <option value="custom">Custom plane angle</option>
-                </select>
-                <ChevronDown size={14} />
+              <ValueControl id="easeStrength" label="Ease strength" min="0" max="300" step="1" value="100" unit="%" />
+              <ValueControl id="easeCycles" label="Ease cycles" min="1" max="12" step="1" value="1" />
+              <ValueControl id="easeCenter" label="Ease centre" min="5" max="95" step="1" value="50" unit="%" disabled />
+            </FieldGroup>
+            <FieldGroup title="Slice plane">
+              <div className="control-row select-row">
+                <label htmlFor="axis">Slice axis</label>
+                <div className="select-wrap">
+                  <select id="axis" defaultValue="up">
+                    <option value="up">Height · topographic</option>
+                    <option value="cam">View depth · camera</option>
+                    <option value="x">Model width</option>
+                    <option value="y">Model depth</option>
+                    <option value="custom">Custom plane angle</option>
+                  </select>
+                  <ChevronDown size={14} />
+                </div>
               </div>
-            </div>
-            <div className="custom-axis" id="customAxis" hidden>
-              <ValueControl id="cutAz" label="Azimuth" min="-180" max="180" step="1" value="0" />
-              <ValueControl id="cutEl" label="Elevation" min="-90" max="90" step="1" value="90" />
-            </div>
-            <div className="check-grid">
-              <Checkbox id="spiral">Continuous spiral</Checkbox>
-              <Checkbox id="hide" defaultChecked>Remove hidden lines</Checkbox>
-              <Checkbox id="sil" defaultChecked>Add outer silhouette</Checkbox>
-            </div>
+              <div className="custom-axis" id="customAxis" hidden>
+                <ValueControl id="cutAz" label="Azimuth" min="-180" max="180" step="1" value="0" unit="°" />
+                <ValueControl id="cutEl" label="Elevation" min="-90" max="90" step="1" value="90" unit="°" />
+              </div>
+            </FieldGroup>
+            <FieldGroup title="Path construction" className="field-group--checks">
+              <div className="check-grid">
+                <Checkbox id="spiral">Continuous spiral</Checkbox>
+                <Checkbox id="hide" defaultChecked>Remove hidden lines</Checkbox>
+                <Checkbox id="sil" defaultChecked>Add outer silhouette</Checkbox>
+              </div>
+            </FieldGroup>
           </Section>
 
           <Section title="Output" badge="03">
-            <ValueControl id="sw" label="Stroke" min="0.05" max="2" step="0.05" value="0.35" unit="mm" />
-            <div className="control-row">
-              <label htmlFor="colorHex">Ink colour</label>
-              <div className="color-control">
-                <span className="swatch" id="swatch" style={{ background: "#15181a" }}><input type="color" id="color" defaultValue="#15181a" /></span>
-                <input type="text" id="colorHex" defaultValue="#15181a" spellCheck="false" />
+            <FieldGroup title="Line style">
+              <ValueControl id="sw" label="Stroke" min="0.05" max="2" step="0.05" value="0.35" unit="mm" />
+              <div className="control-row">
+                <label htmlFor="colorHex">Ink colour</label>
+                <div className="color-control">
+                  <span className="swatch" id="swatch" style={{ background: "#15181a" }}><input type="color" id="color" defaultValue="#15181a" /></span>
+                  <input type="text" id="colorHex" defaultValue="#15181a" spellCheck="false" />
+                </div>
               </div>
-            </div>
-            <GradientChooser />
-            <div className="control-row">
-              <label htmlFor="pw">Sheet size</label>
-              <div className="sheet-control"><input type="number" id="pw" min="10" max="2000" step="1" defaultValue="210" /><span>×</span><input type="number" id="ph" min="10" max="2000" step="1" defaultValue="210" /><span className="unit">mm</span></div>
-            </div>
-            <ValueControl id="margin" label="Margin" min="0" max="40" step="1" value="14" unit="mm" />
-            <Checkbox id="bg">Include white sheet background</Checkbox>
-            <div className="effect-divider" />
-            <Checkbox id="chroma">Chromatic aberration</Checkbox>
-            <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" />
+              <GradientChooser />
+            </FieldGroup>
+            <FieldGroup title="Artboard">
+              <div className="control-row">
+                <label htmlFor="pw">Sheet size</label>
+                <div className="sheet-control"><input type="number" id="pw" min="10" max="2000" step="1" defaultValue="210" /><span>×</span><input type="number" id="ph" min="10" max="2000" step="1" defaultValue="210" /><span className="unit">mm</span></div>
+              </div>
+              <ValueControl id="margin" label="Margin" min="0" max="40" step="1" value="14" unit="mm" />
+              <Checkbox id="bg">Include white sheet background</Checkbox>
+            </FieldGroup>
+            <FieldGroup title="Post-processing">
+              <Checkbox id="chroma">Chromatic aberration</Checkbox>
+              <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" disabled />
+            </FieldGroup>
           </Section>
         </div>
 
         <footer className="actions">
+          <Button id="randomize" variant="outline" className="randomize-button"><Dices size={15} />Randomize parameters</Button>
           <div className="action-buttons">
             <Button id="save"><Download size={15} />Export SVG</Button>
             <Button id="copy" variant="outline" aria-label="Copy SVG markup"><Clipboard size={15} /></Button>

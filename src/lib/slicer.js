@@ -1267,6 +1267,11 @@ $("spiral").addEventListener("change", e => { state.spiral = e.target.checked; r
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });
+function syncChromaAmount(){
+  $("chromaAmount").disabled=!state.chroma;
+  $("chromaAmountN").disabled=!state.chroma;
+  $("chromaAmountControl").classList.toggle("is-disabled", !state.chroma);
+}
 $("chroma").addEventListener("change", e => {
   state.chroma = e.target.checked;
   if (state.chroma && state.gradientEnabled){
@@ -1274,12 +1279,14 @@ $("chroma").addEventListener("change", e => {
     $("gradientEnabled").checked=false;
     $("gradientEditor").classList.remove("enabled");
   }
+  syncChromaAmount();
   redraw(false);
 });
 $("gradientEnabled").addEventListener("change", e => {
   state.gradientEnabled=e.target.checked;
   $("gradientEditor").classList.toggle("enabled",state.gradientEnabled);
   if (state.gradientEnabled && state.chroma){ state.chroma=false; $("chroma").checked=false; }
+  syncChromaAmount();
   redraw(false);
 });
 $("gradientEditor").addEventListener("gradientchange", e => {
@@ -1379,6 +1386,81 @@ document.addEventListener("drop", e => {
     wheelEnd = setTimeout(() => redraw(false), 140);
   }, {passive:false});
 })();
+
+/* ------------------------------------------------------ randomization */
+function randomIn(min, max){ return min + Math.random()*(max-min); }
+function randomInt(min, max){ return Math.floor(randomIn(min, max+1)); }
+function randomItem(items){ return items[Math.floor(Math.random()*items.length)]; }
+function setPairValue(id, key, value){
+  const slider=$(id), number=$(id+"N");
+  const step=parseFloat(number.step) || 1;
+  const precision=(String(number.step).split(".")[1] || "").length;
+  const next=Number((Math.round(value/step)*step).toFixed(precision));
+  state[key]=next;
+  slider.value=next;
+  number.value=next;
+}
+function setCheckbox(id, key, value){
+  state[key]=value;
+  $(id).checked=value;
+}
+
+$("randomize").addEventListener("click", () => {
+  // Keep the loaded source and physical sheet size stable; randomize the
+  // creative choices that shape the contour study.
+  setPairValue("az", "az", randomInt(-180, 180));
+  setPairValue("el", "el", randomInt(-70, 70));
+  setPairValue("rl", "roll", randomInt(-35, 35));
+  setPairValue("zoom", "zoom", randomIn(.72, 1.28));
+
+  state.lens=randomItem(["clean", "clean", "wide", "fisheye", "tele"]);
+  $("lens").value=state.lens;
+  setPairValue("lensAmount", "lensAmount", randomInt(45, 145));
+  syncLensAmount();
+
+  setPairValue("lines", "lines", randomInt(22, 84));
+  setPairValue("quality", "quality", randomInt(5, 9));
+  state.gapEase=randomItem([
+    "linear", "sine-in", "sine-out", "sine-in-out", "sine-out-in",
+    "ease-in", "ease-out", "ease-in-out", "ease-out-in",
+    "cubic-in", "cubic-out", "cubic-in-out", "cubic-out-in"
+  ]);
+  $("gapEase").value=state.gapEase;
+  setPairValue("easeStrength", "easeStrength", randomInt(55, 185));
+  setPairValue("easeCycles", "easeCycles", randomItem([1, 1, 1, 2, 2, 3]));
+  setPairValue("easeCenter", "easeCenter", randomInt(25, 75));
+  syncEaseCenter();
+
+  state.axis=randomItem(["up", "up", "cam", "x", "y", "custom"]);
+  $("axis").value=state.axis;
+  $("customAxis").hidden=state.axis !== "custom";
+  setPairValue("cutAz", "cutAz", randomInt(-180, 180));
+  setPairValue("cutEl", "cutEl", randomInt(-80, 80));
+  setCheckbox("spiral", "spiral", Math.random() < .22);
+  setCheckbox("hide", "hide", Math.random() < .82);
+  setCheckbox("sil", "sil", Math.random() < .78);
+
+  setPairValue("sw", "sw", randomIn(.15, .7));
+  setPairValue("margin", "margin", randomInt(8, 24));
+  const inks=["#15181a", "#172554", "#3f1d2e", "#18392b", "#4a2519", "#30234d"];
+  state.color=randomItem(inks);
+  $("color").value=state.color;
+  $("colorHex").value=state.color;
+  $("swatch").style.background=state.color;
+
+  const colourMode=randomItem(["ink", "ink", "ink", "gradient", "chroma"]);
+  state.gradientEnabled=colourMode === "gradient";
+  $("gradientEnabled").checked=state.gradientEnabled;
+  $("gradientEditor").classList.toggle("enabled", state.gradientEnabled);
+  setPairValue("gradientColors", "gradientColors", randomInt(3, 10));
+  state.chroma=colourMode === "chroma";
+  $("chroma").checked=state.chroma;
+  setPairValue("chromaAmount", "chromaAmount", randomIn(.6, 3.2));
+  syncChromaAmount();
+
+  redraw(false);
+  toast("Parameters randomized");
+});
 
 /* export */
 $("save").addEventListener("click", () => {
