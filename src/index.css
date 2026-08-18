@@ -43,6 +43,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .field-group-title::after { content: ""; height: 1px; flex: 1; background: #e2e4e0; }
 .field-group-body { padding-left: 8px; border-left: 1px solid #e0e3de; }
 .field-group--checks .field-group-body { padding-top: 3px; padding-bottom: 2px; }
+.effect-controls { margin: 4px 0 9px 6px; padding-left: 8px; border-left: 1px solid #d8dbd6; }
 .dropzone { min-height: 92px; display: grid; place-items: center; align-content: center; gap: 4px; border: 1px dashed #b8bcb6; background: white; cursor: pointer; transition: .18s ease; }
 .demo-row { margin: -4px 0 10px; }
 .dropzone:hover, .dropzone.over { border-color: var(--blue); background: #f7f7ff; }

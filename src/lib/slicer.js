@@ -789,6 +789,7 @@ const state = {
   sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
   gradientEnabled: false, gradientColors: 6,
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
+  halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
   chroma: false, chromaAmount: 1.5,
   svg: "", dragging: false
 };
@@ -977,7 +978,13 @@ export function computeContours(mesh, settings, quick){
   }
 
   const palette=gradientPalette(settings);
-  const out=Array.from({length:palette.length},()=>[]);
+  const toneBandCount=settings.halftone ? 12 : 1;
+  const toneValue=position=>{
+    const cycles=clamp(Math.round(settings.halftoneCycles || 1),1,8);
+    return .5+.5*Math.sin(position*cycles*Math.PI*2-Math.PI/2);
+  };
+  const toneBand=position=>clamp(Math.floor(toneValue(position)*toneBandCount),0,toneBandCount-1);
+  const out=Array.from({length:palette.length},()=>Array.from({length:toneBandCount},()=>[]));
   const outlineOut=[];
   const N = settings.lines;
   const quality = clamp(Math.round(settings.quality), 1, 10);
@@ -989,9 +996,16 @@ export function computeContours(mesh, settings, quick){
       if (settings.gradientEnabled){
         for (const chunk of splitPolylineByBands(poly,pts,values,palette.length)){
           const indexes=Array.from({length:chunk.pts.length/3},(_,i)=>i);
-          emitPath(indexes,chunk.pts,vis,step,out[chunk.band]);
+          const position=(chunk.band+.5)/palette.length;
+          emitPath(indexes,chunk.pts,vis,step,out[chunk.band][settings.halftone ? toneBand(position) : 0]);
         }
-      } else emitPath(poly,pts,vis,step,out[0]);
+      } else if (settings.halftone){
+        const tones=Float32Array.from(values,toneValue);
+        for (const chunk of splitPolylineByBands(poly,pts,tones,toneBandCount)){
+          const indexes=Array.from({length:chunk.pts.length/3},(_,i)=>i);
+          emitPath(indexes,chunk.pts,vis,step,out[0][chunk.band]);
+        }
+      } else emitPath(poly,pts,vis,step,out[0][0]);
     }
   } else {
     for (let i=0;i<N;i++){
@@ -1000,7 +1014,8 @@ export function computeContours(mesh, settings, quick){
       const {pts, segs} = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
       if (!segs.length) continue;
       const band=settings.gradientEnabled ? clamp(Math.floor(position*palette.length),0,palette.length-1) : 0;
-      for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out[band]);
+      const tone=settings.halftone ? toneBand(position) : 0;
+      for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out[band][tone]);
     }
   }
   if (settings.sil){
@@ -1024,9 +1039,9 @@ export function computeContours(mesh, settings, quick){
     }
     return d;
   };
-  const colorPaths=out.map(serialiseGroup);
+  const colorPaths=out.map(toneGroups=>toneGroups.map(serialiseGroup));
   const outlinePath=serialiseGroup(outlineOut);
-  const allPathData=colorPaths.join("")+outlinePath;
+  const allPathData=colorPaths.flat().join("")+outlinePath;
   let artwork, renderedPaths=paths, renderedNodes=nodes;
   if (settings.chroma){
     const amount=clamp(settings.chromaAmount, .1, 6);
@@ -1042,7 +1057,18 @@ export function computeContours(mesh, settings, quick){
   } else {
     const bg=settings.bg ? `<rect width="${W}" height="${H}" fill="#ffffff"/>` : "";
     const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
-    const groups=colorPaths.map((d,i)=>d ? `<path d="${d}" stroke="${palette[i]}" ${attrs}/>` : "").join("\n");
+    const spacing=clamp(settings.halftoneSize || 2.4,.5,8);
+    const contrast=clamp((settings.halftoneContrast || 0)/100,0,1);
+    const halftoneAttrs=tone=>{
+      if (!settings.halftone) return "";
+      const value=(tone+.5)/toneBandCount;
+      const ratio=clamp(.5+(value-.5)*contrast*1.7,.07,.93);
+      const dash=Math.max(.01,spacing*ratio-settings.sw*.7);
+      const gap=Math.max(settings.sw*.65,spacing-dash);
+      const offset=(tone/toneBandCount)*spacing;
+      return `stroke-dasharray="${fmt(dash)} ${fmt(gap)}" stroke-dashoffset="${fmt(offset)}"`;
+    };
+    const groups=colorPaths.map((tonePaths,i)=>tonePaths.map((d,tone)=>d ? `<path d="${d}" stroke="${palette[i]}" ${halftoneAttrs(tone)} ${attrs}/>` : "").join("\n")).join("\n");
     const outline=outlinePath ? `<path d="${outlinePath}" stroke="${settings.color}" ${attrs}/>` : "";
     artwork=`${bg}${groups}${outline}`;
   }
@@ -1075,8 +1101,8 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,chroma,chromaAmount} = state;
-  return {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,chroma,chromaAmount};
+  const {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount} = state;
+  return {az,el,roll,zoom,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1237,6 +1263,7 @@ function bindPair(id, key, after){
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom"); bindPair("lensAmount","lensAmount");
 bindPair("lines","lines"); bindPair("easeStrength","easeStrength"); bindPair("easeCycles","easeCycles"); bindPair("easeCenter","easeCenter"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
+bindPair("halftoneSize","halftoneSize"); bindPair("halftoneContrast","halftoneContrast"); bindPair("halftoneCycles","halftoneCycles");
 bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
 
@@ -1267,18 +1294,34 @@ $("spiral").addEventListener("change", e => { state.spiral = e.target.checked; r
 $("hide").addEventListener("change", e => { state.hide = e.target.checked; redraw(false); });
 $("sil").addEventListener("change", e => { state.sil = e.target.checked; redraw(false); });
 $("bg").addEventListener("change", e => { state.bg = e.target.checked; redraw(false); });
+function syncHalftoneControls(){
+  for (const id of ["halftoneSize", "halftoneContrast", "halftoneCycles"]){
+    $(id).disabled=!state.halftone;
+    $(id+"N").disabled=!state.halftone;
+    $(id+"Control").classList.toggle("is-disabled", !state.halftone);
+  }
+}
 function syncChromaAmount(){
   $("chromaAmount").disabled=!state.chroma;
   $("chromaAmountN").disabled=!state.chroma;
   $("chromaAmountControl").classList.toggle("is-disabled", !state.chroma);
 }
+$("halftone").addEventListener("change", e => {
+  state.halftone=e.target.checked;
+  if (state.halftone && state.chroma){ state.chroma=false; $("chroma").checked=false; }
+  syncHalftoneControls();
+  syncChromaAmount();
+  redraw(false);
+});
 $("chroma").addEventListener("change", e => {
   state.chroma = e.target.checked;
+  if (state.chroma && state.halftone){ state.halftone=false; $("halftone").checked=false; }
   if (state.chroma && state.gradientEnabled){
     state.gradientEnabled=false;
     $("gradientEnabled").checked=false;
     $("gradientEditor").classList.remove("enabled");
   }
+  syncHalftoneControls();
   syncChromaAmount();
   redraw(false);
 });
@@ -1448,11 +1491,17 @@ $("randomize").addEventListener("click", () => {
   $("colorHex").value=state.color;
   $("swatch").style.background=state.color;
 
-  const colourMode=randomItem(["ink", "ink", "ink", "gradient", "chroma"]);
+  const colourMode=randomItem(["ink", "ink", "gradient", "halftone", "chroma"]);
   state.gradientEnabled=colourMode === "gradient";
   $("gradientEnabled").checked=state.gradientEnabled;
   $("gradientEditor").classList.toggle("enabled", state.gradientEnabled);
   setPairValue("gradientColors", "gradientColors", randomInt(3, 10));
+  state.halftone=colourMode === "halftone";
+  $("halftone").checked=state.halftone;
+  setPairValue("halftoneSize", "halftoneSize", randomIn(1.2, 4.8));
+  setPairValue("halftoneContrast", "halftoneContrast", randomInt(55, 100));
+  setPairValue("halftoneCycles", "halftoneCycles", randomInt(1, 5));
+  syncHalftoneControls();
   state.chroma=colourMode === "chroma";
   $("chroma").checked=state.chroma;
   setPairValue("chromaAmount", "chromaAmount", randomIn(.6, 3.2));

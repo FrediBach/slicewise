@@ -276,8 +276,16 @@ export default function App() {
               <Checkbox id="bg">Include white sheet background</Checkbox>
             </FieldGroup>
             <FieldGroup title="Post-processing">
+              <Checkbox id="halftone">Halftone stroke</Checkbox>
+              <div className="effect-controls">
+                <ValueControl id="halftoneSize" label="Dot spacing" min="0.5" max="8" step="0.1" value="2.4" unit="mm" disabled />
+                <ValueControl id="halftoneContrast" label="Contrast" min="0" max="100" step="1" value="75" unit="%" disabled />
+                <ValueControl id="halftoneCycles" label="Depth cycles" min="1" max="8" step="1" value="2" disabled />
+              </div>
               <Checkbox id="chroma">Chromatic aberration</Checkbox>
-              <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" disabled />
+              <div className="effect-controls">
+                <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" disabled />
+              </div>
             </FieldGroup>
           </Section>
         </div>
