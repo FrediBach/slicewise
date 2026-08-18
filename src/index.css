@@ -80,7 +80,6 @@ button { -webkit-tap-highlight-color: transparent; }
 .morph-toggle[aria-pressed="true"] { border-color: var(--blue); background: var(--blue); color: white; }
 .morph-toggle:disabled { cursor: not-allowed; }
 .morph-inputs { position: relative; padding-top: 3px; }
-.morph-inputs::before { content: "TO"; position: absolute; left: -24px; top: 7px; color: var(--blue); font-size: 7px; letter-spacing: .08em; }
 .morph-inputs input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--blue), #b9bce9); }
 .morph-inputs input[type="range"]::-webkit-slider-thumb { border-color: var(--blue); }
 .morph-inputs input[type="range"]::-moz-range-track { background: #747ee5; }
@@ -89,7 +88,6 @@ button { -webkit-tap-highlight-color: transparent; }
 .morph-settings { margin-top: 7px; transition: opacity .16s ease; }
 .morph-settings.is-disabled { opacity: .45; }
 .morph-color-control { position: relative; padding-top: 3px; }
-.morph-color-control::before { content: "TO"; position: absolute; left: -24px; top: 10px; color: var(--blue); font-size: 7px; letter-spacing: .08em; }
 input[type="range"] { appearance: none; min-width: 0; flex: 1; height: 16px; background: transparent; }
 input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: linear-gradient(90deg, #282b29, #cdd0cc); }
 input[type="range"]::-webkit-slider-thumb { appearance: none; width: 11px; height: 11px; margin-top: -4.5px; border: 2px solid var(--ink); border-radius: 50%; background: var(--panel); cursor: grab; }
