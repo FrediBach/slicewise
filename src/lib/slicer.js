@@ -821,7 +821,7 @@ const state = {
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
   chroma: false, chromaAmount: 1.5,
-  morphSteps: 4, morphTargets: {},
+  morphEnabled: false, morphSteps: 4, morphTargets: {},
   exportFormat: "svg", gcodeProfile: "uunatek3", drawFeed: 3000, travelFeed: 6000, penUp: 0, penDown: -3, zFeed: 2000,
   svg: "", svgBytes: 0, toolpaths: [], dragging: false
 };
@@ -1133,9 +1133,12 @@ function svgArtwork(svg){
 }
 
 export function computeContours(mesh, settings, quick){
-  const targets=Object.entries(settings.morphTargets || {}).filter(([key,value]) =>
-    Number.isFinite(Number(value)) && Number.isFinite(Number(settings[key]))
-  );
+  const hexColor=/^#[0-9a-f]{6}$/i;
+  const targets=settings.morphEnabled ? Object.entries(settings.morphTargets || {}).filter(([key,value]) =>
+    key==="color"
+      ? hexColor.test(String(value)) && hexColor.test(String(settings[key]))
+      : Number.isFinite(Number(value)) && Number.isFinite(Number(settings[key]))
+  ) : [];
   if (!targets.length) return computeContourInstance(mesh,settings,quick);
 
   const started=performance.now();
@@ -1145,6 +1148,12 @@ export function computeContours(mesh, settings, quick){
     const amount=steps===1 ? 0 : index/(steps-1);
     const instance={...settings,suppressBackground:true};
     for (const [key,target] of targets){
+      if (key==="color"){
+        const startColor=settings.color.slice(1).match(/../g).map(value=>parseInt(value,16));
+        const targetColor=String(target).slice(1).match(/../g).map(value=>parseInt(value,16));
+        instance.color="#"+startColor.map((value,channel)=>Math.round(value+(targetColor[channel]-value)*amount).toString(16).padStart(2,"0")).join("");
+        continue;
+      }
       const start=Number(settings[key]);
       instance[key]=start+(Number(target)-start)*amount;
     }
@@ -1200,14 +1209,14 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphSteps,morphTargets} = state;
-  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphSteps,morphTargets:{...morphTargets}};
+  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets} = state;
+  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets:{...morphTargets}};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
   const visibilityCost = state.hide ? 1.55 : 1;
   const curveCost = 1 + Math.max(0, state.quality-1)*.055;
-  const morphCost = Object.keys(state.morphTargets).length ? state.morphSteps : 1;
+  const morphCost = state.morphEnabled && Object.keys(state.morphTargets).length ? state.morphSteps : 1;
   const score = triangles * state.lines * visibilityCost * curveCost * morphCost;
   let complexityDelay = 150;
   if (score < 450000) complexityDelay = 16;
@@ -1399,15 +1408,28 @@ bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
 bindPair("morphSteps","morphSteps");
 bindExportPair("drawFeed","drawFeed"); bindExportPair("travelFeed","travelFeed"); bindExportPair("penUp","penUp"); bindExportPair("penDown","penDown"); bindExportPair("zFeed","zFeed");
+morphKeyById.set("color","color");
 
 document.addEventListener("morphchange",event=>{
   const {id,active,value}=event.detail || {};
   const key=morphKeyById.get(id);
   if (!key) return;
-  if (active && Number.isFinite(Number(value))) state.morphTargets[key]=Number(value);
+  if (active && key==="color" && /^#[0-9a-f]{6}$/i.test(String(value))) state.morphTargets[key]=String(value);
+  else if (active && Number.isFinite(Number(value))) state.morphTargets[key]=Number(value);
   else delete state.morphTargets[key];
   redraw(false);
 });
+function syncMorphControls(){
+  $("morphSettings").classList.toggle("is-disabled",!state.morphEnabled);
+  $("morphSteps").disabled=!state.morphEnabled;
+  $("morphStepsN").disabled=!state.morphEnabled;
+}
+$("morphEnabled").addEventListener("change",event=>{
+  state.morphEnabled=event.target.checked;
+  syncMorphControls();
+  redraw(false);
+});
+syncMorphControls();
 
 async function rebuildSVG(){
   if (!state.svgSource) return;

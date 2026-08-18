@@ -63,6 +63,54 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
   );
 }
 
+function InkColorControl() {
+  const [morphing, setMorphing] = useState(false);
+  const [target, setTarget] = useState("#15181a");
+  const [targetText, setTargetText] = useState("#15181a");
+  const announce = (active, value) => {
+    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id: "color", active, value } }));
+  };
+  const toggle = () => {
+    const active = !morphing;
+    const main = document.getElementById("color")?.value || "#15181a";
+    if (active) {
+      setTarget(main);
+      setTargetText(main);
+    }
+    setMorphing(active);
+    announce(active, active ? main : target);
+  };
+  const setValidTarget = value => {
+    const valid = /^#[0-9a-f]{6}$/i.test(value);
+    if (!valid) return;
+    setTarget(value);
+    announce(true, value);
+  };
+
+  return (
+    <div className={`control-row color-row${morphing ? " is-morphing" : ""}`} id="colorControl">
+      <div className="control-label">
+        <label htmlFor="colorHex">Ink colour</label>
+        <button type="button" className="morph-toggle" aria-pressed={morphing}
+          aria-label={`${morphing ? "Remove" : "Add"} Ink colour ${morphing ? "from" : "to"} morphing`}
+          title={morphing ? "Remove morph target" : "Add morph target"} onClick={toggle}><MorphIcon /></button>
+      </div>
+      <div className="control-stack">
+        <div className="color-control">
+          <span className="swatch" id="swatch" style={{ background: "#15181a" }}><input type="color" id="color" defaultValue="#15181a" /></span>
+          <input type="text" id="colorHex" defaultValue="#15181a" spellCheck="false" />
+        </div>
+        {morphing && <div className="color-control morph-color-control">
+          <span className="swatch" style={{ background: target }}><input type="color" id="colorMorph" value={target}
+            aria-label="Ink colour morph target" onChange={event => { setTargetText(event.target.value); setValidTarget(event.target.value); }} /></span>
+          <input type="text" id="colorMorphHex" value={targetText} spellCheck="false" aria-label="Ink colour morph target hex value"
+            onChange={event => { setTargetText(event.target.value); setValidTarget(event.target.value); }} />
+        </div>}
+      </div>
+    </div>
+  );
+}
+
 function FieldGroup({ title, children, className = "" }) {
   return (
     <div className={`field-group ${className}`}>
@@ -225,6 +273,16 @@ export default function App() {
             <p className="error" id="mErr" hidden />
           </Section>
 
+          <Section title="Morph" badge="multi instance">
+            <FieldGroup title="Parameter interpolation">
+              <Checkbox id="morphEnabled">Enable morph instances</Checkbox>
+              <div className="morph-settings" id="morphSettings">
+                <ValueControl id="morphSteps" label="Morph steps" min="2" max="24" step="1" value="4" morphable={false} />
+                <p className="gradient-note morph-note">Use the arrow icon beside any numeric parameter or ink colour to reveal its target. All selected values interpolate together from the main settings.</p>
+              </div>
+            </FieldGroup>
+          </Section>
+
           <Section title="View" badge={<><Rotate3d size={12} /> drag canvas</>}>
             <FieldGroup title="Orientation">
               <ValueControl id="az" label="Azimuth" min="-180" max="180" step="1" value="35" unit="°" />
@@ -316,23 +374,10 @@ export default function App() {
             </FieldGroup>
           </Section>
 
-          <Section title="Morph" badge="multi instance">
-            <FieldGroup title="Parameter interpolation">
-              <ValueControl id="morphSteps" label="Morph steps" min="2" max="24" step="1" value="4" morphable={false} />
-              <p className="gradient-note morph-note">Use the arrow icon beside any numeric parameter to reveal its target slider. All selected values are interpolated together from the main settings.</p>
-            </FieldGroup>
-          </Section>
-
           <Section title="Output" badge="03">
             <FieldGroup title="Line style">
               <ValueControl id="sw" label="Stroke" min="0.05" max="2" step="0.05" value="0.35" unit="mm" />
-              <div className="control-row">
-                <label htmlFor="colorHex">Ink colour</label>
-                <div className="color-control">
-                  <span className="swatch" id="swatch" style={{ background: "#15181a" }}><input type="color" id="color" defaultValue="#15181a" /></span>
-                  <input type="text" id="colorHex" defaultValue="#15181a" spellCheck="false" />
-                </div>
-              </div>
+              <InkColorControl />
               <GradientChooser />
             </FieldGroup>
             <FieldGroup title="Artboard">
