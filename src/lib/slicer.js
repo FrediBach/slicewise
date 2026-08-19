@@ -1,5 +1,6 @@
 "use strict";
 import { generateGCode } from "./gcode.js";
+import { GEN_DEFAULTS } from "./generativeMesh";
 /* =====================================================================
    Slicewise — mesh → contour SVG / G-code
    Pipeline: parse → weld → orient → project → slice → chain → hide → export
@@ -884,8 +885,9 @@ function silhouetteEdges(mesh, P){
 
 /* =================================================================== app */
 const state = {
-  mesh: null, name: "demo · torus knot", upY: false,
+  mesh: null, name: "demo · torus knot", source: "knot", upY: false,
   svgSource: null, svgSourceName: "", svgDepth: 12, svgRounded: false, svgRoundness: 25,
+  ...GEN_DEFAULTS,
   az: 35, el: 24, roll: 0, zoom: 1, panX: 0, panY: 0, lens: "clean", lensAmount: 100,
   lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
   sw: 0.35, color: "#15181a", backgroundColor: "#ffffff", pw: 210, ph: 210, margin: 14, bg: false,
@@ -1350,12 +1352,12 @@ renderWorker.addEventListener("message", ({data}) => {
   renderInFlight = false;
   if (data.meshVersion === meshVersion && data.type === "result") applyRender(data.result);
   else if (data.meshVersion === meshVersion && data.type === "error") showError(data.message);
-  if (!queuedRender) $("bedwrap").classList.remove("busy");
+  if (!queuedRender && !generationInFlight) $("bedwrap").classList.remove("busy");
   scheduleRender();
 });
 renderWorker.addEventListener("error", () => {
   renderInFlight = false;
-  $("bedwrap").classList.remove("busy");
+  if (!generationInFlight) $("bedwrap").classList.remove("busy");
   showError("The contour worker stopped unexpectedly — reload the page to restart it");
 });
 
@@ -1382,6 +1384,7 @@ function setMesh(raw, name){
     sendMeshToWorker(state.mesh);
     state.name = name;
     $("mName").textContent = name;
+    $("mName").title = "";
     $("mTris").textContent = (m.T.length/3).toLocaleString();
     $("mErr").hidden = true;
     redraw(false);
@@ -1410,9 +1413,11 @@ function loadDemo(id, announce=true){
   if (!demo) return;
   if (!demoCache.has(id)) demoCache.set(id, demo.create());
   rawCache=demoCache.get(id);
+  state.source=id;
   state.svgSource=null;
   state.svgSourceName="";
-  syncSVGControls();
+  cancelGeneration();
+  syncSourceControls();
   state.upY=false;
   $("upZ").setAttribute("aria-pressed", "true");
   $("upY").setAttribute("aria-pressed", "false");
@@ -1441,13 +1446,15 @@ function loadFile(file){
         state.svgSourceName="";
       }
       rawCache = raw;
+      state.source="upload";
+      cancelGeneration();
       $("demo").value = "upload";
       // OBJ and PLY usually ship Y-up; STL is almost always Z-up
       const guessY = (ext === "obj" || ext === "ply");
       state.upY = guessY;
       $("upZ").setAttribute("aria-pressed", String(!guessY));
       $("upY").setAttribute("aria-pressed", String(guessY));
-      syncSVGControls();
+      syncSourceControls();
       setMesh(raw, file.name);
       toast("Loaded " + file.name);
     } catch(e){ showError(e.message); }
@@ -1455,6 +1462,67 @@ function loadFile(file){
   reader.onerror = () => showError("Could not read that file — check it isn't open in another program");
   reader.readAsArrayBuffer(file);
 }
+
+const generativeWorker = new Worker(new URL("./generative-mesh-worker.ts", import.meta.url), {type:"module"});
+const generativeKeys=["genSeed","genBlend","genFreq","genAniso","genIso","genTwist","genNoise","genRes"];
+let generationId=0, generationInFlight=false, queuedGeneration=null, generationTimer=0;
+function cancelGeneration(){
+  clearTimeout(generationTimer);
+  queuedGeneration=null;
+  generationId++;
+  setGenerativeBusy(false);
+}
+function generativeParams(){
+  return Object.fromEntries(["genField",...generativeKeys].map(key=>[key,state[key]]));
+}
+function setGenerativeBusy(busy){
+  $("generativeControls").closest(".generative-controls")?.classList.toggle("is-building",busy);
+  $("bedwrap").classList.toggle("busy",busy || renderInFlight);
+  $("mName").textContent=busy && state.source==="generative" ? `generative · ${state.genField} · building…` : state.name;
+}
+function dispatchGeneration(){
+  if (generationInFlight || !queuedGeneration) return;
+  const request=queuedGeneration;
+  queuedGeneration=null;
+  generationInFlight=true;
+  setGenerativeBusy(true);
+  generativeWorker.postMessage({type:"generate",...request});
+}
+function queueGeneration(delay=100){
+  if (state.source!=="generative") return;
+  queuedGeneration={id:++generationId,params:generativeParams()};
+  clearTimeout(generationTimer);
+  if (generationInFlight) return;
+  generationTimer=setTimeout(dispatchGeneration,delay);
+}
+function loadGenerative(announce=true){
+  state.source="generative";
+  state.svgSource=null;
+  state.svgSourceName="";
+  state.upY=false;
+  $("upZ").setAttribute("aria-pressed","true");
+  $("upY").setAttribute("aria-pressed","false");
+  syncSourceControls();
+  queueGeneration(0);
+  if (announce) toast("Generating mesh");
+}
+generativeWorker.addEventListener("message",({data})=>{
+  generationInFlight=false;
+  if (data.type==="error" && data.id===generationId && state.source==="generative") showError(data.message);
+  if (data.type==="result" && data.id===generationId && state.source==="generative"){
+    rawCache={verts:new Float32Array(data.positions),tris:new Uint32Array(data.indices)};
+    setMesh(rawCache,`generative · ${state.genField}`);
+    $("mName").title=`Generated in ${Math.round(data.stats.ms)} ms`;
+  }
+  if (queuedGeneration) dispatchGeneration();
+  else setGenerativeBusy(false);
+});
+generativeWorker.addEventListener("error",()=>{
+  generationInFlight=false;
+  queuedGeneration=null;
+  setGenerativeBusy(false);
+  if (state.source==="generative") showError("The mesh generator stopped unexpectedly — reload the page to restart it");
+});
 
 /* -------------------------------------------------------------- wiring */
 const morphKeyById=new Map();
@@ -1498,6 +1566,28 @@ bindPair("morphSteps","morphSteps");
 bindPair("morphStepsY","morphStepsY");
 bindExportPair("drawFeed","drawFeed"); bindExportPair("travelFeed","travelFeed"); bindExportPair("penUp","penUp"); bindExportPair("penDown","penDown"); bindExportPair("zFeed","zFeed");
 morphKeyById.set("color","color");
+
+function bindGenerativePair(id,key){
+  const slider=$(id), number=$(id+"N");
+  const apply=(value,from,final=false)=>{
+    let next=clamp(parseFloat(value),parseFloat(number.min),parseFloat(number.max));
+    if (Number.isNaN(next)) return;
+    if (id==="genSeed" || id==="genRes") next=Math.round(next);
+    state[key]=next;
+    if (from!=="s") slider.value=next;
+    if (from!=="n") number.value=next;
+    queueGeneration(final ? 0 : 110);
+  };
+  slider.addEventListener("input",event=>apply(event.target.value,"s"));
+  number.addEventListener("input",event=>apply(event.target.value,"n"));
+  slider.addEventListener("change",event=>apply(event.target.value,"s",true));
+  number.addEventListener("change",event=>apply(event.target.value,"n",true));
+}
+for (const key of generativeKeys) bindGenerativePair(key,key);
+$("genField").addEventListener("change",event=>{
+  state.genField=event.target.value;
+  queueGeneration(0);
+});
 
 document.addEventListener("morphchange",event=>{
   const {id,dimension=1,active,value}=event.detail || {};
@@ -1571,6 +1661,10 @@ function syncSVGControls(){
   $("svgRoundness").disabled=!roundnessActive;
   $("svgRoundnessN").disabled=!roundnessActive;
   $("svgRoundnessControl").classList.toggle("is-disabled",!roundnessActive);
+}
+function syncSourceControls(){
+  $("generativeControls").hidden=state.source!=="generative";
+  syncSVGControls();
 }
 $("svgRounded").addEventListener("change",event=>{
   state.svgRounded=event.target.checked;
@@ -1740,7 +1834,7 @@ function setUp(y){
 }
 
 /* file input + drag and drop */
-$("demo").addEventListener("change", e => loadDemo(e.target.value));
+$("demo").addEventListener("change", e => e.target.value==="generative" ? loadGenerative() : loadDemo(e.target.value));
 $("file").addEventListener("change", e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
 const drop = $("drop");
 ["dragenter","dragover"].forEach(ev => document.addEventListener(ev, e => {
