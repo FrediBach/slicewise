@@ -1822,77 +1822,126 @@ document.addEventListener("drop", e => {
 function randomIn(min, max){ return min + Math.random()*(max-min); }
 function randomInt(min, max){ return Math.floor(randomIn(min, max+1)); }
 function randomItem(items){ return items[Math.floor(Math.random()*items.length)]; }
-function setPairValue(id, key, value){
-  const slider=$(id), number=$(id+"N");
+function normalizePairValue(id,value){
+  const number=$(id+"N");
   const step=parseFloat(number.step) || 1;
   const precision=(String(number.step).split(".")[1] || "").length;
-  const next=Number((Math.round(value/step)*step).toFixed(precision));
+  return Number((Math.round(value/step)*step).toFixed(precision));
+}
+function setPairValue(id, key, value){
+  const slider=$(id), number=$(id+"N");
+  const next=normalizePairValue(id,value);
   state[key]=next;
   slider.value=next;
   number.value=next;
+  return next;
 }
 function setCheckbox(id, key, value){
   state[key]=value;
   $(id).checked=value;
 }
+const randomLocks=new Set();
+document.addEventListener("randomlockchange",event=>{
+  const {id,locked}=event.detail || {};
+  if (!id) return;
+  if (locked) randomLocks.add(id);
+  else randomLocks.delete(id);
+});
+function randomizePair(id,key,makeValue){
+  if (randomLocks.has(id)) return;
+  setPairValue(id,key,makeValue());
+  if (Object.hasOwn(state.morphTargets,key)){
+    const target=normalizePairValue(id,makeValue());
+    state.morphTargets[key]=target;
+    document.dispatchEvent(new CustomEvent("randomizemorph",{detail:{id,value:target}}));
+  }
+}
+function randomizeColor(id,key,colors){
+  if (randomLocks.has(id)) return;
+  const value=randomItem(colors);
+  state[key]=value;
+  $(id).value=value;
+  $(id+"Hex").value=value;
+  $(id==="color" ? "swatch" : "backgroundSwatch").style.background=value;
+  if (key==="backgroundColor") $("bed").style.background=value;
+  if (Object.hasOwn(state.morphTargets,key)){
+    const target=randomItem(colors);
+    state.morphTargets[key]=target;
+    document.dispatchEvent(new CustomEvent("randomizemorph",{detail:{id,value:target}}));
+  }
+}
+function randomizeSelect(id,key,values){
+  if (randomLocks.has(id)) return;
+  state[key]=randomItem(values);
+  $(id).value=state[key];
+}
+function randomizeCheckbox(id,key,probability){
+  if (!randomLocks.has(id)) setCheckbox(id,key,Math.random()<probability);
+}
 
 $("randomize").addEventListener("click", () => {
   // Keep the loaded source and physical sheet size stable; randomize the
   // creative choices that shape the contour study.
-  setPairValue("az", "az", randomInt(-180, 180));
-  setPairValue("el", "el", randomInt(-70, 70));
-  setPairValue("rl", "roll", randomInt(-35, 35));
-  setPairValue("zoom", "zoom", randomIn(.72, 1.28));
+  randomizePair("az", "az", ()=>randomInt(-180, 180));
+  randomizePair("el", "el", ()=>randomInt(-70, 70));
+  randomizePair("rl", "roll", ()=>randomInt(-35, 35));
+  randomizePair("zoom", "zoom", ()=>randomIn(.72, 1.28));
+  randomizePair("panX", "panX", ()=>randomIn(-state.pw*.15, state.pw*.15));
+  randomizePair("panY", "panY", ()=>randomIn(-state.ph*.15, state.ph*.15));
 
-  state.lens=randomItem(["clean", "clean", "wide", "fisheye", "tele"]);
-  $("lens").value=state.lens;
-  setPairValue("lensAmount", "lensAmount", randomInt(45, 145));
+  randomizeSelect("lens","lens",["clean", "clean", "wide", "fisheye", "tele"]);
+  randomizePair("lensAmount", "lensAmount", ()=>randomInt(45, 145));
   syncLensAmount();
 
-  setPairValue("lines", "lines", randomInt(22, 84));
-  setPairValue("quality", "quality", randomInt(5, 9));
-  state.gapEase=randomItem([
+  randomizePair("lines", "lines", ()=>randomInt(22, 84));
+  randomizePair("quality", "quality", ()=>randomInt(5, 9));
+  randomizeSelect("gapEase","gapEase",[
     "linear", "sine-in", "sine-out", "sine-in-out", "sine-out-in",
     "ease-in", "ease-out", "ease-in-out", "ease-out-in",
     "cubic-in", "cubic-out", "cubic-in-out", "cubic-out-in"
   ]);
-  $("gapEase").value=state.gapEase;
-  setPairValue("easeStrength", "easeStrength", randomInt(55, 185));
-  setPairValue("easeCycles", "easeCycles", randomItem([1, 1, 1, 2, 2, 3]));
-  setPairValue("easeCenter", "easeCenter", randomInt(25, 75));
+  randomizePair("easeStrength", "easeStrength", ()=>randomInt(55, 185));
+  randomizePair("easeCycles", "easeCycles", ()=>randomItem([1, 1, 1, 2, 2, 3]));
+  randomizePair("easeCenter", "easeCenter", ()=>randomInt(25, 75));
   syncEaseCenter();
 
-  state.axis=randomItem(["up", "up", "cam", "x", "y", "custom"]);
-  $("axis").value=state.axis;
+  randomizeSelect("axis","axis",["up", "up", "cam", "x", "y", "custom"]);
   $("customAxis").hidden=state.axis !== "custom";
-  setPairValue("cutAz", "cutAz", randomInt(-180, 180));
-  setPairValue("cutEl", "cutEl", randomInt(-80, 80));
-  setCheckbox("spiral", "spiral", Math.random() < .22);
-  setCheckbox("hide", "hide", Math.random() < .82);
-  setCheckbox("sil", "sil", Math.random() < .78);
+  randomizePair("cutAz", "cutAz", ()=>randomInt(-180, 180));
+  randomizePair("cutEl", "cutEl", ()=>randomInt(-80, 80));
+  randomizeCheckbox("spiral", "spiral", .22);
+  randomizeCheckbox("hide", "hide", .82);
+  randomizeCheckbox("sil", "sil", .78);
 
-  setPairValue("sw", "sw", randomIn(.15, .7));
-  setPairValue("margin", "margin", randomInt(8, 24));
+  randomizePair("sw", "sw", ()=>randomIn(.15, .7));
+  randomizePair("margin", "margin", ()=>randomInt(8, 24));
   const inks=["#15181a", "#172554", "#3f1d2e", "#18392b", "#4a2519", "#30234d"];
-  state.color=randomItem(inks);
-  $("color").value=state.color;
-  $("colorHex").value=state.color;
-  $("swatch").style.background=state.color;
+  const papers=["#ffffff", "#f7f3e8", "#f1eee4", "#e8edf0", "#eee8e2", "#171917"];
+  randomizeColor("color","color",inks);
+  randomizeColor("backgroundColor","backgroundColor",papers);
 
-  const colourMode=randomItem(["ink", "ink", "gradient", "halftone", "chroma"]);
-  state.gradientEnabled=colourMode === "gradient";
+  const modes=[
+    {name:"ink",gradientEnabled:false,halftone:false,chroma:false},
+    {name:"ink",gradientEnabled:false,halftone:false,chroma:false},
+    {name:"gradient",gradientEnabled:true,halftone:false,chroma:false},
+    {name:"halftone",gradientEnabled:false,halftone:true,chroma:false},
+    {name:"chroma",gradientEnabled:false,halftone:false,chroma:true}
+  ];
+  const availableModes=modes.filter(mode=>["gradientEnabled","halftone","chroma"].every(id=>!randomLocks.has(id) || mode[id]===state[id]));
+  const colourMode=randomItem(availableModes.length ? availableModes : modes);
+  for (const id of ["gradientEnabled","halftone","chroma"]){
+    if (!randomLocks.has(id)) state[id]=colourMode[id];
+  }
   $("gradientEnabled").checked=state.gradientEnabled;
   $("gradientEditor").classList.toggle("enabled", state.gradientEnabled);
-  setPairValue("gradientColors", "gradientColors", randomInt(3, 10));
-  state.halftone=colourMode === "halftone";
+  randomizePair("gradientColors", "gradientColors", ()=>randomInt(3, 10));
   $("halftone").checked=state.halftone;
-  setPairValue("halftoneSize", "halftoneSize", randomIn(1.2, 4.8));
-  setPairValue("halftoneContrast", "halftoneContrast", randomInt(55, 100));
-  setPairValue("halftoneCycles", "halftoneCycles", randomInt(1, 5));
+  randomizePair("halftoneSize", "halftoneSize", ()=>randomIn(1.2, 4.8));
+  randomizePair("halftoneContrast", "halftoneContrast", ()=>randomInt(55, 100));
+  randomizePair("halftoneCycles", "halftoneCycles", ()=>randomInt(1, 5));
   syncHalftoneControls();
-  state.chroma=colourMode === "chroma";
   $("chroma").checked=state.chroma;
-  setPairValue("chromaAmount", "chromaAmount", randomIn(.6, 3.2));
+  randomizePair("chromaAmount", "chromaAmount", ()=>randomIn(.6, 3.2));
   syncChromaAmount();
 
   redraw(false);

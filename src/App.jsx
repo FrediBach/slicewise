@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Check, ChevronDown, Clipboard, Dices, Download, FileUp, Plus, Rotate3d, Trash2 } from "lucide-react";
+import { Box, Check, ChevronDown, Clipboard, Dices, Download, FileUp, Lock, LockOpen, Plus, Rotate3d, Trash2 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Section } from "./components/ui/section";
 
@@ -11,7 +11,23 @@ function MorphIcon({ size = 13 }) {
   );
 }
 
-function ValueControl({ id, label, min, max, step, value, unit, disabled = false, morphable = true }) {
+function RandomLock({ id, label }) {
+  const [locked, setLocked] = useState(false);
+  const toggle = () => {
+    const next = !locked;
+    setLocked(next);
+    document.dispatchEvent(new CustomEvent("randomlockchange", { detail: { id, locked: next } }));
+  };
+  return (
+    <button type="button" className="random-lock" aria-pressed={locked}
+      aria-label={`${locked ? "Unlock" : "Lock"} ${label} randomization`}
+      title={locked ? "Include in randomization" : "Exclude from randomization"} onClick={toggle}>
+      {locked ? <Lock size={11} /> : <LockOpen size={11} />}
+    </button>
+  );
+}
+
+function ValueControl({ id, label, min, max, step, value, unit, disabled = false, morphable = true, randomizable = morphable }) {
   const [morphing, setMorphing] = useState(false);
   const [morphValue, setMorphValue] = useState(Number(value));
 
@@ -32,6 +48,18 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
     announceMorph(true, parsed);
   };
 
+  useEffect(() => {
+    const update = event => {
+      if (event.detail?.id !== id || !morphing) return;
+      const parsed = Math.min(Number(max), Math.max(Number(min), Number(event.detail.value)));
+      if (!Number.isFinite(parsed)) return;
+      setMorphValue(parsed);
+      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active: true, value: parsed } }));
+    };
+    document.addEventListener("randomizemorph", update);
+    return () => document.removeEventListener("randomizemorph", update);
+  }, [id, max, min, morphing]);
+
   return (
     <div className={`control-row${disabled ? " is-disabled" : ""}${morphing ? " is-morphing" : ""}`} id={`${id}Control`}>
       <div className="control-label">
@@ -39,6 +67,7 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
         {morphable && <button type="button" className="morph-toggle" aria-pressed={morphing}
           aria-label={`${morphing ? "Remove" : "Add"} ${label} ${morphing ? "from" : "to"} morphing`} title={morphing ? "Remove morph target" : "Add morph target"}
           onClick={toggleMorph}><MorphIcon /></button>}
+        {randomizable && <RandomLock id={id} label={label} />}
       </div>
       <div className="control-stack">
         <div className="control-inputs">
@@ -63,16 +92,16 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
   );
 }
 
-function InkColorControl() {
+function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
   const [morphing, setMorphing] = useState(false);
-  const [target, setTarget] = useState("#15181a");
-  const [targetText, setTargetText] = useState("#15181a");
+  const [target, setTarget] = useState(defaultValue);
+  const [targetText, setTargetText] = useState(defaultValue);
   const announce = (active, value) => {
-    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id: "color", active, value } }));
+    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active, value } }));
   };
   const toggle = () => {
     const active = !morphing;
-    const main = document.getElementById("color")?.value || "#15181a";
+    const main = document.getElementById(id)?.value || defaultValue;
     if (active) {
       setTarget(main);
       setTargetText(main);
@@ -87,23 +116,36 @@ function InkColorControl() {
     announce(true, value);
   };
 
+  useEffect(() => {
+    const update = event => {
+      if (event.detail?.id !== id || !morphing) return;
+      const value = event.detail.value;
+      setTarget(value);
+      setTargetText(value);
+      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active: true, value } }));
+    };
+    document.addEventListener("randomizemorph", update);
+    return () => document.removeEventListener("randomizemorph", update);
+  }, [id, morphing]);
+
   return (
-    <div className={`control-row color-row${morphing ? " is-morphing" : ""}`} id="colorControl">
+    <div className={`control-row color-row${morphing ? " is-morphing" : ""}`} id={`${id}Control`}>
       <div className="control-label">
-        <label htmlFor="colorHex">Ink colour</label>
-        <button type="button" className="morph-toggle" aria-pressed={morphing}
-          aria-label={`${morphing ? "Remove" : "Add"} Ink colour ${morphing ? "from" : "to"} morphing`}
-          title={morphing ? "Remove morph target" : "Add morph target"} onClick={toggle}><MorphIcon /></button>
+        <label htmlFor={`${id}Hex`}>{label}</label>
+        {morphable && <button type="button" className="morph-toggle" aria-pressed={morphing}
+          aria-label={`${morphing ? "Remove" : "Add"} ${label} ${morphing ? "from" : "to"} morphing`}
+          title={morphing ? "Remove morph target" : "Add morph target"} onClick={toggle}><MorphIcon /></button>}
+        <RandomLock id={id} label={label} />
       </div>
       <div className="control-stack">
         <div className="color-control">
-          <span className="swatch" id="swatch" style={{ background: "#15181a" }}><input type="color" id="color" defaultValue="#15181a" /></span>
-          <input type="text" id="colorHex" defaultValue="#15181a" spellCheck="false" />
+          <span className="swatch" id={swatchId} style={{ background: defaultValue }}><input type="color" id={id} defaultValue={defaultValue} /></span>
+          <input type="text" id={`${id}Hex`} defaultValue={defaultValue} spellCheck="false" />
         </div>
-        {morphing && <div className="color-control morph-color-control">
-          <span className="swatch" style={{ background: target }}><input type="color" id="colorMorph" value={target}
-            aria-label="Ink colour morph target" onChange={event => { setTargetText(event.target.value); setValidTarget(event.target.value); }} /></span>
-          <input type="text" id="colorMorphHex" value={targetText} spellCheck="false" aria-label="Ink colour morph target hex value"
+        {morphable && morphing && <div className="color-control morph-color-control">
+          <span className="swatch" style={{ background: target }}><input type="color" id={`${id}Morph`} value={target}
+            aria-label={`${label} morph target`} onChange={event => { setTargetText(event.target.value); setValidTarget(event.target.value); }} /></span>
+          <input type="text" id={`${id}MorphHex`} value={targetText} spellCheck="false" aria-label={`${label} morph target hex value`}
             onChange={event => { setTargetText(event.target.value); setValidTarget(event.target.value); }} />
         </div>}
       </div>
@@ -111,22 +153,12 @@ function InkColorControl() {
   );
 }
 
+function InkColorControl() {
+  return <ColorControl id="color" label="Ink colour" defaultValue="#15181a" swatchId="swatch" />;
+}
+
 function BackgroundColorControl() {
-  return (
-    <div className="control-row color-row" id="backgroundColorControl">
-      <div className="control-label">
-        <label htmlFor="backgroundColorHex">Background colour</label>
-      </div>
-      <div className="control-stack">
-        <div className="color-control">
-          <span className="swatch" id="backgroundSwatch" style={{ background: "#ffffff" }}>
-            <input type="color" id="backgroundColor" defaultValue="#ffffff" />
-          </span>
-          <input type="text" id="backgroundColorHex" defaultValue="#ffffff" spellCheck="false" />
-        </div>
-      </div>
-    </div>
-  );
+  return <ColorControl id="backgroundColor" label="Background colour" defaultValue="#ffffff" swatchId="backgroundSwatch" morphable={false} />;
 }
 
 function FieldGroup({ title, children, className = "" }) {
@@ -138,13 +170,16 @@ function FieldGroup({ title, children, className = "" }) {
   );
 }
 
-function Checkbox({ id, children, defaultChecked = false }) {
+function Checkbox({ id, children, defaultChecked = false, randomizable = false }) {
   return (
-    <label className="checkbox-row">
-      <input type="checkbox" id={id} defaultChecked={defaultChecked} />
-      <span className="checkbox-box"><Check size={11} strokeWidth={3} /></span>
-      <span>{children}</span>
-    </label>
+    <div className="checkbox-control">
+      <label className="checkbox-row">
+        <input type="checkbox" id={id} defaultChecked={defaultChecked} />
+        <span className="checkbox-box"><Check size={11} strokeWidth={3} /></span>
+        <span>{children}</span>
+      </label>
+      {randomizable && <RandomLock id={id} label={String(children)} />}
+    </div>
   );
 }
 
@@ -191,7 +226,7 @@ function GradientChooser() {
   const cssGradient = `linear-gradient(90deg, ${stops.map(([p,c]) => `${c} ${Math.round(p*100)}%`).join(", ")})`;
   return (
     <div className="gradient-editor" id="gradientEditor" ref={rootRef}>
-      <Checkbox id="gradientEnabled">Use colour gradient</Checkbox>
+      <Checkbox id="gradientEnabled" randomizable>Use colour gradient</Checkbox>
       <div className="gradient-panel" id="gradientPanel">
         <div className="gradient-preview" style={{ background: cssGradient }} aria-label="Current gradient preview" />
         <div className="gradient-presets" aria-label="Gradient presets">
@@ -316,7 +351,7 @@ export default function App() {
               <ValueControl id="panX" label="Offset X" min="-2000" max="2000" step="0.1" value="0" unit="mm" />
               <ValueControl id="panY" label="Offset Y" min="-2000" max="2000" step="0.1" value="0" unit="mm" />
               <div className="control-row select-row">
-                <label htmlFor="lens">Camera lens</label>
+                <div className="control-label"><label htmlFor="lens">Camera lens</label><RandomLock id="lens" label="Camera lens" /></div>
                 <div className="select-wrap">
                   <select id="lens" defaultValue="clean">
                     <option value="clean">50 mm · clean</option>
@@ -338,7 +373,7 @@ export default function App() {
             </FieldGroup>
             <FieldGroup title="Line spacing">
               <div className="control-row select-row">
-                <label htmlFor="gapEase">Gap easing</label>
+                <div className="control-label"><label htmlFor="gapEase">Gap easing</label><RandomLock id="gapEase" label="Gap easing" /></div>
                 <div className="select-wrap">
                   <select id="gapEase" defaultValue="linear">
                     <option value="linear">Linear</option>
@@ -370,7 +405,7 @@ export default function App() {
             </FieldGroup>
             <FieldGroup title="Slice plane">
               <div className="control-row select-row">
-                <label htmlFor="axis">Slice axis</label>
+                <div className="control-label"><label htmlFor="axis">Slice axis</label><RandomLock id="axis" label="Slice axis" /></div>
                 <div className="select-wrap">
                   <select id="axis" defaultValue="up">
                     <option value="up">Height · topographic</option>
@@ -389,9 +424,9 @@ export default function App() {
             </FieldGroup>
             <FieldGroup title="Path construction" className="field-group--checks">
               <div className="check-grid">
-                <Checkbox id="spiral">Continuous spiral</Checkbox>
-                <Checkbox id="hide" defaultChecked>Remove hidden lines</Checkbox>
-                <Checkbox id="sil" defaultChecked>Add outer silhouette</Checkbox>
+                <Checkbox id="spiral" randomizable>Continuous spiral</Checkbox>
+                <Checkbox id="hide" defaultChecked randomizable>Remove hidden lines</Checkbox>
+                <Checkbox id="sil" defaultChecked randomizable>Add outer silhouette</Checkbox>
               </div>
             </FieldGroup>
           </Section>
@@ -435,13 +470,13 @@ export default function App() {
               <Checkbox id="bg">Include sheet background</Checkbox>
             </FieldGroup>
             <FieldGroup title="Post-processing">
-              <Checkbox id="halftone">Halftone stroke</Checkbox>
+              <Checkbox id="halftone" randomizable>Halftone stroke</Checkbox>
               <div className="effect-controls">
                 <ValueControl id="halftoneSize" label="Dot spacing" min="0.5" max="8" step="0.1" value="2.4" unit="mm" disabled />
                 <ValueControl id="halftoneContrast" label="Contrast" min="0" max="100" step="1" value="75" unit="%" disabled />
                 <ValueControl id="halftoneCycles" label="Depth cycles" min="1" max="8" step="1" value="2" disabled />
               </div>
-              <Checkbox id="chroma">Chromatic aberration</Checkbox>
+              <Checkbox id="chroma" randomizable>Chromatic aberration</Checkbox>
               <div className="effect-controls">
                 <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" disabled />
               </div>
