@@ -1330,6 +1330,7 @@ function scheduleRender(){
 }
 function redraw(quick){
   if (!state.mesh) return;
+  if (!quick) scheduleParameterHistory();
   // Preserve a queued final-quality request; otherwise only the latest input
   // matters. This coalesces pointer and slider events while the worker is busy.
   const renderQuick = quick && queuedRender?.quick !== false;
@@ -1647,6 +1648,7 @@ $("gradientEnabled").addEventListener("change", e => {
 });
 $("gradientEditor").addEventListener("gradientchange", e => {
   state.gradientStops=e.detail.stops;
+  scheduleParameterHistory();
   if (state.gradientEnabled) redraw(true);
 });
 $("color").addEventListener("input", e => { setInk(e.target.value, true); $("colorHex").value = e.target.value; });
@@ -1817,6 +1819,96 @@ document.addEventListener("drop", e => {
     wheelEnd = setTimeout(() => redraw(false), 140);
   }, {passive:false});
 })();
+
+/* ------------------------------------------------ parameter history */
+const historyPairs=[
+  ["az","az"],["el","el"],["rl","roll"],["zoom","zoom"],["panX","panX"],["panY","panY"],["lensAmount","lensAmount"],
+  ["lines","lines"],["quality","quality"],["easeStrength","easeStrength"],["easeCycles","easeCycles"],["easeCenter","easeCenter"],
+  ["cutAz","cutAz"],["cutEl","cutEl"],["sw","sw"],["gradientColors","gradientColors"],["margin","margin"],
+  ["halftoneSize","halftoneSize"],["halftoneContrast","halftoneContrast"],["halftoneCycles","halftoneCycles"],["chromaAmount","chromaAmount"],
+  ["morphSteps","morphSteps"]
+];
+const historySelects=["lens","gapEase","axis"];
+const historyChecks=["spiral","hide","sil","bg","gradientEnabled","halftone","chroma","morphEnabled"];
+const parameterHistory=[];
+let parameterHistoryIndex=-1, parameterHistoryTimer=0, restoringParameters=false;
+function cloneParameterSnapshot(){ return structuredClone(settingsSnapshot()); }
+function sameParameterSnapshot(a,b){ return JSON.stringify(a)===JSON.stringify(b); }
+function updateHistoryButtons(){
+  $("undo").disabled=parameterHistoryIndex<=0;
+  $("redo").disabled=parameterHistoryIndex<0 || parameterHistoryIndex>=parameterHistory.length-1;
+}
+function commitParameterHistory(){
+  clearTimeout(parameterHistoryTimer);
+  if (restoringParameters) return;
+  const snapshot=cloneParameterSnapshot();
+  if (parameterHistoryIndex>=0 && sameParameterSnapshot(parameterHistory[parameterHistoryIndex],snapshot)) return;
+  parameterHistory.splice(parameterHistoryIndex+1);
+  parameterHistory.push(snapshot);
+  if (parameterHistory.length>100) parameterHistory.shift();
+  parameterHistoryIndex=parameterHistory.length-1;
+  updateHistoryButtons();
+}
+function scheduleParameterHistory(){
+  if (restoringParameters) return;
+  clearTimeout(parameterHistoryTimer);
+  parameterHistoryTimer=setTimeout(commitParameterHistory,180);
+}
+function restoreParameterSnapshot(snapshot){
+  restoringParameters=true;
+  clearTimeout(parameterHistoryTimer);
+  Object.assign(state,structuredClone(snapshot));
+  for (const [id,key] of historyPairs){
+    if ($(id)) $(id).value=state[key];
+    if ($(id+"N")) $(id+"N").value=state[key];
+  }
+  for (const id of historySelects) $(id).value=state[id];
+  for (const id of historyChecks) $(id).checked=state[id];
+  $("color").value=state.color;
+  $("colorHex").value=state.color;
+  $("swatch").style.background=state.color;
+  $("backgroundColor").value=state.backgroundColor;
+  $("backgroundColorHex").value=state.backgroundColor;
+  $("backgroundSwatch").style.background=state.backgroundColor;
+  $("bed").style.background=state.backgroundColor;
+  $("pw").value=state.pw;
+  $("ph").value=state.ph;
+  syncPaperPreset();
+  $("customAxis").hidden=state.axis!=="custom";
+  $("gradientEditor").classList.toggle("enabled",state.gradientEnabled);
+  syncLensAmount();
+  syncEaseCenter();
+  syncHalftoneControls();
+  syncChromaAmount();
+  syncMorphControls();
+  const morphTargetsById={};
+  for (const [id,key] of morphKeyById){
+    if (Object.hasOwn(state.morphTargets,key)) morphTargetsById[id]=state.morphTargets[key];
+  }
+  document.dispatchEvent(new CustomEvent("restoreparameters",{detail:{morphTargetsById,gradientStops:state.gradientStops}}));
+  redraw(false);
+  restoringParameters=false;
+  updateHistoryButtons();
+}
+function moveParameterHistory(offset){
+  commitParameterHistory();
+  const next=clamp(parameterHistoryIndex+offset,0,parameterHistory.length-1);
+  if (next===parameterHistoryIndex) return;
+  parameterHistoryIndex=next;
+  restoreParameterSnapshot(parameterHistory[parameterHistoryIndex]);
+  toast(offset<0 ? "Parameters undone" : "Parameters redone");
+}
+$("undo").addEventListener("click",()=>moveParameterHistory(-1));
+$("redo").addEventListener("click",()=>moveParameterHistory(1));
+document.addEventListener("keydown",event=>{
+  if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+  const key=event.key.toLowerCase();
+  const undo=key==="z" && !event.shiftKey;
+  const redo=(key==="z" && event.shiftKey) || (key==="y" && !event.shiftKey);
+  if (!undo && !redo) return;
+  event.preventDefault();
+  moveParameterHistory(undo ? -1 : 1);
+});
 
 /* ------------------------------------------------------ randomization */
 function randomIn(min, max){ return min + Math.random()*(max-min); }
@@ -1997,6 +2089,7 @@ function toast(msg){
 }
 
 /* boot with the demo knot so the tool works before anything is uploaded */
+commitParameterHistory();
 loadDemo("knot", false);
 window.addEventListener("resize", () => redraw(true));
 }

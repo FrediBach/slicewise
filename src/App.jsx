@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Check, ChevronDown, Clipboard, Dices, Download, FileUp, Lock, LockOpen, Plus, Rotate3d, Trash2 } from "lucide-react";
+import { Box, Check, ChevronDown, Clipboard, Dices, Download, FileUp, Lock, LockOpen, Plus, Redo2, Rotate3d, Trash2, Undo2 } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Section } from "./components/ui/section";
 
@@ -57,8 +57,19 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
       document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active: true, value: parsed } }));
     };
     document.addEventListener("randomizemorph", update);
-    return () => document.removeEventListener("randomizemorph", update);
-  }, [id, max, min, morphing]);
+    const restore = event => {
+      if (!morphable) return;
+      const targets = event.detail?.morphTargetsById || {};
+      const active = Object.hasOwn(targets, id);
+      setMorphing(active);
+      if (active) setMorphValue(targets[id]);
+    };
+    document.addEventListener("restoreparameters", restore);
+    return () => {
+      document.removeEventListener("randomizemorph", update);
+      document.removeEventListener("restoreparameters", restore);
+    };
+  }, [id, max, min, morphable, morphing]);
 
   return (
     <div className={`control-row${disabled ? " is-disabled" : ""}${morphing ? " is-morphing" : ""}`} id={`${id}Control`}>
@@ -125,8 +136,22 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
       document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active: true, value } }));
     };
     document.addEventListener("randomizemorph", update);
-    return () => document.removeEventListener("randomizemorph", update);
-  }, [id, morphing]);
+    const restore = event => {
+      if (!morphable) return;
+      const targets = event.detail?.morphTargetsById || {};
+      const active = Object.hasOwn(targets, id);
+      setMorphing(active);
+      if (active) {
+        setTarget(targets[id]);
+        setTargetText(targets[id]);
+      }
+    };
+    document.addEventListener("restoreparameters", restore);
+    return () => {
+      document.removeEventListener("randomizemorph", update);
+      document.removeEventListener("restoreparameters", restore);
+    };
+  }, [id, morphable, morphing]);
 
   return (
     <div className={`control-row color-row${morphing ? " is-morphing" : ""}`} id={`${id}Control`}>
@@ -202,6 +227,17 @@ function GradientChooser() {
       detail: { stops: stops.map(([position, color]) => ({ position, color })) },
     }));
   }, [stops]);
+
+  useEffect(() => {
+    const restore = event => {
+      if (event.detail?.gradientStops) {
+        setPreset("");
+        setStops(event.detail.gradientStops.map(stop => [stop.position, stop.color]));
+      }
+    };
+    document.addEventListener("restoreparameters", restore);
+    return () => document.removeEventListener("restoreparameters", restore);
+  }, []);
 
   const updateStop = (index, next) => {
     setPreset("");
@@ -515,7 +551,11 @@ export default function App() {
         </div>
 
         <footer className="actions">
-          <Button id="randomize" variant="outline" className="randomize-button"><Dices size={15} />Randomize parameters</Button>
+          <div className="parameter-actions">
+            <Button id="undo" variant="outline" className="history-button" disabled aria-label="Undo parameter change" title="Undo · Ctrl/⌘ Z"><Undo2 size={14} />Undo</Button>
+            <Button id="redo" variant="outline" className="history-button" disabled aria-label="Redo parameter change" title="Redo · Ctrl/⌘ Shift Z"><Redo2 size={14} />Redo</Button>
+            <Button id="randomize" variant="outline" className="randomize-button"><Dices size={15} />Randomize parameters</Button>
+          </div>
           <div className="action-buttons">
             <Button id="save"><Download size={15} /><span id="exportLabel">Export SVG</span></Button>
             <Button id="copy" variant="outline" aria-label="Copy SVG markup"><Clipboard size={15} /></Button>

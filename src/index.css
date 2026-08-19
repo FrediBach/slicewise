@@ -158,6 +158,10 @@ input[type="number"], input[type="text"], select { height: 27px; border: 1px sol
 .button--default { flex: 1; }
 .button--outline { width: 42px; background: transparent; color: var(--ink); }
 .button--outline:hover { color: white; }
+.button:disabled { border-color: #d4d7d2; background: #eceeeb; color: #a8aca7; cursor: not-allowed; }
+.button:disabled:hover { border-color: #d4d7d2; background: #eceeeb; color: #a8aca7; }
+.parameter-actions { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 6px; }
+.history-button { width: auto; height: 31px; padding: 0 9px; border-color: #c7cbc5; color: #555a54; background: #eef0ec; font-size: 9px; letter-spacing: .08em; }
 .randomize-button { width: 100%; height: 31px; border-color: #c7cbc5; color: #555a54; background: #eef0ec; }
 .randomize-button:hover { border-color: var(--ink); background: var(--ink); color: white; }
 
