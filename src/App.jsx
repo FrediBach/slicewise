@@ -28,55 +28,90 @@ function RandomLock({ id, label }) {
 }
 
 function ValueControl({ id, label, min, max, step, value, unit, disabled = false, morphable = true, randomizable = morphable }) {
-  const [morphing, setMorphing] = useState(false);
+  const [morphMode, setMorphMode] = useState(0);
   const [morphValue, setMorphValue] = useState(Number(value));
-
-  const announceMorph = (active, nextValue = morphValue) => {
-    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active, value: Number(nextValue) } }));
+  const [morphValueY, setMorphValueY] = useState(Number(value));
+  const announceMorph = (dimension, active, nextValue) => {
+    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active, value: Number(nextValue) } }));
   };
   const toggleMorph = () => {
-    const active = !morphing;
+    const secondEnabled = Boolean(document.getElementById("morphSecondEnabled")?.checked);
+    const nextMode = (morphMode + 1) % (secondEnabled ? 3 : 2);
     const mainValue = Number(document.getElementById(id)?.value ?? value);
-    if (active) setMorphValue(mainValue);
-    setMorphing(active);
-    announceMorph(active, active ? mainValue : morphValue);
+    if (nextMode === 1 && morphMode === 0) {
+      setMorphValue(mainValue);
+      announceMorph(1, true, mainValue);
+    } else if (nextMode === 2) {
+      setMorphValueY(mainValue);
+      announceMorph(2, true, mainValue);
+    } else if (nextMode === 0) {
+      announceMorph(1, false, morphValue);
+      announceMorph(2, false, morphValueY);
+    }
+    setMorphMode(nextMode);
   };
-  const changeMorphValue = next => {
+  const changeMorphValue = (dimension, next) => {
     const parsed = Math.min(Number(max), Math.max(Number(min), Number(next)));
     if (!Number.isFinite(parsed)) return;
-    setMorphValue(parsed);
-    announceMorph(true, parsed);
+    if (dimension === 1) setMorphValue(parsed);
+    else setMorphValueY(parsed);
+    announceMorph(dimension, true, parsed);
   };
 
   useEffect(() => {
     const update = event => {
-      if (event.detail?.id !== id || !morphing) return;
+      const dimension = event.detail?.dimension || 1;
+      if (event.detail?.id !== id || morphMode < dimension) return;
       const parsed = Math.min(Number(max), Math.max(Number(min), Number(event.detail.value)));
       if (!Number.isFinite(parsed)) return;
-      setMorphValue(parsed);
-      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active: true, value: parsed } }));
+      if (dimension === 1) setMorphValue(parsed);
+      else setMorphValueY(parsed);
+      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active: true, value: parsed } }));
     };
     document.addEventListener("randomizemorph", update);
+    const secondDimension = event => {
+      if (event.detail?.enabled || morphMode < 2) return;
+      setMorphMode(1);
+      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension: 2, active: false, value: morphValueY } }));
+    };
+    document.addEventListener("morphseconddimension", secondDimension);
     const restore = event => {
       if (!morphable) return;
-      const targets = event.detail?.morphTargetsById || {};
-      const active = Object.hasOwn(targets, id);
-      setMorphing(active);
-      if (active) setMorphValue(targets[id]);
+      const targetsX = event.detail?.morphTargetsById || {};
+      const targetsY = event.detail?.morphTargets2ById || {};
+      const hasX = Object.hasOwn(targetsX, id);
+      const hasY = Object.hasOwn(targetsY, id);
+      setMorphMode(hasY ? 2 : hasX ? 1 : 0);
+      if (hasX) setMorphValue(targetsX[id]);
+      if (hasY) setMorphValueY(targetsY[id]);
     };
     document.addEventListener("restoreparameters", restore);
     return () => {
       document.removeEventListener("randomizemorph", update);
+      document.removeEventListener("morphseconddimension", secondDimension);
       document.removeEventListener("restoreparameters", restore);
     };
-  }, [id, max, min, morphable, morphing]);
+  }, [id, max, min, morphMode, morphValueY, morphable]);
+
+  const morphInputs = (dimension, targetValue) => (
+    <div className="control-inputs morph-inputs" data-dimension={dimension}>
+      <span className="morph-axis" aria-hidden="true">{dimension === 1 ? "X" : "Y"}</span>
+      <input type="range" id={`${id}Morph${dimension}`} min={min} max={max} step={step} value={targetValue}
+        aria-label={`${label} morph ${dimension === 1 ? "X" : "Y"} target`} onChange={event => changeMorphValue(dimension, event.target.value)} />
+      <span className={`value-field${unit ? " has-unit" : ""}`}>
+        <input type="number" id={`${id}Morph${dimension}N`} min={min} max={max} step={step} value={targetValue}
+          aria-label={`${label} morph ${dimension === 1 ? "X" : "Y"} target${unit ? ` in ${unit}` : ""}`} onChange={event => changeMorphValue(dimension, event.target.value)} />
+        <span className="unit" aria-hidden="true">{unit || ""}</span>
+      </span>
+    </div>
+  );
 
   return (
-    <div className={`control-row${disabled ? " is-disabled" : ""}${morphing ? " is-morphing" : ""}`} id={`${id}Control`}>
+    <div className={`control-row${disabled ? " is-disabled" : ""}${morphMode ? " is-morphing" : ""}`} id={`${id}Control`}>
       <div className="control-label">
         <label htmlFor={id}>{label}</label>
-        {morphable && <button type="button" className="morph-toggle" aria-pressed={morphing}
-          aria-label={`${morphing ? "Remove" : "Add"} ${label} ${morphing ? "from" : "to"} morphing`} title={morphing ? "Remove morph target" : "Add morph target"}
+        {morphable && <button type="button" className="morph-toggle" aria-pressed={morphMode > 0} data-morph-dimension={morphMode}
+          aria-label={`${label} morph mode: ${morphMode === 0 ? "none" : morphMode === 1 ? "X only" : "X and Y"}`} title="Cycle morph mode: none, X, X + Y"
           onClick={toggleMorph}><MorphIcon /></button>}
         {randomizable && <RandomLock id={id} label={label} />}
       </div>
@@ -89,77 +124,105 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
             <span className="unit" aria-hidden="true">{unit || ""}</span>
           </span>
         </div>
-        {morphing && <div className="control-inputs morph-inputs">
-          <input type="range" id={`${id}Morph`} min={min} max={max} step={step} value={morphValue}
-            aria-label={`${label} morph target`} onChange={event => changeMorphValue(event.target.value)} />
-          <span className={`value-field${unit ? " has-unit" : ""}`}>
-            <input type="number" id={`${id}MorphN`} min={min} max={max} step={step} value={morphValue}
-              aria-label={`${label} morph target${unit ? ` in ${unit}` : ""}`} onChange={event => changeMorphValue(event.target.value)} />
-            <span className="unit" aria-hidden="true">{unit || ""}</span>
-          </span>
-        </div>}
+        {morphMode >= 1 && morphInputs(1, morphValue)}
+        {morphMode >= 2 && morphInputs(2, morphValueY)}
       </div>
     </div>
   );
 }
 
 function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
-  const [morphing, setMorphing] = useState(false);
+  const [morphMode, setMorphMode] = useState(0);
   const [target, setTarget] = useState(defaultValue);
   const [targetText, setTargetText] = useState(defaultValue);
-  const announce = (active, value) => {
-    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active, value } }));
+  const [targetY, setTargetY] = useState(defaultValue);
+  const [targetTextY, setTargetTextY] = useState(defaultValue);
+  const announce = (dimension, active, value) => {
+    document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active, value } }));
   };
   const toggle = () => {
-    const active = !morphing;
+    const secondEnabled = Boolean(document.getElementById("morphSecondEnabled")?.checked);
+    const nextMode = (morphMode + 1) % (secondEnabled ? 3 : 2);
     const main = document.getElementById(id)?.value || defaultValue;
-    if (active) {
+    if (nextMode === 1 && morphMode === 0) {
       setTarget(main);
       setTargetText(main);
+      announce(1, true, main);
+    } else if (nextMode === 2) {
+      setTargetY(main);
+      setTargetTextY(main);
+      announce(2, true, main);
+    } else if (nextMode === 0) {
+      announce(1, false, target);
+      announce(2, false, targetY);
     }
-    setMorphing(active);
-    announce(active, active ? main : target);
+    setMorphMode(nextMode);
   };
-  const setValidTarget = value => {
+  const setValidTarget = (dimension, value) => {
     const valid = /^#[0-9a-f]{6}$/i.test(value);
     if (!valid) return;
-    setTarget(value);
-    announce(true, value);
+    if (dimension === 1) setTarget(value);
+    else setTargetY(value);
+    announce(dimension, true, value);
   };
 
   useEffect(() => {
     const update = event => {
-      if (event.detail?.id !== id || !morphing) return;
+      const dimension = event.detail?.dimension || 1;
+      if (event.detail?.id !== id || morphMode < dimension) return;
       const value = event.detail.value;
-      setTarget(value);
-      setTargetText(value);
-      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, active: true, value } }));
+      if (dimension === 1) { setTarget(value); setTargetText(value); }
+      else { setTargetY(value); setTargetTextY(value); }
+      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active: true, value } }));
     };
     document.addEventListener("randomizemorph", update);
+    const secondDimension = event => {
+      if (event.detail?.enabled || morphMode < 2) return;
+      setMorphMode(1);
+      document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension: 2, active: false, value: targetY } }));
+    };
+    document.addEventListener("morphseconddimension", secondDimension);
     const restore = event => {
       if (!morphable) return;
-      const targets = event.detail?.morphTargetsById || {};
-      const active = Object.hasOwn(targets, id);
-      setMorphing(active);
-      if (active) {
-        setTarget(targets[id]);
-        setTargetText(targets[id]);
+      const targetsX = event.detail?.morphTargetsById || {};
+      const targetsY = event.detail?.morphTargets2ById || {};
+      const hasX = Object.hasOwn(targetsX, id);
+      const hasY = Object.hasOwn(targetsY, id);
+      setMorphMode(hasY ? 2 : hasX ? 1 : 0);
+      if (hasX) {
+        setTarget(targetsX[id]);
+        setTargetText(targetsX[id]);
+      }
+      if (hasY) {
+        setTargetY(targetsY[id]);
+        setTargetTextY(targetsY[id]);
       }
     };
     document.addEventListener("restoreparameters", restore);
     return () => {
       document.removeEventListener("randomizemorph", update);
+      document.removeEventListener("morphseconddimension", secondDimension);
       document.removeEventListener("restoreparameters", restore);
     };
-  }, [id, morphable, morphing]);
+  }, [id, morphMode, morphable, targetY]);
+
+  const colorTarget = (dimension, value, text, setText) => (
+    <div className="color-control morph-color-control" data-dimension={dimension}>
+      <span className="morph-axis" aria-hidden="true">{dimension === 1 ? "X" : "Y"}</span>
+      <span className="swatch" style={{ background: value }}><input type="color" id={`${id}Morph${dimension}`} value={value}
+        aria-label={`${label} morph ${dimension === 1 ? "X" : "Y"} target`} onChange={event => { setText(event.target.value); setValidTarget(dimension, event.target.value); }} /></span>
+      <input type="text" id={`${id}Morph${dimension}Hex`} value={text} spellCheck="false" aria-label={`${label} morph ${dimension === 1 ? "X" : "Y"} target hex value`}
+        onChange={event => { setText(event.target.value); setValidTarget(dimension, event.target.value); }} />
+    </div>
+  );
 
   return (
-    <div className={`control-row color-row${morphing ? " is-morphing" : ""}`} id={`${id}Control`}>
+    <div className={`control-row color-row${morphMode ? " is-morphing" : ""}`} id={`${id}Control`}>
       <div className="control-label">
         <label htmlFor={`${id}Hex`}>{label}</label>
-        {morphable && <button type="button" className="morph-toggle" aria-pressed={morphing}
-          aria-label={`${morphing ? "Remove" : "Add"} ${label} ${morphing ? "from" : "to"} morphing`}
-          title={morphing ? "Remove morph target" : "Add morph target"} onClick={toggle}><MorphIcon /></button>}
+        {morphable && <button type="button" className="morph-toggle" aria-pressed={morphMode > 0} data-morph-dimension={morphMode}
+          aria-label={`${label} morph mode: ${morphMode === 0 ? "none" : morphMode === 1 ? "X only" : "X and Y"}`}
+          title="Cycle morph mode: none, X, X + Y" onClick={toggle}><MorphIcon /></button>}
         <RandomLock id={id} label={label} />
       </div>
       <div className="control-stack">
@@ -167,12 +230,8 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
           <span className="swatch" id={swatchId} style={{ background: defaultValue }}><input type="color" id={id} defaultValue={defaultValue} /></span>
           <input type="text" id={`${id}Hex`} defaultValue={defaultValue} spellCheck="false" />
         </div>
-        {morphable && morphing && <div className="color-control morph-color-control">
-          <span className="swatch" style={{ background: target }}><input type="color" id={`${id}Morph`} value={target}
-            aria-label={`${label} morph target`} onChange={event => { setTargetText(event.target.value); setValidTarget(event.target.value); }} /></span>
-          <input type="text" id={`${id}MorphHex`} value={targetText} spellCheck="false" aria-label={`${label} morph target hex value`}
-            onChange={event => { setTargetText(event.target.value); setValidTarget(event.target.value); }} />
-        </div>}
+        {morphable && morphMode >= 1 && colorTarget(1, target, targetText, setTargetText)}
+        {morphable && morphMode >= 2 && colorTarget(2, targetY, targetTextY, setTargetTextY)}
       </div>
     </div>
   );
@@ -370,8 +429,12 @@ export default function App() {
             <FieldGroup title="Parameter interpolation">
               <Checkbox id="morphEnabled">Enable morph instances</Checkbox>
               <div className="morph-settings" id="morphSettings">
-                <ValueControl id="morphSteps" label="Morph steps" min="2" max="24" step="1" value="4" morphable={false} />
-                <p className="gradient-note morph-note">Use the arrow icon beside any numeric parameter or ink colour to reveal its target. All selected values interpolate together from the main settings.</p>
+                <ValueControl id="morphSteps" label="X steps" min="2" max="24" step="1" value="4" morphable={false} />
+                <Checkbox id="morphSecondEnabled">Add Y dimension</Checkbox>
+                <div className="morph-second-settings" id="morphSecondSettings">
+                  <ValueControl id="morphStepsY" label="Y steps" min="2" max="24" step="1" value="4" morphable={false} />
+                </div>
+                <p className="gradient-note morph-note">Cycle each arrow through no morph, X only, and X + Y. X and Y targets combine into a matrix of variations.</p>
               </div>
             </FieldGroup>
           </Section>

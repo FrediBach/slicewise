@@ -893,7 +893,7 @@ const state = {
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
   chroma: false, chromaAmount: 1.5,
-  morphEnabled: false, morphSteps: 4, morphTargets: {},
+  morphEnabled: false, morphSteps: 4, morphTargets: {}, morphSecondEnabled: false, morphStepsY: 4, morphTargets2: {},
   exportFormat: "svg", gcodeProfile: "uunatek3", drawFeed: 3000, travelFeed: 6000, penUp: 0, penDown: -3, zFeed: 2000,
   svg: "", svgBytes: 0, toolpaths: [], dragging: false
 };
@@ -1206,37 +1206,45 @@ function svgArtwork(svg){
 
 export function computeContours(mesh, settings, quick){
   const hexColor=/^#[0-9a-f]{6}$/i;
-  const targets=settings.morphEnabled ? Object.entries(settings.morphTargets || {}).filter(([key,value]) =>
+  const validTargets = targets => Object.entries(targets || {}).filter(([key,value]) =>
     key==="color"
       ? hexColor.test(String(value)) && hexColor.test(String(settings[key]))
       : Number.isFinite(Number(value)) && Number.isFinite(Number(settings[key]))
-  ) : [];
-  if (!targets.length) return computeContourInstance(mesh,settings,quick);
+  );
+  const targetsX=settings.morphEnabled ? validTargets(settings.morphTargets) : [];
+  const targetsY=settings.morphEnabled && settings.morphSecondEnabled ? validTargets(settings.morphTargets2) : [];
+  if (!targetsX.length && !targetsY.length) return computeContourInstance(mesh,settings,quick);
 
   const started=performance.now();
-  const steps=clamp(Math.round(settings.morphSteps || 2),2,24);
+  const stepsX=targetsX.length ? clamp(Math.round(settings.morphSteps || 2),2,24) : 1;
+  const stepsY=targetsY.length ? clamp(Math.round(settings.morphStepsY || 2),2,24) : 1;
+  const targetsXByKey=new Map(targetsX), targetsYByKey=new Map(targetsY);
+  const targetKeys=new Set([...targetsXByKey.keys(),...targetsYByKey.keys()]);
   const results=[];
-  for (let index=0;index<steps;index++){
-    const amount=steps===1 ? 0 : index/(steps-1);
+  for (let y=0;y<stepsY;y++) for (let x=0;x<stepsX;x++){
+    const amountX=stepsX===1 ? 0 : x/(stepsX-1);
+    const amountY=stepsY===1 ? 0 : y/(stepsY-1);
     const instance={...settings,suppressBackground:true};
-    for (const [key,target] of targets){
+    for (const key of targetKeys){
+      const targetX=targetsXByKey.get(key), targetY=targetsYByKey.get(key);
       if (key==="color"){
         const startColor=settings.color.slice(1).match(/../g).map(value=>parseInt(value,16));
-        const targetColor=String(target).slice(1).match(/../g).map(value=>parseInt(value,16));
-        instance.color="#"+startColor.map((value,channel)=>Math.round(value+(targetColor[channel]-value)*amount).toString(16).padStart(2,"0")).join("");
+        const colorX=targetX ? String(targetX).slice(1).match(/../g).map(value=>parseInt(value,16)) : startColor;
+        const colorY=targetY ? String(targetY).slice(1).match(/../g).map(value=>parseInt(value,16)) : startColor;
+        instance.color="#"+startColor.map((value,channel)=>clamp(Math.round(value+(colorX[channel]-value)*amountX+(colorY[channel]-value)*amountY),0,255).toString(16).padStart(2,"0")).join("");
         continue;
       }
       const start=Number(settings[key]);
-      instance[key]=start+(Number(target)-start)*amount;
+      instance[key]=start+(targetX===undefined ? 0 : (Number(targetX)-start)*amountX)+(targetY===undefined ? 0 : (Number(targetY)-start)*amountY);
     }
-    results.push(computeContourInstance(mesh,instance,quick));
+    results.push({...computeContourInstance(mesh,instance,quick),morphX:x,morphY:y});
   }
 
   const W=settings.pw, H=settings.ph;
   const background=settings.chroma
     ? `<rect width="${W}" height="${H}" fill="#000000"/>`
     : settings.bg ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || "#ffffff"}"/>` : "";
-  const layers=results.map((result,index)=>`<g data-morph-step="${index+1}" data-morph-position="${fmt(index/(steps-1))}">${svgArtwork(result.svg)}</g>`).join("\n");
+  const layers=results.map(result=>`<g data-morph-x-step="${result.morphX+1}" data-morph-y-step="${result.morphY+1}" data-morph-x="${stepsX===1 ? 0 : fmt(result.morphX/(stepsX-1))}" data-morph-y="${stepsY===1 ? 0 : fmt(result.morphY/(stepsY-1))}">${svgArtwork(result.svg)}</g>`).join("\n");
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${background}${layers}
 </svg>`;
@@ -1281,14 +1289,15 @@ let requestId = 0, queuedRender = null, renderInFlight = false;
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets} = state;
-  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets:{...morphTargets}};
+  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets,morphSecondEnabled,morphStepsY,morphTargets2} = state;
+  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets:{...morphTargets},morphSecondEnabled,morphStepsY,morphTargets2:{...morphTargets2}};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
   const visibilityCost = state.hide ? 1.55 : 1;
   const curveCost = 1 + Math.max(0, state.quality-1)*.055;
-  const morphCost = state.morphEnabled && Object.keys(state.morphTargets).length ? state.morphSteps : 1;
+  const morphCost = state.morphEnabled && Object.keys(state.morphTargets).length
+    ? state.morphSteps*(state.morphSecondEnabled && Object.keys(state.morphTargets2).length ? state.morphStepsY : 1) : 1;
   const score = triangles * state.lines * visibilityCost * curveCost * morphCost;
   let complexityDelay = 150;
   if (score < 450000) complexityDelay = 16;
@@ -1486,25 +1495,39 @@ bindPair("halftoneSize","halftoneSize"); bindPair("halftoneContrast","halftoneCo
 bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
 bindPair("morphSteps","morphSteps");
+bindPair("morphStepsY","morphStepsY");
 bindExportPair("drawFeed","drawFeed"); bindExportPair("travelFeed","travelFeed"); bindExportPair("penUp","penUp"); bindExportPair("penDown","penDown"); bindExportPair("zFeed","zFeed");
 morphKeyById.set("color","color");
 
 document.addEventListener("morphchange",event=>{
-  const {id,active,value}=event.detail || {};
+  const {id,dimension=1,active,value}=event.detail || {};
   const key=morphKeyById.get(id);
   if (!key) return;
-  if (active && key==="color" && /^#[0-9a-f]{6}$/i.test(String(value))) state.morphTargets[key]=String(value);
-  else if (active && Number.isFinite(Number(value))) state.morphTargets[key]=Number(value);
-  else delete state.morphTargets[key];
+  const targets=dimension===2 ? state.morphTargets2 : state.morphTargets;
+  if (active && key==="color" && /^#[0-9a-f]{6}$/i.test(String(value))) targets[key]=String(value);
+  else if (active && Number.isFinite(Number(value))) targets[key]=Number(value);
+  else delete targets[key];
   redraw(false);
 });
 function syncMorphControls(){
   $("morphSettings").classList.toggle("is-disabled",!state.morphEnabled);
   $("morphSteps").disabled=!state.morphEnabled;
   $("morphStepsN").disabled=!state.morphEnabled;
+  $("morphSecondEnabled").disabled=!state.morphEnabled;
+  const secondActive=state.morphEnabled && state.morphSecondEnabled;
+  $("morphSecondSettings").classList.toggle("is-disabled",!secondActive);
+  $("morphStepsY").disabled=!secondActive;
+  $("morphStepsYN").disabled=!secondActive;
 }
 $("morphEnabled").addEventListener("change",event=>{
   state.morphEnabled=event.target.checked;
+  syncMorphControls();
+  redraw(false);
+});
+$("morphSecondEnabled").addEventListener("change",event=>{
+  state.morphSecondEnabled=event.target.checked;
+  if (!state.morphSecondEnabled) state.morphTargets2={};
+  document.dispatchEvent(new CustomEvent("morphseconddimension",{detail:{enabled:state.morphSecondEnabled}}));
   syncMorphControls();
   redraw(false);
 });
@@ -1826,10 +1849,10 @@ const historyPairs=[
   ["lines","lines"],["quality","quality"],["easeStrength","easeStrength"],["easeCycles","easeCycles"],["easeCenter","easeCenter"],
   ["cutAz","cutAz"],["cutEl","cutEl"],["sw","sw"],["gradientColors","gradientColors"],["margin","margin"],
   ["halftoneSize","halftoneSize"],["halftoneContrast","halftoneContrast"],["halftoneCycles","halftoneCycles"],["chromaAmount","chromaAmount"],
-  ["morphSteps","morphSteps"]
+  ["morphSteps","morphSteps"],["morphStepsY","morphStepsY"]
 ];
 const historySelects=["lens","gapEase","axis"];
-const historyChecks=["spiral","hide","sil","bg","gradientEnabled","halftone","chroma","morphEnabled"];
+const historyChecks=["spiral","hide","sil","bg","gradientEnabled","halftone","chroma","morphEnabled","morphSecondEnabled"];
 const parameterHistory=[];
 let parameterHistoryIndex=-1, parameterHistoryTimer=0, restoringParameters=false;
 function cloneParameterSnapshot(){ return structuredClone(settingsSnapshot()); }
@@ -1881,11 +1904,12 @@ function restoreParameterSnapshot(snapshot){
   syncHalftoneControls();
   syncChromaAmount();
   syncMorphControls();
-  const morphTargetsById={};
+  const morphTargetsById={}, morphTargets2ById={};
   for (const [id,key] of morphKeyById){
     if (Object.hasOwn(state.morphTargets,key)) morphTargetsById[id]=state.morphTargets[key];
+    if (Object.hasOwn(state.morphTargets2,key)) morphTargets2ById[id]=state.morphTargets2[key];
   }
-  document.dispatchEvent(new CustomEvent("restoreparameters",{detail:{morphTargetsById,gradientStops:state.gradientStops}}));
+  document.dispatchEvent(new CustomEvent("restoreparameters",{detail:{morphTargetsById,morphTargets2ById,gradientStops:state.gradientStops}}));
   redraw(false);
   restoringParameters=false;
   updateHistoryButtons();
@@ -1942,10 +1966,11 @@ document.addEventListener("randomlockchange",event=>{
 function randomizePair(id,key,makeValue){
   if (randomLocks.has(id)) return;
   setPairValue(id,key,makeValue());
-  if (Object.hasOwn(state.morphTargets,key)){
+  for (const [dimension,targets] of [[1,state.morphTargets],[2,state.morphTargets2]]){
+    if (!Object.hasOwn(targets,key)) continue;
     const target=normalizePairValue(id,makeValue());
-    state.morphTargets[key]=target;
-    document.dispatchEvent(new CustomEvent("randomizemorph",{detail:{id,value:target}}));
+    targets[key]=target;
+    document.dispatchEvent(new CustomEvent("randomizemorph",{detail:{id,dimension,value:target}}));
   }
 }
 function randomizeColor(id,key,colors){
@@ -1956,10 +1981,11 @@ function randomizeColor(id,key,colors){
   $(id+"Hex").value=value;
   $(id==="color" ? "swatch" : "backgroundSwatch").style.background=value;
   if (key==="backgroundColor") $("bed").style.background=value;
-  if (Object.hasOwn(state.morphTargets,key)){
+  for (const [dimension,targets] of [[1,state.morphTargets],[2,state.morphTargets2]]){
+    if (!Object.hasOwn(targets,key)) continue;
     const target=randomItem(colors);
-    state.morphTargets[key]=target;
-    document.dispatchEvent(new CustomEvent("randomizemorph",{detail:{id,value:target}}));
+    targets[key]=target;
+    document.dispatchEvent(new CustomEvent("randomizemorph",{detail:{id,dimension,value:target}}));
   }
 }
 function randomizeSelect(id,key,values){
