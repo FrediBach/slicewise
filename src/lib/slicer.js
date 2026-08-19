@@ -1,5 +1,6 @@
 "use strict";
 import { generateGCode } from "./gcode.js";
+import { createColorPair } from "./colorPair.js"
 import { GEN_DEFAULTS } from "./generativeMesh";
 /* =====================================================================
    Slicewise — mesh → contour SVG / G-code
@@ -2127,8 +2128,11 @@ $("randomize").addEventListener("click", () => {
 
   randomizePair("sw", "sw", ()=>randomIn(.15, .7));
   randomizePair("margin", "margin", ()=>randomInt(8, 24));
-  const inks=["#15181a", "#172554", "#3f1d2e", "#18392b", "#4a2519", "#30234d"];
-  const papers=["#ffffff", "#f7f3e8", "#f1eee4", "#e8edf0", "#eee8e2", "#171917"];
+  const colorPair = createColorPair();
+  const reverseColors = Math.random() < 0.5;
+  const useBlackAndWhite = Math.random() < 0.1;
+  const inks=[useBlackAndWhite ? '#000000' : reverseColors ? colorPair.b.hex : colorPair.a.hex];
+  const papers=[useBlackAndWhite ? '#ffffff' : reverseColors ? colorPair.a.hex : colorPair.b.hex];
   randomizeColor("color","color",inks);
   randomizeColor("backgroundColor","backgroundColor",papers);
 
