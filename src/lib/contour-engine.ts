@@ -1,16 +1,164 @@
 "use strict";
 
+type NumericArray = ArrayLike<number> & Iterable<number>;
+type Vec2 = [x: number, y: number];
+type Vec3 = [x: number, y: number, z: number];
+type Polyline = number[];
+type VisibilityTest = (x: number, y: number, depth: number) => boolean;
+type MorphValue = number | string;
+type MorphTargets = Record<string, MorphValue>;
+
+export interface ContourMesh {
+  V: NumericArray;
+  T: NumericArray;
+  N?: NumericArray;
+}
+
+export interface GradientStop {
+  position: number;
+  color: string;
+}
+
+export interface ContourSettings {
+  [key: string]: unknown;
+  az: number;
+  el: number;
+  roll: number;
+  zoom: number;
+  panX: number;
+  panY: number;
+  lens: string;
+  lensAmount: number;
+  lines: number;
+  gapEase: string;
+  easeStrength: number;
+  easeCycles: number;
+  easeCenter: number;
+  quality: number;
+  axis: string;
+  cutAz: number;
+  cutEl: number;
+  spiral: boolean;
+  hide: boolean;
+  sil: boolean;
+  sw: number;
+  color: string;
+  backgroundColor: string;
+  gradientEnabled: boolean;
+  gradientColors: number;
+  gradientStops: readonly GradientStop[];
+  pw: number;
+  ph: number;
+  margin: number;
+  bg: boolean;
+  halftone: boolean;
+  halftoneSize: number;
+  halftoneContrast: number;
+  halftoneCycles: number;
+  chroma: boolean;
+  chromaAmount: number;
+  humanizer: boolean;
+  humanizerAmount: number;
+  blueprint: boolean;
+  blueprintStyle: string;
+  documentTitle: string;
+  morphEnabled: boolean;
+  morphSteps: number;
+  morphTargets: MorphTargets;
+  morphSecondEnabled: boolean;
+  morphStepsY: number;
+  morphTargets2: MorphTargets;
+  suppressBackground?: boolean;
+}
+
+export interface ContourToolpathGroup {
+  color: string;
+  label: string;
+  runs: Polyline[];
+}
+
+export interface ContourResult {
+  svg: string;
+  toolpaths: ContourToolpathGroup[];
+  paths: number;
+  nodes: number;
+  bytes: number;
+  ms: number;
+  W: number;
+  H: number;
+  quick: boolean;
+}
+
+interface CameraBasis {
+  f: Vec3;
+  r: Vec3;
+  u: Vec3;
+}
+
+interface Projection extends CameraBasis {
+  sx: Float32Array;
+  sy: Float32Array;
+  sd: Float32Array;
+  dmin: number;
+  dmax: number;
+  scale: number;
+  ox: number;
+  oy: number;
+  lens: string;
+  lensAmount: number;
+}
+
+interface ScalarField {
+  S: NumericArray;
+  min: number;
+  max: number;
+  dir: Vec3;
+}
+
+interface PointSegments {
+  pts: number[];
+  segs: number[];
+}
+
+interface SpiralSegments extends PointSegments {
+  values: number[];
+}
+
+interface DepthBuffer {
+  buf: Float32Array;
+  rw: number;
+  rh: number;
+  k: number;
+}
+
+interface BandChunk {
+  band: number;
+  pts: number[];
+}
+
+interface SerialisedGroup {
+  d: string;
+  runs: Polyline[];
+}
+
+interface BlueprintDocument {
+  backdrop: string;
+  overlay: string;
+}
+
 /* ---------------------------------------------------------------- utils */
-const clamp = (v,a,b) => v<a?a:v>b?b:v;
-const fmt = n => {
+const clamp = (v: number, a: number, b: number): number => v<a?a:v>b?b:v;
+const fmt = (n: number): string => {
   const r = Math.round(n*100)/100;
   return Number.isInteger(r) ? String(r) : String(r);
 };
-const escapeXml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
+const XML_ESCAPES: Readonly<Record<string, string>> = {
   "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&apos;"
-})[character]);
+};
+const escapeXml = (value: unknown): string =>
+  String(value ?? "").replace(/[&<>"']/g, character => XML_ESCAPES[character]);
 
-function applyLineGapEase(t, easing, center){
+function applyLineGapEase(t: number, easing: string, center: number): number {
   const left=t/center, right=(t-center)/(1-center);
   switch (easing){
     case "sine-in": return 1-Math.cos(t*Math.PI/2);
@@ -29,7 +177,7 @@ function applyLineGapEase(t, easing, center){
   }
 }
 
-function easeLineGap(t, easing, strength=100, center=50, cycles=1){
+function easeLineGap(t: number, easing: string, strength=100, center=50, cycles=1): number {
   const cycleCount=clamp(Math.round(cycles), 1, 12);
   const scaled=t*cycleCount;
   const cycle=Math.min(cycleCount-1, Math.floor(scaled));
@@ -47,32 +195,32 @@ function easeLineGap(t, easing, strength=100, center=50, cycles=1){
 }
 
 /* --------------------------------------------------------- projection */
-function cameraBasis(azDeg, elDeg, rollDeg){
+function cameraBasis(azDeg: number, elDeg: number, rollDeg: number): CameraBasis {
   const az = azDeg*Math.PI/180, el = elDeg*Math.PI/180, ro = rollDeg*Math.PI/180;
   // camera sits on the unit sphere, looks at the origin. Z is up.
-  const c = [Math.cos(el)*Math.cos(az), Math.cos(el)*Math.sin(az), Math.sin(el)];
-  const f = [-c[0], -c[1], -c[2]];                 // view direction
+  const c: Vec3 = [Math.cos(el)*Math.cos(az), Math.cos(el)*Math.sin(az), Math.sin(el)];
+  const f: Vec3 = [-c[0], -c[1], -c[2]];                 // view direction
   // An analytical horizontal axis stays defined at the poles and remains
   // continuous as elevation travels through a full rotation.
-  let r = [-Math.sin(az), Math.cos(az), 0];
-  let u = [r[1]*f[2]-r[2]*f[1], r[2]*f[0]-r[0]*f[2], r[0]*f[1]-r[1]*f[0]];
+  let r: Vec3 = [-Math.sin(az), Math.cos(az), 0];
+  let u: Vec3 = [r[1]*f[2]-r[2]*f[1], r[2]*f[0]-r[0]*f[2], r[0]*f[1]-r[1]*f[0]];
   if (ro){
     const cr = Math.cos(ro), sr = Math.sin(ro);
-    const r2 = [r[0]*cr+u[0]*sr, r[1]*cr+u[1]*sr, r[2]*cr+u[2]*sr];
-    const u2 = [u[0]*cr-r[0]*sr, u[1]*cr-r[1]*sr, u[2]*cr-r[2]*sr];
+    const r2: Vec3 = [r[0]*cr+u[0]*sr, r[1]*cr+u[1]*sr, r[2]*cr+u[2]*sr];
+    const u2: Vec3 = [u[0]*cr-r[0]*sr, u[1]*cr-r[1]*sr, u[2]*cr-r[2]*sr];
     r = r2; u = u2;
   }
   return {f, r, u};
 }
 
-const LENS_CURVE = {
+const LENS_CURVE: Readonly<Record<string, number>> = {
   clean: 0,
   wide: -0.18,
   fisheye: -0.4,
   tele: 0.16
 };
 
-function distortLens(x, y, lens, amount){
+function distortLens(x: number, y: number, lens: string, amount: number): Vec2 {
   const curve = (LENS_CURVE[lens] || 0) * clamp(amount/100, 0, 2);
   if (!curve) return [x, y];
   const radius2 = x*x + y*y;
@@ -83,19 +231,27 @@ function distortLens(x, y, lens, amount){
   return [x*factor, y*factor];
 }
 
-function projectCameraPoint(x, y, scale, ox, oy, lens, lensAmount){
+function projectCameraPoint(x: number, y: number, scale: number, ox: number, oy: number, lens: string, lensAmount: number): Vec2 {
   const warped = distortLens(x, y, lens, lensAmount);
   return [ox + warped[0]*scale, oy - warped[1]*scale];
 }
 
 /* ------------------------------------------------- marching triangles */
-function sliceLevel(P, mesh, S, level, NV, scalarDir, curveStrength){
+function sliceLevel(
+  P: Projection,
+  mesh: ContourMesh,
+  S: NumericArray,
+  level: number,
+  NV: number,
+  scalarDir: Vec3,
+  curveStrength: number,
+): PointSegments {
   // returns {pts:[x,y,d,...], segs:[i,j,...]} for one cutting plane
   const {T, V, N} = mesh;
-  const idx = new Map();          // edge key -> point index
-  const pts = [], segs = [];
+  const idx = new Map<number, number>();          // edge key -> point index
+  const pts: number[] = [], segs: number[] = [];
   const {r, u, f, scale, ox, oy, lens, lensAmount} = P;
-  const getPoint = (a, b) => {
+  const getPoint = (a: number, b: number): number => {
     const key = a < b ? a*NV + b : b*NV + a;
     let id = idx.get(key);
     if (id !== undefined) return id;
@@ -124,7 +280,7 @@ function sliceLevel(P, mesh, S, level, NV, scalarDir, curveStrength){
     const db=ex*N[bi]+ey*N[bi+1]+ez*N[bi+2];
     const tax=ex-N[ai]*da, tay=ey-N[ai+1]*da, taz=ez-N[ai+2]*da;
     const tbx=ex-N[bi]*db, tby=ey-N[bi+1]*db, tbz=ez-N[bi+2]*db;
-    const sample = (q) => {
+    const sample = (q: number): Vec3 => {
       const q2=q*q, q3=q2*q;
       const h00=2*q3-3*q2+1, h10=q3-2*q2+q;
       const h01=-2*q3+3*q2, h11=q3-q2;
@@ -167,7 +323,7 @@ function sliceLevel(P, mesh, S, level, NV, scalarDir, curveStrength){
 }
 
 /* ------------------------------------------- chain segments into runs */
-function chain(pts, segs){
+function chain(pts: NumericArray, segs: NumericArray): number[][] {
   const n = pts.length/3;
   const head = new Int32Array(n).fill(-1);
   const nextRef = new Int32Array(segs.length).fill(-1);
@@ -179,9 +335,9 @@ function chain(pts, segs){
   const deg = new Uint8Array(n);
   for (const v of segs) if (deg[v] < 255) deg[v]++;
 
-  const polys = [];
-  const walk = (start) => {
-    const line = [start];
+  const polys: number[][] = [];
+  const walk = (start: number): void => {
+    const line: number[] = [start];
     let cur = start;
     for(;;){
       let picked = -1, other = -1;
@@ -204,7 +360,7 @@ function chain(pts, segs){
 }
 
 /* ------------------------------------------------------- depth buffer */
-function buildDepth(P, T, W, H, res){
+function buildDepth(P: Projection, T: NumericArray, W: number, H: number, res: number): DepthBuffer {
   const rw = Math.max(32, Math.round(res * (W>=H ? 1 : W/H)));
   const rh = Math.max(32, Math.round(res * (H>=W ? 1 : H/W)));
   const k = rw / W;
@@ -238,10 +394,10 @@ function buildDepth(P, T, W, H, res){
   }
   return {buf, rw, rh, k};
 }
-function makeVisibleTest(D, bias, rad){
+function makeVisibleTest(D: DepthBuffer, bias: number, rad: number): VisibilityTest {
   const {buf, rw, rh, k} = D;
   const R = rad || 1;
-  return (x, y, d) => {
+  return (x: number, y: number, d: number): boolean => {
     const px = Math.floor(x*k), py = Math.floor(y*k);
     if (px < 0 || py < 0 || px >= rw || py >= rh) return true;
     let best = -Infinity;          // most permissive depth found nearby
@@ -259,12 +415,18 @@ function makeVisibleTest(D, bias, rad){
 }
 
 /* ------------------------------------------- polyline → visible paths */
-function emitPath(poly, pts, visible, step, out){
+function emitPath(
+  poly: NumericArray,
+  pts: NumericArray,
+  visible: VisibilityTest | null,
+  step: number,
+  out: Polyline[],
+): void {
   // Walk a chained polyline and keep only the stretches the camera can see.
   // Visibility is sampled at roughly one sample per depth-buffer pixel, but only
   // the interval breaks become nodes — sampling density never inflates the file.
-  let run = null, openEnd = false;   // openEnd: run currently ends at this segment's start
-  const flush = () => { if (run && run.length >= 4) out.push(run); run = null; openEnd = false; };
+  let run: Polyline | null = null, openEnd = false;   // openEnd: run currently ends at this segment's start
+  const flush = (): void => { if (run && run.length >= 4) out.push(run); run = null; openEnd = false; };
 
   for (let i=0;i+1<poly.length;i++){
     const a = poly[i]*3, b = poly[i+1]*3;
@@ -313,15 +475,20 @@ function emitPath(poly, pts, visible, step, out){
   flush();
 }
 
-function splitPolylineByBands(poly, pts, values, bandCount){
-  const chunks=[];
-  let current=null;
-  const pointAt=(a,b,t)=>[
+function splitPolylineByBands(
+  poly: NumericArray,
+  pts: NumericArray,
+  values: NumericArray,
+  bandCount: number,
+): BandChunk[] {
+  const chunks: BandChunk[]=[];
+  let current: BandChunk | null=null;
+  const pointAt=(a: number,b: number,t: number): Vec3=>[
     pts[a*3]+(pts[b*3]-pts[a*3])*t,
     pts[a*3+1]+(pts[b*3+1]-pts[a*3+1])*t,
     pts[a*3+2]+(pts[b*3+2]-pts[a*3+2])*t
   ];
-  const finish=()=>{ if (current && current.pts.length>=6) chunks.push(current); current=null; };
+  const finish=(): void=>{ if (current && current.pts.length>=6) chunks.push(current); current=null; };
   for (let i=0;i+1<poly.length;i++){
     const a=poly[i], b=poly[i+1], va=clamp(values[a],0,1), vb=clamp(values[b],0,1);
     const cuts=[0,1];
@@ -345,17 +512,17 @@ function splitPolylineByBands(poly, pts, values, bandCount){
   return chunks;
 }
 
-function gradientPalette(settings){
+function gradientPalette(settings: ContourSettings): string[] {
   if (settings.blueprint) return ["#f5f9ff"];
   if (!settings.gradientEnabled) return [settings.color];
   const stops=(settings.gradientStops || []).slice().sort((a,b)=>a.position-b.position);
   if (stops.length<2) return [settings.color];
   const count=clamp(Math.round(settings.gradientColors),2,24);
-  const rgb=hex=>{
+  const rgb=(hex: string): Vec3=>{
     const value=parseInt(hex.slice(1),16);
     return [(value>>16)&255,(value>>8)&255,value&255];
   };
-  const hex=channels=>"#"+channels.map(v=>Math.round(v).toString(16).padStart(2,"0")).join("");
+  const hex=(channels: number[]): string=>"#"+channels.map(v=>Math.round(v).toString(16).padStart(2,"0")).join("");
   return Array.from({length:count},(_,i)=>{
     const t=i/(count-1);
     let right=stops.findIndex(stop=>stop.position>=t);
@@ -367,8 +534,8 @@ function gradientPalette(settings){
   });
 }
 
-function deterministicDrawingNumber(settings,geometry){
-  const orderedTargets=targets=>Object.fromEntries(Object.entries(targets || {}).sort(([a],[b])=>a.localeCompare(b)));
+function deterministicDrawingNumber(settings: ContourSettings, geometry: BlueprintGeometry): string {
+  const orderedTargets=(targets: MorphTargets): MorphTargets=>Object.fromEntries(Object.entries(targets || {}).sort(([a],[b])=>a.localeCompare(b)));
   const signature=JSON.stringify({
     object:settings.documentTitle,
     sheet:[settings.pw,settings.ph,settings.margin],
@@ -387,14 +554,23 @@ function deterministicDrawingNumber(settings,geometry){
 }
 
 type BlueprintGeometry = {
-  direction?: number[];
+  direction?: Vec3;
   fieldMin?: number;
   fieldMax?: number;
   vertices?: number;
   triangles?: number;
 };
 
-function blueprintDocument(settings,W,H,geometry: BlueprintGeometry={}){
+interface InternalContourResult extends ContourResult {
+  blueprintGeometry: BlueprintGeometry;
+}
+
+interface MorphContourResult extends InternalContourResult {
+  morphX: number;
+  morphY: number;
+}
+
+function blueprintDocument(settings: ContourSettings, W: number, H: number, geometry: BlueprintGeometry={}): BlueprintDocument {
   if (!settings.blueprint) return {backdrop:"",overlay:""};
   const black=settings.blueprintStyle==="black";
   const paper=black ? "#101417" : "#0b3f7a";
@@ -459,13 +635,13 @@ function blueprintDocument(settings,W,H,geometry: BlueprintGeometry={}){
 }
 
 /* ------------------------------------ Ramer–Douglas–Peucker (iterative) */
-function sharpVertices(run){
+function sharpVertices(run: NumericArray): Uint8Array {
   const n=run.length/2;
   const sharp=new Uint8Array(n);
   const closed=n>3 && Math.hypot(run[0]-run[(n-1)*2],run[1]-run[(n-1)*2+1])<1e-5;
   const count=closed ? n-1 : n;
   const threshold=35*Math.PI/180;
-  const point=i=>{
+  const point=(i: number): Vec2=>{
     if (closed) i=(i%count+count)%count;
     else i=clamp(i,0,count-1);
     return [run[i*2],run[i*2+1]];
@@ -482,17 +658,17 @@ function sharpVertices(run){
   return sharp;
 }
 
-function simplify(run, tol){
+function simplify(run: Polyline, tol: number): { run: Polyline; sharp: Uint8Array } {
   const n = run.length/2;
   const sourceSharp=sharpVertices(run);
   if (n < 3) return {run,sharp:sourceSharp};
   const keep = new Uint8Array(n);
   keep[0] = keep[n-1] = 1;
   for (let i=1;i<n-1;i++) if (sourceSharp[i]) keep[i]=1;
-  const stack = [[0, n-1]];
+  const stack: Array<[number, number]> = [[0, n-1]];
   const t2 = tol*tol;
   while (stack.length){
-    const [i0, i1] = stack.pop();
+    const [i0, i1] = stack.pop()!;
     if (i1 - i0 < 2) continue;
     const x0=run[i0*2], y0=run[i0*2+1], x1=run[i1*2], y1=run[i1*2+1];
     const dx=x1-x0, dy=y1-y0, dd=dx*dx+dy*dy;
@@ -506,7 +682,7 @@ function simplify(run, tol){
     }
     if (far > 0){ keep[far] = 1; stack.push([i0, far], [far, i1]); }
   }
-  const out = [], sharp=[];
+  const out: number[] = [], sharp: number[]=[];
   for (let i=0;i<n;i++) if (keep[i]){
     out.push(run[i*2],run[i*2+1]);
     sharp.push(sourceSharp[i]);
@@ -515,7 +691,7 @@ function simplify(run, tol){
 }
 
 /* --------------------------------------- deterministic hand-drawn wobble */
-function humanizeRun(run, amount, salt=0){
+function humanizeRun(run: Polyline, amount: number, salt=0): Polyline {
   const strength=clamp(Number(amount) || 0,0,100)/100;
   const count=run.length/2;
   if (!strength || count<2) return run;
@@ -531,14 +707,14 @@ function humanizeRun(run, amount, salt=0){
     hash^=Math.round(run[i*2]*1000); hash=Math.imul(hash,0x01000193);
     hash^=Math.round(run[i*2+1]*1000); hash=Math.imul(hash,0x01000193);
   }
-  const random=()=>{
+  const random=(): number=>{
     hash^=hash<<13; hash^=hash>>>17; hash^=hash<<5;
     return (hash>>>0)/4294967296;
   };
   const phases=[random(),random(),random(),random()].map(value=>value*Math.PI*2);
   const amplitude=.08+strength*.62;
   const spacing=4.8-strength*2.2;
-  const points=[];
+  const points: number[]=[];
   let distance=0;
   const segmentCount=closed ? uniqueCount : uniqueCount-1;
   for (let i=0;i<segmentCount;i++){
@@ -567,18 +743,18 @@ function humanizeRun(run, amount, salt=0){
 }
 
 /* ------------------------------------------ adaptive SVG curve output */
-function serialiseRun(run, quality, sharp){
+function serialiseRun(run: NumericArray, quality: number, sharp: NumericArray): string {
   const n = run.length/2;
   if (n < 2) return "";
   const closed = n > 3 && Math.hypot(run[0]-run[(n-1)*2], run[1]-run[(n-1)*2+1]) < 1e-5;
   const count = closed ? n-1 : n;
   if (count < 2) return "";
-  const point = (i) => {
+  const point = (i: number): Vec2 => {
     if (closed) i = (i % count + count) % count;
     else i = clamp(i, 0, count-1);
     return [run[i*2], run[i*2+1]];
   };
-  const curvature = (i) => {
+  const curvature = (i: number): number => {
     if (!closed && (i <= 0 || i >= count-1)) return 0;
     const a=point(i-1), b=point(i), c=point(i+1);
     const ux=b[0]-a[0], uy=b[1]-a[1], vx=c[0]-b[0], vy=c[1]-b[1];
@@ -616,7 +792,7 @@ function serialiseRun(run, quality, sharp){
 }
 
 /* ------------------------------------------------------- silhouette */
-function silhouetteEdges(mesh, P){
+function silhouetteEdges(mesh: ContourMesh, P: Projection): PointSegments {
   const {T} = mesh;
   const {sx, sy, sd} = P;
   const facing = new Int8Array(T.length/3);
@@ -626,7 +802,7 @@ function silhouetteEdges(mesh, P){
     facing[t] = area > 0 ? 1 : -1;            // screen y is flipped, so sign = facing
   }
   const NV = mesh.V.length/3;
-  const edges = new Map();
+  const edges = new Map<number, number>();
   for (let i=0, t=0; i<T.length; i+=3, t++){
     for (let e=0;e<3;e++){
       const a = T[i+e], b = T[i+(e+1)%3];
@@ -636,8 +812,8 @@ function silhouetteEdges(mesh, P){
       else edges.set(key, prev + facing[t]*4);   // marker: seen twice
     }
   }
-  const pts = [], segs = [], seen = new Map();
-  const nodeOf = (v) => {
+  const pts: number[] = [], segs: number[] = [], seen = new Map<number, number>();
+  const nodeOf = (v: number): number => {
     let id = seen.get(v);
     if (id === undefined){ id = pts.length/3; seen.set(v,id); pts.push(sx[v], sy[v], sd[v]); }
     return id;
@@ -653,7 +829,18 @@ function silhouetteEdges(mesh, P){
   return {pts, segs};
 }
 
-function project(mesh, cam, W, H, margin, zoom, panX, panY, lens, lensAmount){
+function project(
+  mesh: ContourMesh,
+  cam: CameraBasis,
+  W: number,
+  H: number,
+  margin: number,
+  zoom: number,
+  panX: number,
+  panY: number,
+  lens: string,
+  lensAmount: number,
+): Projection {
   const {V} = mesh;
   const n = V.length/3;
   const sx = new Float32Array(n), sy = new Float32Array(n), sd = new Float32Array(n);
@@ -677,13 +864,19 @@ function project(mesh, cam, W, H, margin, zoom, panX, panY, lens, lensAmount){
   return {sx, sy, sd, dmin, dmax, scale, ox, oy, f, r, u, lens, lensAmount};
 }
 
-function scalarField(mesh, P, axis, cutAz, cutEl){
+function scalarField(
+  mesh: ContourMesh,
+  P: Projection,
+  axis: string,
+  cutAz: number,
+  cutEl: number,
+): ScalarField {
   const {V} = mesh;
   const n = V.length/3;
   if (axis === "cam") return {S: P.sd, min: P.dmin, max: P.dmax, dir: P.f};
   if (axis === "custom"){
     const az=cutAz*Math.PI/180, el=cutEl*Math.PI/180;
-    const dir=[Math.cos(el)*Math.cos(az), Math.cos(el)*Math.sin(az), Math.sin(el)];
+    const dir: Vec3=[Math.cos(el)*Math.cos(az), Math.cos(el)*Math.sin(az), Math.sin(el)];
     const S=new Float32Array(n);
     let mn=Infinity, mx=-Infinity;
     for (let i=0, v=0; v<n; i+=3, v++){
@@ -700,11 +893,11 @@ function scalarField(mesh, P, axis, cutAz, cutEl){
     const s = V[i]; S[v]=s;
     if (s<mn) mn=s; if (s>mx) mx=s;
   }
-  const dir = comp === 0 ? [1,0,0] : comp === 1 ? [0,1,0] : [0,0,1];
+  const dir: Vec3 = comp === 0 ? [1,0,0] : comp === 1 ? [0,1,0] : [0,0,1];
   return {S, min: mn, max: mx, dir};
 }
 
-function inverseLineGapEase(value, settings){
+function inverseLineGapEase(value: number, settings: ContourSettings): number {
   if (settings.gapEase === "linear" || !settings.easeStrength) return value;
   let lo=0, hi=1;
   for (let i=0;i<18;i++){
@@ -715,7 +908,7 @@ function inverseLineGapEase(value, settings){
   return (lo+hi)/2;
 }
 
-function spiralContours(P, mesh, field, settings){
+function spiralContours(P: Projection, mesh: ContourMesh, field: ScalarField, settings: ContourSettings): SpiralSegments {
   const {V,T}=mesh;
   const count=Math.max(1, Math.round(settings.lines));
   const span=field.max-field.min || 1;
@@ -729,7 +922,7 @@ function spiralContours(P, mesh, field, settings){
   // A polar frame around the slicing direction turns parallel levels into a
   // helicoidal field. Integer isolines of that field join across its angle seam.
   const dir=field.dir;
-  const ref=Math.abs(dir[2])<.9 ? [0,0,1] : [0,1,0];
+  const ref: Vec3=Math.abs(dir[2])<.9 ? [0,0,1] : [0,1,0];
   let ax=ref[1]*dir[2]-ref[2]*dir[1];
   let ay=ref[2]*dir[0]-ref[0]*dir[2];
   let az=ref[0]*dir[1]-ref[1]*dir[0];
@@ -747,9 +940,9 @@ function spiralContours(P, mesh, field, settings){
     angle[v]=Math.atan2(ry,rx)/(Math.PI*2);
   }
 
-  const pts=[], values=[], segs=[], pointIndex=new Map();
-  const unwrap=(value,anchor)=>value+Math.round(anchor-value);
-  const crossesAxis=(ids)=>{
+  const pts: number[]=[], values: number[]=[], segs: number[]=[], pointIndex=new Map<string, number>();
+  const unwrap=(value: number,anchor: number): number=>value+Math.round(anchor-value);
+  const crossesAxis=(ids: Vec3): boolean=>{
     const x0=radialX[ids[0]], y0=radialY[ids[0]];
     const x1=radialX[ids[1]], y1=radialY[ids[1]];
     const x2=radialX[ids[2]], y2=radialY[ids[2]];
@@ -760,7 +953,7 @@ function spiralContours(P, mesh, field, settings){
     if (Math.abs(area)>eps){
       return (c0>=-eps && c1>=-eps && c2>=-eps) || (c0<=eps && c1<=eps && c2<=eps);
     }
-    const edgeHitsOrigin=(px,py,qx,qy)=>{
+    const edgeHitsOrigin=(px: number,py: number,qx: number,qy: number): boolean=>{
       const dx=qx-px, dy=qy-py, length2=dx*dx+dy*dy;
       if (!length2) return px*px+py*py<=eps;
       const t=clamp(-(px*dx+py*dy)/length2,0,1);
@@ -769,9 +962,9 @@ function spiralContours(P, mesh, field, settings){
     };
     return edgeHitsOrigin(x0,y0,x1,y1) || edgeHitsOrigin(x1,y1,x2,y2) || edgeHitsOrigin(x2,y2,x0,y0);
   };
-  const pointOnEdge=(a,b,pa,pb,level)=>{
+  const pointOnEdge=(a: number,b: number,pa: number,pb: number,level: number): number=>{
     const t=clamp((level-pa)/(pb-pa),0,1);
-    let key;
+    let key: string;
     if (t<1e-7) key="v"+a;
     else if (t>1-1e-7) key="v"+b;
     else {
@@ -793,7 +986,7 @@ function spiralContours(P, mesh, field, settings){
   };
 
   for (let i=0;i<T.length;i+=3){
-    const ids=[T[i],T[i+1],T[i+2]];
+    const ids: Vec3=[T[i],T[i+1],T[i+2]];
     // Polar phase is undefined where the winding axis pierces the surface.
     // Treat those triangles as branch boundaries instead of drawing arbitrary
     // segments across the singularity.
@@ -804,7 +997,7 @@ function spiralContours(P, mesh, field, settings){
     const first=Math.ceil(Math.min(...phase));
     const last=Math.floor(Math.max(...phase));
     for (let level=first;level<=last;level++){
-      const crossings=[];
+      const crossings: number[]=[];
       for (let e=0;e<3;e++){
         const n=(e+1)%3, p0=phase[e], p1=phase[n];
         if ((p0<level && p1>=level) || (p1<level && p0>=level)){
@@ -817,7 +1010,11 @@ function spiralContours(P, mesh, field, settings){
   return {pts,values,segs};
 }
 
-function computeContourInstance(mesh, settings, quick){
+function computeContourInstance(
+  mesh: ContourMesh,
+  settings: ContourSettings,
+  quick: boolean,
+): InternalContourResult {
   const t0 = performance.now();
   const W = settings.pw, H = settings.ph;
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
@@ -826,7 +1023,7 @@ function computeContourInstance(mesh, settings, quick){
   const blueprintGeometry={fieldMin:field.min,fieldMax:field.max,direction:field.dir,vertices:mesh.V.length/3,triangles:mesh.T.length/3};
   const NV = mesh.V.length/3;
 
-  let vis = null, visOutline = null, step = 0.6;
+  let vis: VisibilityTest | null = null, visOutline: VisibilityTest | null = null, step = 0.6;
   if (settings.hide){
     const res = quick ? 320 : 1100;
     const D = buildDepth(P, mesh.T, W, H, res);
@@ -839,13 +1036,16 @@ function computeContourInstance(mesh, settings, quick){
 
   const palette=gradientPalette(settings);
   const toneBandCount=settings.halftone ? 12 : 1;
-  const toneValue=position=>{
+  const toneValue=(position: number): number=>{
     const cycles=clamp(Math.round(settings.halftoneCycles || 1),1,8);
     return .5+.5*Math.sin(position*cycles*Math.PI*2-Math.PI/2);
   };
-  const toneBand=position=>clamp(Math.floor(toneValue(position)*toneBandCount),0,toneBandCount-1);
-  const out=Array.from({length:palette.length},()=>Array.from({length:toneBandCount},()=>[]));
-  const outlineOut=[];
+  const toneBand=(position: number): number=>clamp(Math.floor(toneValue(position)*toneBandCount),0,toneBandCount-1);
+  const out: Polyline[][][]=Array.from(
+    {length:palette.length},
+    (): Polyline[][]=>Array.from({length:toneBandCount},(): Polyline[]=>[]),
+  );
+  const outlineOut: Polyline[]=[];
   const N = settings.lines;
   const quality = clamp(Math.round(settings.quality), 1, 10);
   const curveStrength = (quality-1)/9;
@@ -890,9 +1090,9 @@ function computeContourInstance(mesh, settings, quick){
   const tolerance = 0.06 * Math.pow(0.72, quality-1);
   let nodes=0, paths=0;
   let humanizerSalt=0;
-  const serialiseGroup=runs=>{
+  const serialiseGroup=(runs: Polyline[]): SerialisedGroup=>{
     let d="";
-    const plotRuns=[];
+    const plotRuns: Polyline[]=[];
     for (const raw of runs){
       const simplified=simplify(raw,tolerance);
       const run=settings.humanizer ? humanizeRun(simplified.run,settings.humanizerAmount,humanizerSalt++) : simplified.run;
@@ -920,7 +1120,7 @@ function computeContourInstance(mesh, settings, quick){
   }
   const allPathData=colorPaths.flat().join("")+outlinePath;
   const blueprint=blueprintDocument(settings,W,H,blueprintGeometry);
-  let artwork, renderedPaths=paths, renderedNodes=nodes;
+  let artwork: string, renderedPaths=paths, renderedNodes=nodes;
   if (settings.chroma){
     const amount=clamp(settings.chromaAmount, .1, 6);
     const rotation=amount*.12, cx=W/2, cy=H/2;
@@ -937,7 +1137,7 @@ function computeContourInstance(mesh, settings, quick){
     const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
     const spacing=clamp(settings.halftoneSize || 2.4,.5,8);
     const contrast=clamp((settings.halftoneContrast || 0)/100,0,1);
-    const halftoneAttrs=tone=>{
+    const halftoneAttrs=(tone: number): string=>{
       if (!settings.halftone) return "";
       const value=(tone+.5)/toneBandCount;
       const ratio=clamp(.5+(value-.5)*contrast*1.7,.07,.93);
@@ -957,15 +1157,19 @@ ${artwork}
   return {svg, toolpaths, paths:renderedPaths, nodes:renderedNodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick, blueprintGeometry};
 }
 
-function svgArtwork(svg){
+function svgArtwork(svg: string): string {
   const start=svg.indexOf(">");
   const end=svg.lastIndexOf("</svg>");
   return start>=0 && end>start ? svg.slice(start+1,end).trim() : "";
 }
 
-export function computeContours(mesh, settings, quick){
+export function computeContours(
+  mesh: ContourMesh,
+  settings: ContourSettings,
+  quick: boolean,
+): ContourResult {
   const hexColor=/^#[0-9a-f]{6}$/i;
-  const validTargets = targets => Object.entries(targets || {}).filter(([key,value]) =>
+  const validTargets = (targets: MorphTargets): Array<[string, MorphValue]> => Object.entries(targets || {}).filter(([key,value]) =>
     key==="color"
       ? hexColor.test(String(value)) && hexColor.test(String(settings[key]))
       : Number.isFinite(Number(value)) && Number.isFinite(Number(settings[key]))
@@ -979,17 +1183,17 @@ export function computeContours(mesh, settings, quick){
   const stepsY=targetsY.length ? clamp(Math.round(settings.morphStepsY || 2),2,24) : 1;
   const targetsXByKey=new Map(targetsX), targetsYByKey=new Map(targetsY);
   const targetKeys=new Set([...targetsXByKey.keys(),...targetsYByKey.keys()]);
-  const results=[];
+  const results: MorphContourResult[]=[];
   for (let y=0;y<stepsY;y++) for (let x=0;x<stepsX;x++){
     const amountX=stepsX===1 ? 0 : x/(stepsX-1);
     const amountY=stepsY===1 ? 0 : y/(stepsY-1);
-    const instance={...settings,suppressBackground:true};
+    const instance: ContourSettings={...settings,suppressBackground:true};
     for (const key of targetKeys){
       const targetX=targetsXByKey.get(key), targetY=targetsYByKey.get(key);
       if (key==="color"){
-        const startColor=settings.color.slice(1).match(/../g).map(value=>parseInt(value,16));
-        const colorX=targetX ? String(targetX).slice(1).match(/../g).map(value=>parseInt(value,16)) : startColor;
-        const colorY=targetY ? String(targetY).slice(1).match(/../g).map(value=>parseInt(value,16)) : startColor;
+        const startColor=(settings.color.slice(1).match(/../g) ?? []).map(value=>parseInt(value,16));
+        const colorX=targetX ? (String(targetX).slice(1).match(/../g) ?? []).map(value=>parseInt(value,16)) : startColor;
+        const colorY=targetY ? (String(targetY).slice(1).match(/../g) ?? []).map(value=>parseInt(value,16)) : startColor;
         instance.color="#"+startColor.map((value,channel)=>clamp(Math.round(value+(colorX[channel]-value)*amountX+(colorY[channel]-value)*amountY),0,255).toString(16).padStart(2,"0")).join("");
         continue;
       }
@@ -1011,7 +1215,7 @@ export function computeContours(mesh, settings, quick){
 ${background}${layers}${settings.blueprint ? blueprint.overlay : ""}
 </svg>`;
 
-  const groups=new Map();
+  const groups=new Map<string, ContourToolpathGroup>();
   for (const result of results) for (const group of result.toolpaths){
     const key=group.color.toLowerCase();
     const existing=groups.get(key);
@@ -1028,5 +1232,3 @@ ${background}${layers}${settings.blueprint ? blueprint.overlay : ""}
     W,H,quick
   };
 }
-
-
