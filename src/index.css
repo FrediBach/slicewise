@@ -88,7 +88,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .random-lock:hover { color: var(--ink); }
 .random-lock[aria-pressed="true"] { color: var(--blue); }
 .morph-inputs { position: relative; padding-top: 3px; }
-.morph-axis { width: 12px; flex: 0 0 12px; color: #7c82aa; font-size: 8px; font-weight: 500; text-align: center; }
+.morph-axis { position: absolute; top: calc(50% + 1px); left: -17px; width: 12px; color: #7c82aa; font-size: 8px; font-weight: 500; text-align: center; pointer-events: none; transform: translateY(-50%); }
 .morph-inputs input[type="range"]::-webkit-slider-runnable-track { background: linear-gradient(90deg, var(--blue), #b9bce9); }
 .morph-inputs input[type="range"]::-webkit-slider-thumb { border-color: var(--blue); }
 .morph-inputs input[type="range"]::-moz-range-track { background: #747ee5; }
