@@ -837,6 +837,14 @@ select {
   text-align: center;
   text-transform: uppercase;
 }
+.actions p a {
+  color: inherit;
+  text-decoration-color: #c2c5c1;
+  text-underline-offset: 2px;
+}
+.actions p a:hover {
+  color: var(--ink);
+}
 .button {
   height: 38px;
   display: inline-flex;

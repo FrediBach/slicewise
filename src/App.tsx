@@ -88,7 +88,12 @@ export default function App() {
               <Clipboard size={15} />
             </Button>
           </div>
-          <p>© 2026 Fredi Bach</p>
+          <p>
+            © 2026 Fredi Bach <span aria-hidden="true">·</span>{' '}
+            <a href="https://github.com/FrediBach/slicewise" target="_blank" rel="noreferrer">
+              GitHub
+            </a>
+          </p>
         </footer>
       </aside>
 
