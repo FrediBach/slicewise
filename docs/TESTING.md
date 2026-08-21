@@ -8,12 +8,14 @@ Slicewise uses Vitest for unit and integration tests, Testing Library for React 
 npm test                 # run the suite once
 npm run test:watch       # rerun affected tests during development
 npm run test:coverage    # run tests and write coverage/index.html
+npm run doctor           # audit React health; fail on error-severity findings
 ```
 
 The normal pre-commit verification sequence is:
 
 ```bash
 npm run format:check
+npm run doctor
 npm run lint
 npm run typecheck
 npm test

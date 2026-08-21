@@ -16,6 +16,7 @@ Read the relevant documentation before making changes:
 npm install
 npm run dev
 npm run format:check
+npm run doctor
 npm run lint
 npm run typecheck
 npm test
@@ -42,6 +43,7 @@ Before handing off a change, run the checks relevant to it. For a full verificat
 
 ```bash
 npm run format:check
+npm run doctor
 npm run lint
 npm run typecheck
 npm test

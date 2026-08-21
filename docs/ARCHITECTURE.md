@@ -115,6 +115,7 @@ Run all checks before committing:
 
 ```bash
 npm run format:check
+npm run doctor
 npm run lint
 npm run typecheck
 npm test

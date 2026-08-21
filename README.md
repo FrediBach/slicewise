@@ -29,6 +29,7 @@ Vite prints the local development URL. Production verification uses:
 
 ```bash
 npm run format:check
+npm run doctor
 npm run lint
 npm run typecheck
 npm run build
