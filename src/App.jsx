@@ -599,7 +599,7 @@ export default function App() {
                 <div className="sheet-control"><input type="number" id="pw" min="10" max="2000" step="1" defaultValue="210" /><span>×</span><input type="number" id="ph" min="10" max="2000" step="1" defaultValue="210" /><span className="unit">mm</span></div>
               </div>
               <ValueControl id="margin" label="Margin" min="0" max="40" step="1" value="14" unit="mm" />
-              <Checkbox id="bg">Include sheet background</Checkbox>
+              <Checkbox id="bg" defaultChecked>Include sheet background</Checkbox>
             </FieldGroup>
             <FieldGroup title="Post-processing">
               <Checkbox id="halftone" randomizable>Halftone stroke</Checkbox>

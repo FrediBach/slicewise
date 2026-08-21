@@ -891,7 +891,7 @@ const state = {
   ...GEN_DEFAULTS,
   az: 35, el: 24, roll: 0, zoom: 1, panX: 0, panY: 0, lens: "clean", lensAmount: 100,
   lines: 40, gapEase: "linear", easeStrength: 100, easeCycles: 1, easeCenter: 50, quality: 7, axis: "up", cutAz: 0, cutEl: 90, spiral: false, hide: true, sil: true,
-  sw: 0.35, color: "#15181a", backgroundColor: "#ffffff", pw: 210, ph: 210, margin: 14, bg: false,
+  sw: 0.35, color: "#15181a", backgroundColor: "#ffffff", pw: 210, ph: 210, margin: 14, bg: true,
   gradientEnabled: false, gradientColors: 6,
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
@@ -1288,7 +1288,9 @@ function fitBed(W, H){
 
 /* ------------------------------------------------ worker + smart redraw */
 const renderWorker = new Worker(new URL("./slicer-worker.js", import.meta.url), {type:"module"});
-let requestId = 0, queuedRender = null, renderInFlight = false;
+let requestId = 0, appliedRequestId = 0, failedRequestId = 0;
+let queuedRender = null, renderInFlight = false;
+let renderWaiters = [];
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
@@ -1310,8 +1312,9 @@ function throttleDelay(){
   // Adapt when a particular device or mesh is slower than the static estimate.
   return Math.min(180, Math.max(complexityDelay, observedRenderMs*.4));
 }
-function applyRender(result){
+function applyRender(result, id){
   observedRenderMs = observedRenderMs ? observedRenderMs*.72+result.ms*.28 : result.ms;
+  appliedRequestId = id;
   state.svg = result.svg;
   state.svgBytes = result.bytes;
   state.toolpaths = result.toolpaths || [];
@@ -1323,6 +1326,20 @@ function applyRender(result){
   $("rPts").textContent = Math.round(result.nodes).toLocaleString();
   updateExportSize();
   $("rMs").textContent = Math.round(result.ms) + " ms";
+}
+function notifyRenderWaiters(){
+  const waiters=renderWaiters;
+  renderWaiters=[];
+  for (const resolve of waiters) resolve();
+}
+async function waitForCurrentRender(){
+  while (renderInFlight || queuedRender || appliedRequestId!==requestId){
+    const awaitedRequestId=requestId;
+    await new Promise(resolve=>renderWaiters.push(resolve));
+    if (failedRequestId>=awaitedRequestId && appliedRequestId<awaitedRequestId){
+      throw new Error("The latest contour render could not be exported");
+    }
+  }
 }
 function dispatchRender(){
   if (renderInFlight || !queuedRender) return;
@@ -1351,13 +1368,19 @@ function redraw(quick){
 }
 renderWorker.addEventListener("message", ({data}) => {
   renderInFlight = false;
-  if (data.meshVersion === meshVersion && data.type === "result") applyRender(data.result);
-  else if (data.meshVersion === meshVersion && data.type === "error") showError(data.message);
+  if (data.meshVersion === meshVersion && data.type === "result" && data.id===requestId) applyRender(data.result,data.id);
+  else if (data.meshVersion === meshVersion && data.type === "error"){
+    failedRequestId=data.id;
+    showError(data.message);
+  }
+  notifyRenderWaiters();
   if (!queuedRender && !generationInFlight) $("bedwrap").classList.remove("busy");
   scheduleRender();
 });
 renderWorker.addEventListener("error", () => {
   renderInFlight = false;
+  failedRequestId=requestId;
+  notifyRenderWaiters();
   if (!generationInFlight) $("bedwrap").classList.remove("busy");
   showError("The contour worker stopped unexpectedly — reload the page to restart it");
 });
@@ -2187,22 +2210,31 @@ function updateExportSize(){
   const bytes=state.exportFormat==="gcode" ? new TextEncoder().encode(currentGCode()).byteLength : state.svgBytes;
   $("rSize").textContent=(bytes/1024).toFixed(1)+" kB";
 }
-$("save").addEventListener("click", () => {
-  const exported=currentExport();
-  if (!exported.content) return;
-  const base = state.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g,"-").replace(/^-|-$/g,"") || "contours";
-  const blob = new Blob([exported.content], {type:exported.type});
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = base + "-contours." + exported.extension;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  toast("Saved " + a.download);
+$("save").addEventListener("click", async () => {
+  try{
+    await waitForCurrentRender();
+    const exported=currentExport();
+    if (!exported.content) return;
+    const base = state.name.replace(/\.[^.]+$/, "").replace(/[^\w-]+/g,"-").replace(/^-|-$/g,"") || "contours";
+    const blob = new Blob([exported.content], {type:exported.type});
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = base + "-contours." + exported.extension;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast("Saved " + a.download);
+  } catch(error){ toast(error.message); }
 });
 $("copy").addEventListener("click", async () => {
-  const exported=currentExport();
-  try{ await navigator.clipboard.writeText(exported.content); toast(exported.extension==="svg" ? "SVG markup copied" : "G-code copied"); }
-  catch{ toast("Copy blocked — use Export " + (exported.extension==="svg" ? "SVG" : "G-code")); }
+  try{
+    await waitForCurrentRender();
+    const exported=currentExport();
+    await navigator.clipboard.writeText(exported.content);
+    toast(exported.extension==="svg" ? "SVG markup copied" : "G-code copied");
+  } catch(error){
+    if (failedRequestId===requestId) toast(error.message);
+    else toast("Copy blocked — use Export " + (state.exportFormat==="svg" ? "SVG" : "G-code"));
+  }
 });
 let toastT;
 function toast(msg){

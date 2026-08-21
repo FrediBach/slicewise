@@ -294,7 +294,7 @@
         <div class="ctl"><input type="range" id="margin" min="0" max="40" step="1" value="14">
         <input type="number" class="num" id="marginN" min="0" max="200" step="1" value="14"><span style="color:var(--ink-35)">mm</span></div>
       </div>
-      <label class="check"><input type="checkbox" id="bg"><span>Paint sheet background into the file</span></label>
+      <label class="check"><input type="checkbox" id="bg" checked><span>Paint sheet background into the file</span></label>
     </section>
 
     <div class="actions">
@@ -836,7 +836,7 @@ const state = {
   mesh: null, name: "demo · torus knot", upY: false,
   az: 35, el: 24, roll: 0, zoom: 1,
   lines: 40, axis: "up", hide: true, sil: true,
-  sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: false,
+  sw: 0.35, color: "#15181a", pw: 210, ph: 210, margin: 14, bg: true,
   svg: "", dragging: false
 };
 

@@ -101,7 +101,7 @@ The default Rainbow stops are red at 0%, amber at 20%, lime at 40%, cyan at 60%,
 | Width (`pw`) | Number; **210 mm**; 10–2000, step 1 | Sets the SVG/G-code sheet width and the projection coordinate system. |
 | Height (`ph`) | Number; **210 mm**; 10–2000, step 1 | Sets the SVG/G-code sheet height and the projection coordinate system. |
 | Margin (`margin`) | Number; **14 mm**; 0–40, step 1 | Insets the 1× projection fit from the artboard edge. It affects model scale, not clipping; scale and offsets can still place paths beyond the artboard. |
-| Include sheet background (`bg`) | Boolean; **off** | Adds a full-size background-colour rectangle to SVG output. It has no drawing toolpath in G-code. Chromatic aberration always emits a black SVG background. |
+| Include sheet background (`bg`) | Boolean; **on** | Adds a full-size background-colour rectangle to SVG output, so randomized ink/background pairs are preserved by default. It has no drawing toolpath in G-code. Chromatic aberration always emits a black SVG background. |
 
 Paper presets are A6 105×148, A5 148×210, A4 210×297, A3 297×420, A2 420×594, A1 594×841, A0 841×1189, Letter 216×279, Legal 216×356, and Tabloid 279×432 mm.
 
@@ -147,4 +147,3 @@ These are outputs rather than parameters:
 | Nodes | Number of simplified path nodes after effects; chromatic aberration triples the displayed count. |
 | File | Estimated size of the currently selected SVG or generated G-code. |
 | Render | Time spent computing the most recently applied contour result. |
-
