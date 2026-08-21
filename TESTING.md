@@ -54,8 +54,10 @@ Coverage currently measures the focused core under active test:
 - `gcode.ts`
 - `generativeMesh.ts`
 - `mesh.ts`
+- `svg-mesh.ts`
+- `FormControls.tsx`
 - `GradientChooser.tsx`
 
-This avoids presenting untested declarative panel markup as the same risk category as geometry and export logic. There is no global threshold yet; useful behavioral coverage takes precedence over padding a percentage. Expand the configured scope when adding meaningful tests for another subsystem.
+This avoids presenting untested declarative panel markup as the same risk category as geometry and export logic. Coverage enforces a regression floor of 85% statements, 70% branches, 80% functions, and 85% lines across this focused scope. Raising coverage should still come from useful behavior rather than assertions written only to pad a percentage. Expand the configured scope when adding meaningful tests for another subsystem.
 
 The HTML report is generated under `coverage/` and is ignored by Git.

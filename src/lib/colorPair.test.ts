@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contrastRatio, createColorPair, oklchToHex, parseColor } from "./colorPair";
+import { contrastRatio, createColorPair, maxChroma, mulberry32, oklchToHex, parseColor } from "./colorPair";
 
 describe("colour pairing", () => {
   it("is reproducible for a seed", () => {
@@ -28,5 +28,30 @@ describe("colour pairing", () => {
 
     expect(contrastRatio(black, white)).toBeCloseTo(21, 5);
     expect(contrastRatio(white, black)).toBeCloseTo(21, 5);
+  });
+
+  it("accepts RGB and gamut-maps OKLCH object inputs", () => {
+    expect(oklchToHex(parseColor({ r: 255, g: 0, b: 0 }))).toBe("#ff0000");
+
+    const mapped = parseColor({ L: 0.6, C: 1, H: 40 });
+    expect(mapped.L).toBeCloseTo(0.6, 6);
+    expect(mapped.C).toBeLessThanOrEqual(maxChroma(0.6, 40));
+    expect(oklchToHex(mapped)).toMatch(/^#[0-9a-f]{6}$/);
+  });
+
+  it("enforces the configured perceptual lightness gap across seeds", () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      expect(createColorPair({ seed, minLightnessDiff: 0.2 }).lightnessDiff).toBeGreaterThanOrEqual(0.1999);
+    }
+  });
+
+  it("supports reproducible RNG streams and custom random sources", () => {
+    const first = mulberry32(123);
+    const second = mulberry32(123);
+    const sequence = Array.from({ length: 5 }, () => first());
+
+    expect(sequence).toEqual(Array.from({ length: 5 }, () => second()));
+    expect(sequence.every(value => value >= 0 && value < 1)).toBe(true);
+    expect(createColorPair({ rng: () => 0.5 })).toEqual(createColorPair({ rng: () => 0.5 }));
   });
 });

@@ -43,7 +43,7 @@ npm run test:watch
 npm run test:coverage
 ```
 
-Tests are colocated with the modules they protect. The initial suite focuses on mesh parsing and normalization, contour generation, deterministic colour pairing, generative-mesh invariants, G-code output, and gradient-editor interactions. See [TESTING.md](./TESTING.md) for conventions and coverage scope.
+Tests are colocated with the modules they protect. The suite covers ASCII and binary mesh parsing, SVG extrusion, contour modes and effects, deterministic colour pairing, every generative field family, G-code output, and React control-event contracts. See [TESTING.md](./TESTING.md) for conventions, fixtures, and enforced coverage thresholds.
 
 ## Repository guide
 

@@ -13,10 +13,16 @@ export default defineConfig({
       reporter: ["text", "html"],
       reportsDirectory: "coverage",
       include: [
-        "src/lib/{colorPair,contour-engine,gcode,generativeMesh,mesh}.ts",
-        "src/components/controls/GradientChooser.tsx",
+        "src/lib/{colorPair,contour-engine,gcode,generativeMesh,mesh,svg-mesh}.ts",
+        "src/components/controls/{FormControls,GradientChooser}.tsx",
       ],
       exclude: ["src/**/*.d.ts", "src/test/**"],
+      thresholds: {
+        statements: 85,
+        branches: 70,
+        functions: 80,
+        lines: 85,
+      },
     },
   },
 });

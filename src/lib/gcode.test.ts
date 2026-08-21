@@ -55,4 +55,46 @@ describe("generateGCode", () => {
     expect(output).toContain("; Sheet: 210 x 210 mm");
     expect(output).not.toContain("; Tool 1:");
   });
+
+  it("deduplicates near-identical points and clamps numeric precision", () => {
+    const output = generateGCode(
+      [group([[0, 0, 0.0001, 0.0001, 1.23456, 2.34567]])],
+      { width: 10, height: 10 },
+      { origin: "rear-left" },
+    );
+
+    expect(output).toContain("G0 X0 Y0 F3000");
+    expect(output).toContain("G1 X1.235 Y2.346 F1200");
+    expect(output).not.toContain("0.0001");
+  });
+
+  it("emits configured machine motion and effect notes", () => {
+    const output = generateGCode(
+      [group([[0, 0, 1, 1]])],
+      { width: 10, height: 10 },
+      {
+        penUp: 3.25,
+        penDown: -2.5,
+        zFeed: 900,
+        machine: "UUNA TEK",
+        effects: { halftone: true, chroma: true, humanizer: true, blueprint: true },
+      },
+    );
+
+    expect(output).toContain("G1 Z3.25 F900 ; pen up");
+    expect(output).toContain("G1 Z-2.5 F900 ; pen down");
+    expect(output).toContain("SVG dash styling is exported as continuous plotter paths");
+    expect(output).toContain("chromatic SVG offsets are exported as one base contour set");
+    expect(output).toContain("Humanizer: hand-drawn variations are included");
+    expect(output).toContain("blueprint border and annotations are SVG-only");
+  });
+
+  it("always returns controller setup and shutdown for an empty drawing", () => {
+    const output = generateGCode([], {}, {});
+
+    expect(output).toContain("G21 ; millimetres");
+    expect(output).toContain("G90 ; absolute positioning");
+    expect(output).toContain("G0 X0 Y0 F3000");
+    expect(output.endsWith("M2\n")).toBe(true);
+  });
 });
