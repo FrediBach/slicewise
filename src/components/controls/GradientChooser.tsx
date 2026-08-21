@@ -77,7 +77,7 @@ function GradientChooser() {
   }, [stops]);
 
   useEffect(() => {
-    const restore = (
+    const setGradient = (
       event: CustomEvent<{ gradientStops?: Array<{ position: number; color: string }> }>,
     ) => {
       if (event.detail?.gradientStops) {
@@ -87,8 +87,12 @@ function GradientChooser() {
         );
       }
     };
-    document.addEventListener('restoreparameters', restore);
-    return () => document.removeEventListener('restoreparameters', restore);
+    document.addEventListener('restoreparameters', setGradient);
+    document.addEventListener('setgradient', setGradient);
+    return () => {
+      document.removeEventListener('restoreparameters', setGradient);
+      document.removeEventListener('setgradient', setGradient);
+    };
   }, []);
 
   const updateStop = (id: number, next: GradientValue) => {

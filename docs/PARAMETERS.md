@@ -93,6 +93,8 @@ Canvas gestures provide equivalent controls: drag to change azimuth/elevation, S
 | Gradient stop position                  | Integer percent; **0–100**, step 1     | Places a stop along normalized slice depth/height. Stops are kept sorted. There must be at least two stops; **Add colour stop** inserts a copy of the preceding colour at the midpoint of the widest gap.        |
 | Pen colours (`gradientColors`)          | Integer; **6**; 2–24                   | Samples the continuous gradient into this many discrete colours, producing separate plotter-ready path groups.                                                                                                   |
 
+When randomization selects or preserves the gradient output mode, it creates a new harmonic gradient anchored to the current Ink colour instead of choosing one of the fixed presets.
+
 The default Rainbow stops are red at 0%, amber at 20%, lime at 40%, cyan at 60%, blue at 80%, and violet at 100%.
 
 ### Artboard

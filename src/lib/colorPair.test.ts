@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   contrastRatio,
+  createColorGradient,
   createColorPair,
   maxChroma,
   mulberry32,
@@ -62,5 +63,16 @@ describe('colour pairing', () => {
     expect(sequence).toEqual(Array.from({ length: 5 }, () => second()));
     expect(sequence.every((value) => value >= 0 && value < 1)).toBe(true);
     expect(createColorPair({ rng: () => 0.5 })).toEqual(createColorPair({ rng: () => 0.5 }));
+  });
+
+  it('creates a reproducible custom gradient anchored to the supplied ink colour', () => {
+    const first = createColorGradient('#336699', { count: 5, rng: mulberry32(42) });
+    const second = createColorGradient('#336699', { count: 5, rng: mulberry32(42) });
+
+    expect(first).toEqual(second);
+    expect(first).toHaveLength(5);
+    expect(first[0]).toEqual({ position: 0, color: '#336699' });
+    expect(first.at(-1)?.position).toBe(1);
+    expect(new Set(first.map(({ color }) => color)).size).toBeGreaterThan(2);
   });
 });

@@ -79,6 +79,16 @@ export interface ColorPair {
   contrast: number;
 }
 
+export interface ColorGradientStop {
+  position: number;
+  color: string;
+}
+
+export interface CreateColorGradientOptions {
+  count?: number;
+  rng?: RandomSource;
+}
+
 interface ColorPairConfig {
   color: ColorInput | null;
   minLightnessDiff: number;
@@ -406,4 +416,44 @@ function createColorPair(opts: CreateColorPairOptions = {}): ColorPair {
   };
 }
 
-export { createColorPair, parseColor, maxChroma, contrastRatio, oklchToHex, mulberry32 };
+/**
+ * Build a small harmonic gradient around an existing ink colour. A single
+ * harmony is shared by every generated partner so the result reads as one
+ * palette rather than a collection of unrelated random colours.
+ */
+function createColorGradient(
+  color: ColorInput,
+  { count = 4, rng = Math.random }: CreateColorGradientOptions = {},
+): ColorGradientStop[] {
+  const stopCount = clamp(Math.round(count), 2, 8);
+  const base = oklchToHex(parseColor(color));
+  const harmony = pickWeighted(DEFAULTS.harmonies, rng);
+  const colors = [base];
+
+  for (let index = 1; index < stopCount; index += 1) {
+    colors.push(
+      createColorPair({
+        color: base,
+        harmonies: [harmony],
+        minLightnessDiff: 0.12,
+        hueJitter: 10,
+        rng,
+      }).b.hex,
+    );
+  }
+
+  return colors.map((stopColor, index) => ({
+    position: index / (stopCount - 1),
+    color: stopColor,
+  }));
+}
+
+export {
+  createColorGradient,
+  createColorPair,
+  parseColor,
+  maxChroma,
+  contrastRatio,
+  oklchToHex,
+  mulberry32,
+};

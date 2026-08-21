@@ -1,6 +1,6 @@
 'use strict';
 import { generateGCode } from './gcode';
-import { createColorPair } from './colorPair';
+import { createColorGradient, createColorPair } from './colorPair';
 import {
   type ContourMesh,
   type ContourResult,
@@ -1721,6 +1721,16 @@ if (typeof document !== 'undefined') {
     $('gradientEnabled').checked = state.gradientEnabled;
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
     randomizePair('gradientColors', 'gradientColors', () => randomInt(3, 10));
+    if (state.gradientEnabled) {
+      state.gradientStops = createColorGradient(state.color, {
+        count: randomInt(3, 5),
+      });
+      document.dispatchEvent(
+        new CustomEvent('setgradient', {
+          detail: { gradientStops: state.gradientStops },
+        }),
+      );
+    }
     $('halftone').checked = state.halftone;
     randomizePair('halftoneSize', 'halftoneSize', () => randomIn(1.2, 4.8));
     randomizePair('halftoneContrast', 'halftoneContrast', () => randomInt(55, 100));

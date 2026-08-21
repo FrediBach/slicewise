@@ -59,7 +59,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `svg-mesh.ts` converts filled SVG artwork into extruded mesh geometry or pruned medial/scale-axis centreline polylines.
 - `toolpaths.ts` owns rectangular clipping, near-endpoint joining, greedy run ordering, and reversible 2-opt refinement.
 - `gcode.ts` converts grouped toolpaths into machine instructions, applies an export-time clipping safety net, and owns plotter-profile defaults.
-- `colorPair.ts` creates random ink/background combinations in OKLCH while enforcing contrast and gamut constraints.
+- `colorPair.ts` creates random ink/background combinations and ink-anchored harmonic gradients in OKLCH while enforcing contrast and gamut constraints.
 
 ### Browser orchestration
 
@@ -74,6 +74,7 @@ Complex React controls communicate through custom DOM events:
 - `morphchange` and `morphseconddimension` synchronize morph targets.
 - `randomlockchange` and `randomlockbulk` coordinate parameter locks.
 - `gradientchange` publishes normalized gradient stops.
+- `setgradient` synchronizes generated gradient stops into the React editor.
 - `restoreparameters` restores React-owned control state during undo/redo.
 
 These event names and their payloads are internal interfaces. Change producers and consumers together.

@@ -58,4 +58,26 @@ describe('GradientChooser', () => {
     expect(movingStop.value).toBe('50');
     expect(document.activeElement).toBe(movingStop);
   });
+
+  it('shows a generated custom gradient supplied by the randomizer', async () => {
+    render(<GradientChooser />);
+
+    document.dispatchEvent(
+      new CustomEvent('setgradient', {
+        detail: {
+          gradientStops: [
+            { position: 0, color: '#336699' },
+            { position: 0.5, color: '#aabbcc' },
+            { position: 1, color: '#cc8844' },
+          ],
+        },
+      }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getAllByRole('button', { name: /remove stop/i })).toHaveLength(3),
+    );
+    expect(screen.getByLabelText('Stop 1 colour')).toHaveValue('#336699');
+    expect(screen.getByRole('button', { name: 'Rainbow' })).not.toHaveClass('active');
+  });
 });
