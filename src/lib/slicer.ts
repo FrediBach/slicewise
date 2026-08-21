@@ -21,6 +21,7 @@ type RenderMesh = ContourMesh & {
   V: Float32Array;
   T: Uint32Array;
   N: Float32Array;
+  lineArt?: { offsets: Uint32Array };
 };
 type NormalizedMesh = Omit<RenderMesh, 'N'> & { N?: Float32Array };
 
@@ -36,10 +37,14 @@ type AppState = RenderSettings &
     svgDepth: number;
     svgRounded: boolean;
     svgRoundness: number;
+    svgMode: 'extrude' | 'centerline';
+    svgCenterlinePruning: number;
     exportFormat: string;
     gcodeProfile: string;
     drawFeed: number;
     travelFeed: number;
+    optimizeTravel: boolean;
+    mergeTolerance: number;
     penUp: number;
     penDown: number;
     zFeed: number;
@@ -104,6 +109,8 @@ const state: AppState = {
   svgDepth: 12,
   svgRounded: false,
   svgRoundness: 25,
+  svgMode: 'extrude',
+  svgCenterlinePruning: 2,
   ...GEN_DEFAULTS,
   az: 35,
   el: 24,
@@ -131,6 +138,7 @@ const state: AppState = {
   pw: 210,
   ph: 210,
   margin: 14,
+  clipToArtboard: true,
   bg: true,
   gradientEnabled: false,
   gradientColors: 6,
@@ -162,6 +170,8 @@ const state: AppState = {
   gcodeProfile: 'uunatek3',
   drawFeed: 3000,
   travelFeed: 6000,
+  optimizeTravel: true,
+  mergeTolerance: 0.15,
   penUp: 0,
   penDown: -3,
   zFeed: 2000,
@@ -235,6 +245,7 @@ if (typeof document !== 'undefined') {
       pw,
       ph,
       margin,
+      clipToArtboard,
       bg,
       halftone,
       halftoneSize,
@@ -283,6 +294,7 @@ if (typeof document !== 'undefined') {
       pw,
       ph,
       margin,
+      clipToArtboard,
       bg,
       halftone,
       halftoneSize,
@@ -413,9 +425,21 @@ if (typeof document !== 'undefined') {
     const V = mesh.V.slice(),
       T = mesh.T.slice(),
       N = mesh.N.slice();
+    const offsets = mesh.lineArt?.offsets.slice();
+    const transfer = [V.buffer, T.buffer, N.buffer];
+    if (offsets) transfer.push(offsets.buffer);
     renderWorker.postMessage(
-      { type: 'mesh', meshVersion: ++meshVersion, mesh: { V: V.buffer, T: T.buffer, N: N.buffer } },
-      [V.buffer, T.buffer, N.buffer],
+      {
+        type: 'mesh',
+        meshVersion: ++meshVersion,
+        mesh: {
+          V: V.buffer,
+          T: T.buffer,
+          N: N.buffer,
+          lineArtOffsets: offsets?.buffer,
+        },
+      },
+      transfer,
     );
   }
   function setMesh(raw: RawMesh, name: string): void {
@@ -438,10 +462,67 @@ if (typeof document !== 'undefined') {
       $('mName').textContent = name;
       $('mName').title = '';
       $('mTris').textContent = (m.T.length / 3).toLocaleString();
+      $('mUnits').textContent = 'triangles';
       $('mErr').hidden = true;
       redraw(false);
     } catch (e) {
       showError(errorMessage(e));
+    }
+  }
+  function setCenterlines(
+    parsed: Awaited<ReturnType<NonNullable<typeof globalThis.slicewiseParseSVGCenterlines>>>,
+    name: string,
+  ): void {
+    const count = parsed.points.length / 2;
+    let minX = Infinity,
+      minY = Infinity,
+      maxX = -Infinity,
+      maxY = -Infinity;
+    for (let i = 0; i < parsed.points.length; i += 2) {
+      minX = Math.min(minX, parsed.points[i]);
+      maxX = Math.max(maxX, parsed.points[i]);
+      minY = Math.min(minY, parsed.points[i + 1]);
+      maxY = Math.max(maxY, parsed.points[i + 1]);
+    }
+    const cx = (minX + maxX) / 2,
+      cy = (minY + maxY) / 2;
+    let radius = 0;
+    for (let i = 0; i < parsed.points.length; i += 2)
+      radius = Math.max(radius, Math.hypot(parsed.points[i] - cx, parsed.points[i + 1] - cy));
+    if (!Number.isFinite(radius) || radius <= 0)
+      throw new Error('The extracted SVG centreline has no measurable span');
+    const V = new Float32Array(count * 3);
+    for (let point = 0; point < count; point++) {
+      V[point * 3] = (parsed.points[point * 2] - cx) / radius;
+      V[point * 3 + 1] = -(parsed.points[point * 2 + 1] - cy) / radius;
+    }
+    state.mesh = {
+      V,
+      T: new Uint32Array(),
+      N: new Float32Array(V.length),
+      lineArt: { offsets: parsed.offsets },
+    };
+    rawCache = null;
+    sendMeshToWorker(state.mesh);
+    state.name = name;
+    $('mName').textContent = name;
+    $('mName').title = 'Scale-axis centreline extracted from filled SVG artwork';
+    $('mTris').textContent = (parsed.offsets.length - 1).toLocaleString();
+    $('mUnits').textContent = 'centreline paths';
+    $('mErr').hidden = true;
+    redraw(false);
+  }
+  function setCenterlineView(): void {
+    state.az = -90;
+    state.el = 90;
+    state.roll = 0;
+    for (const [id, value] of [
+      ['az', state.az],
+      ['el', state.el],
+      ['rl', state.roll],
+    ] as const) {
+      $(id).value = String(value);
+      $(id + 'N').value = String(value);
     }
   }
   function showError(msg: string): void {
@@ -488,14 +569,31 @@ if (typeof document !== 'undefined') {
         let raw: RawMesh;
         if (ext === 'svg') {
           const text = new TextDecoder().decode(new Uint8Array(reader.result as ArrayBuffer));
+          state.svgSource = text;
+          state.svgSourceName = file.name;
+          state.source = 'upload';
+          cancelGeneration();
+          $('demo').value = 'upload';
+          state.upY = false;
+          $('upZ').setAttribute('aria-pressed', 'true');
+          $('upY').setAttribute('aria-pressed', 'false');
+          syncSourceControls();
+          if (state.svgMode === 'centerline') {
+            const centerlines = await globalThis.slicewiseParseSVGCenterlines!(
+              text,
+              state.svgCenterlinePruning,
+            );
+            setCenterlineView();
+            setCenterlines(centerlines, file.name);
+            toast('Loaded ' + file.name + ' as a centreline');
+            return;
+          }
           raw = await globalThis.slicewiseParseSVG!(
             text,
             state.svgDepth,
             state.svgRounded,
             state.svgRoundness,
           );
-          state.svgSource = text;
-          state.svgSourceName = file.name;
         } else if (ext === 'stl') raw = parseSTL(reader.result as ArrayBuffer);
         else if (ext === 'obj')
           raw = parseOBJ(new TextDecoder().decode(new Uint8Array(reader.result as ArrayBuffer)));
@@ -672,6 +770,7 @@ if (typeof document !== 'undefined') {
   bindPair('morphStepsY', 'morphStepsY');
   bindExportPair('drawFeed', 'drawFeed');
   bindExportPair('travelFeed', 'travelFeed');
+  bindExportPair('mergeTolerance', 'mergeTolerance');
   bindExportPair('penUp', 'penUp');
   bindExportPair('penDown', 'penDown');
   bindExportPair('zFeed', 'zFeed');
@@ -744,6 +843,15 @@ if (typeof document !== 'undefined') {
     const source = state.svgSource,
       name = state.svgSourceName;
     try {
+      if (state.svgMode === 'centerline') {
+        const centerlines = await globalThis.slicewiseParseSVGCenterlines!(
+          source,
+          state.svgCenterlinePruning,
+        );
+        if (source !== state.svgSource) return;
+        setCenterlines(centerlines, name);
+        return;
+      }
       const raw = await globalThis.slicewiseParseSVG!(
         source,
         state.svgDepth,
@@ -779,10 +887,14 @@ if (typeof document !== 'undefined') {
   }
   bindSVGPair('svgDepth', 'svgDepth');
   bindSVGPair('svgRoundness', 'svgRoundness');
+  bindSVGPair('svgCenterlinePruning', 'svgCenterlinePruning');
   function syncSVGControls(): void {
     const active = Boolean(state.svgSource);
     $('svgExtrusion').hidden = !active;
-    const roundnessActive = active && state.svgRounded;
+    const centerline = state.svgMode === 'centerline';
+    $('svgExtrusionControls').hidden = centerline;
+    $('svgCenterlineControls').hidden = !centerline;
+    const roundnessActive = active && !centerline && state.svgRounded;
     $('svgRoundness').disabled = !roundnessActive;
     $('svgRoundnessN').disabled = !roundnessActive;
     $('svgRoundnessControl').classList.toggle('is-disabled', !roundnessActive);
@@ -793,6 +905,12 @@ if (typeof document !== 'undefined') {
   }
   $('svgRounded').addEventListener('change', (event) => {
     state.svgRounded = inputTarget(event).checked;
+    syncSVGControls();
+    rebuildSVG();
+  });
+  $('svgMode').addEventListener('change', (event) => {
+    state.svgMode = inputTarget(event).value === 'centerline' ? 'centerline' : 'extrude';
+    if (state.svgMode === 'centerline') setCenterlineView();
     syncSVGControls();
     rebuildSVG();
   });
@@ -846,6 +964,17 @@ if (typeof document !== 'undefined') {
     $('copy').setAttribute('aria-label', gcode ? 'Copy G-code' : 'Copy SVG markup');
     updateExportSize();
   });
+  function syncTravelOptimization(): void {
+    $('mergeTolerance').disabled = !state.optimizeTravel;
+    $('mergeToleranceN').disabled = !state.optimizeTravel;
+    $('mergeToleranceControl').classList.toggle('is-disabled', !state.optimizeTravel);
+  }
+  $('optimizeTravel').addEventListener('change', (event) => {
+    state.optimizeTravel = inputTarget(event).checked;
+    syncTravelOptimization();
+    updateExportSize();
+  });
+  syncTravelOptimization();
 
   $('axis').addEventListener('change', (e) => {
     state.axis = inputTarget(e).value;
@@ -888,6 +1017,10 @@ if (typeof document !== 'undefined') {
   });
   $('bg').addEventListener('change', (e) => {
     state.bg = inputTarget(e).checked;
+    redraw(false);
+  });
+  $('clipToArtboard').addEventListener('change', (e) => {
+    state.clipToArtboard = inputTarget(e).checked;
     redraw(false);
   });
   function syncHalftoneControls(): void {
@@ -1260,6 +1393,7 @@ if (typeof document !== 'undefined') {
     'hide',
     'sil',
     'bg',
+    'clipToArtboard',
     'gradientEnabled',
     'halftone',
     'chroma',
@@ -1623,6 +1757,9 @@ if (typeof document !== 'undefined') {
         zFeed: state.zFeed,
         machine: state.gcodeProfile === 'uunatek3' ? 'UUNA TEK 3.0 A3' : 'Generic Z-axis plotter',
         origin: state.gcodeProfile === 'uunatek3' ? 'rear-left' : 'bottom-left',
+        clipToArtboard: state.clipToArtboard,
+        optimizeTravel: state.optimizeTravel,
+        mergeTolerance: state.mergeTolerance,
         effects: {
           halftone: state.halftone,
           chroma: state.chroma,

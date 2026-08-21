@@ -39,6 +39,7 @@ export const contourSettings = {
   pw: 120,
   ph: 100,
   margin: 10,
+  clipToArtboard: true,
   bg: true,
   halftone: false,
   halftoneSize: 2.4,

@@ -109,4 +109,22 @@ describe('generateGCode', () => {
     expect(output).toContain('G0 X0 Y0 F3000');
     expect(output.endsWith('M2\n')).toBe(true);
   });
+
+  it('clips unsafe moves and joins nearby runs before plotting', () => {
+    const output = generateGCode(
+      [
+        group([
+          [-5, 5, 5, 5],
+          [5.1, 5, 15, 5],
+        ]),
+      ],
+      { width: 10, height: 10 },
+      { origin: 'rear-left', mergeTolerance: 0.15 },
+    );
+
+    expect(output).toContain('; Artboard clipping: enabled');
+    expect(output).toContain('; Optimized pen-up travel:');
+    expect(output.match(/; pen down/g)).toHaveLength(1);
+    expect(output).not.toMatch(/X-5|X15/);
+  });
 });

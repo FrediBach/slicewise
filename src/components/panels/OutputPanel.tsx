@@ -76,6 +76,9 @@ export function OutputPanel() {
           </div>
         </div>
         <ValueControl id="margin" label="Margin" min="0" max="40" step="1" value="14" unit="mm" />
+        <Checkbox id="clipToArtboard" defaultChecked>
+          Clip paths to artboard
+        </Checkbox>
         <Checkbox id="bg" defaultChecked>
           Include sheet background
         </Checkbox>
@@ -210,6 +213,19 @@ export function OutputPanel() {
             step="50"
             value="6000"
             unit="mm/m"
+            morphable={false}
+          />
+          <Checkbox id="optimizeTravel" defaultChecked>
+            Optimize pen-up travel
+          </Checkbox>
+          <ValueControl
+            id="mergeTolerance"
+            label="Join tolerance"
+            min="0"
+            max="1"
+            step="0.05"
+            value="0.15"
+            unit="mm"
             morphable={false}
           />
           <ValueControl

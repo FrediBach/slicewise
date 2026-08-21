@@ -36,7 +36,7 @@ lib/slicer.ts ── preview / clipboard / download
                               └── gcode.ts for G-code export
 ```
 
-Generative meshes use a separate path: `slicer.ts` sends implicit-field parameters to `generative-mesh-worker.ts`, which calls `generativeMesh.ts` and transfers typed-array buffers back to the main thread. Uploaded SVG artwork is parsed and extruded lazily through `svg-mesh.ts`.
+Generative meshes use a separate path: `slicer.ts` sends implicit-field parameters to `generative-mesh-worker.ts`, which calls `generativeMesh.ts` and transfers typed-array buffers back to the main thread. Uploaded SVG artwork is parsed lazily through `svg-mesh.ts`. It can become an extruded mesh or scale-axis centreline polylines; centreline points and run offsets are transferred to the contour worker as typed arrays.
 
 ## Module responsibilities
 
@@ -56,8 +56,9 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `contour-engine.ts` is the pure rendering core. It projects geometry, calculates scalar fields, slices triangles, chains line segments, performs visibility and silhouette work, applies output effects, and returns SVG plus grouped toolpaths. It must not read the DOM.
 - `slicer-worker.ts` is deliberately small: it stores the current transferable mesh, invokes `computeContours`, and reports results or errors.
 - `generativeMesh.ts` generates indexed meshes from implicit fields. Its worker transfers array buffers rather than cloning large arrays.
-- `svg-mesh.ts` converts SVG artwork into mesh geometry.
-- `gcode.ts` converts grouped toolpaths into machine instructions and owns plotter-profile defaults.
+- `svg-mesh.ts` converts filled SVG artwork into extruded mesh geometry or pruned medial/scale-axis centreline polylines.
+- `toolpaths.ts` owns rectangular clipping, near-endpoint joining, greedy run ordering, and reversible 2-opt refinement.
+- `gcode.ts` converts grouped toolpaths into machine instructions, applies an export-time clipping safety net, and owns plotter-profile defaults.
 - `colorPair.ts` creates random ink/background combinations in OKLCH while enforcing contrast and gamut constraints.
 
 ### Browser orchestration
@@ -104,7 +105,7 @@ Implement import parsing in `mesh.ts` or procedural demo geometry in `demo-meshe
 
 ### Add a contour algorithm or output effect
 
-Implement deterministic, DOM-free work in `contour-engine.ts`. Pass configuration in the settings snapshot and return any export metadata with the render result. Browser-specific toggles and enable/disable behavior remain in `slicer.ts`.
+Implement deterministic, DOM-free work in `contour-engine.ts` or a focused helper such as `toolpaths.ts`. Pass configuration in the settings snapshot and return any export metadata with the render result. Browser-specific toggles and enable/disable behavior remain in `slicer.ts`.
 
 ### Add an export format
 

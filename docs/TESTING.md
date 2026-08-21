@@ -59,6 +59,7 @@ Coverage currently measures the focused core under active test:
 - `generativeMesh.ts`
 - `mesh.ts`
 - `svg-mesh.ts`
+- `toolpaths.ts`
 - `FormControls.tsx`
 - `GradientChooser.tsx`
 

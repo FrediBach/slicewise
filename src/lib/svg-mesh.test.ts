@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from 'vitest';
-import { parseSVG } from './svg-mesh';
+import { parseSVG, parseSVGCenterlines } from './svg-mesh';
 
 const filledRectangle = `
   <svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50">
@@ -39,5 +39,13 @@ describe('parseSVG', () => {
   it('rejects filled artwork without measurable area', () => {
     const point = `<svg xmlns="http://www.w3.org/2000/svg"><path fill="#000" d="M1 1Z"/></svg>`;
     expect(() => parseSVG(point)).toThrow(/no measurable filled area|No filled shapes/i);
+  });
+
+  it('extracts finite, pruned centerline polylines from filled artwork', () => {
+    const centerlines = parseSVGCenterlines(filledRectangle, 2);
+
+    expect(centerlines.offsets.length).toBeGreaterThan(1);
+    expect(centerlines.offsets.at(-1)).toBe(centerlines.points.length / 2);
+    expect(Array.from(centerlines.points).every(Number.isFinite)).toBe(true);
   });
 });

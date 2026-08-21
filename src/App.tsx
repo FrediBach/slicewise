@@ -14,9 +14,14 @@ export default function App() {
       const { parseSVG } = await import('./lib/svg-mesh');
       return parseSVG(...args);
     };
+    globalThis.slicewiseParseSVGCenterlines = async (...args) => {
+      const { parseSVGCenterlines } = await import('./lib/svg-mesh');
+      return parseSVGCenterlines(...args);
+    };
     import('./lib/slicer');
     return () => {
       delete globalThis.slicewiseParseSVG;
+      delete globalThis.slicewiseParseSVGCenterlines;
     };
   }, []);
 

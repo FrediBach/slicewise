@@ -1,3 +1,5 @@
+import { clipRunToRect, optimizeRuns } from './toolpaths';
+
 export type ToolpathGroup = {
   color?: string;
   label?: string;
@@ -13,6 +15,9 @@ export type GCodeOptions = {
   name?: string;
   machine?: string;
   origin?: 'rear-left' | 'bottom-left';
+  clipToArtboard?: boolean;
+  optimizeTravel?: boolean;
+  mergeTolerance?: number;
   effects?: Partial<Record<'halftone' | 'chroma' | 'humanizer' | 'blueprint', boolean>>;
 };
 
@@ -49,38 +54,6 @@ function prepareRun(run: number[], height: number, origin: GCodeOptions['origin'
   return points.length > 1 ? points : null;
 }
 
-function orderRuns(runs: number[][][]) {
-  const remaining = runs.slice();
-  const ordered = [];
-  let cursor = [0, 0];
-  while (remaining.length) {
-    let bestIndex = 0;
-    let reverse = false;
-    let bestDistance = Infinity;
-    for (let i = 0; i < remaining.length; i++) {
-      const run = remaining[i];
-      const startDistance = Math.hypot(run[0][0] - cursor[0], run[0][1] - cursor[1]);
-      const end = run[run.length - 1];
-      const endDistance = Math.hypot(end[0] - cursor[0], end[1] - cursor[1]);
-      if (startDistance < bestDistance) {
-        bestDistance = startDistance;
-        bestIndex = i;
-        reverse = false;
-      }
-      if (endDistance < bestDistance) {
-        bestDistance = endDistance;
-        bestIndex = i;
-        reverse = true;
-      }
-    }
-    const [next] = remaining.splice(bestIndex, 1);
-    if (reverse) next.reverse();
-    ordered.push(next);
-    cursor = next[next.length - 1];
-  }
-  return ordered;
-}
-
 /** Convert contour polyline groups into conservative, controller-neutral plotter G-code. */
 export function generateGCode(
   groups: ToolpathGroup[],
@@ -97,19 +70,46 @@ export function generateGCode(
   const name = cleanComment(options.name || 'contours');
   const machine = cleanComment(options.machine || 'Generic Z-axis plotter');
   const origin = options.origin === 'rear-left' ? 'rear-left' : 'bottom-left';
+  const clipToArtboard = options.clipToArtboard !== false;
+  const optimizeTravel = options.optimizeTravel !== false;
+  const mergeTolerance = finiteOption(options.mergeTolerance, 0.15);
   const effects = options.effects || {};
   const usableGroups: Array<{ color: string; label: string; runs: number[][][] }> = [];
+  let cursor: [number, number] = [0, 0],
+    penUpDistance = 0;
   for (const group of groups || []) {
     const preparedRuns: number[][][] = [];
     for (const run of group.runs || []) {
-      const prepared = prepareRun(run, height, origin);
-      if (prepared) preparedRuns.push(prepared);
+      const sourceRuns = clipToArtboard ? clipRunToRect(run, width, height) : [run];
+      for (const sourceRun of sourceRuns) {
+        const prepared = prepareRun(sourceRun, height, origin);
+        if (prepared) preparedRuns.push(prepared);
+      }
     }
     if (!preparedRuns.length) continue;
+    const optimized = optimizeTravel
+      ? optimizeRuns(
+          preparedRuns.flatMap((run) => [run.flat()]),
+          cursor,
+          mergeTolerance,
+        )
+      : null;
+    const orderedRuns = optimized
+      ? optimized.runs.map((run) => {
+          const points: number[][] = [];
+          for (let i = 0; i + 1 < run.length; i += 2) points.push([run[i], run[i + 1]]);
+          return points;
+        })
+      : preparedRuns;
+    if (optimized) {
+      cursor = optimized.end;
+      penUpDistance += optimized.penUpDistance;
+    } else if (orderedRuns.length)
+      cursor = orderedRuns[orderedRuns.length - 1].at(-1) as [number, number];
     usableGroups.push({
       color: cleanComment(group.color || 'unspecified'),
       label: cleanComment(group.label || 'contours'),
-      runs: orderRuns(preparedRuns),
+      runs: orderedRuns,
     });
   }
 
@@ -132,6 +132,8 @@ export function generateGCode(
     lines.push(
       '; Note: blueprint border and annotations are SVG-only; G-code contains the base contour set',
     );
+  if (clipToArtboard) lines.push('; Artboard clipping: enabled');
+  if (optimizeTravel) lines.push(`; Optimized pen-up travel: ${clampPrecision(penUpDistance)} mm`);
   lines.push(
     'G21 ; millimetres',
     'G90 ; absolute positioning',

@@ -135,34 +135,60 @@ export function SourcePanel() {
         <strong>Drop a model here</strong>
         <em>or click to browse · STL, OBJ, PLY, SVG</em>
       </label>
-      <FieldGroup title="SVG extrusion" className="svg-extrusion">
+      <FieldGroup title="SVG artwork" className="svg-extrusion">
         <div id="svgExtrusion" hidden>
-          <ValueControl
-            id="svgDepth"
-            label="Extrusion"
-            min="0.5"
-            max="100"
-            step="0.1"
-            value="12"
-            unit="%"
-            morphable={false}
-          />
-          <Checkbox id="svgRounded">Round extruded edges</Checkbox>
-          <ValueControl
-            id="svgRoundness"
-            label="Roundness"
-            min="0"
-            max="100"
-            step="0.5"
-            value="25"
-            unit="%"
-            disabled
-            morphable={false}
-          />
-          <p className="gradient-note">
-            Depth is proportional to the SVG span. Roundness is relative to the largest safe edge
-            radius.
-          </p>
+          <div className="control-row select-row">
+            <label htmlFor="svgMode">Interpretation</label>
+            <div className="select-wrap">
+              <select id="svgMode" defaultValue="extrude">
+                <option value="extrude">Extruded shape</option>
+                <option value="centerline">Single-line centreline</option>
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </div>
+          <div id="svgExtrusionControls">
+            <ValueControl
+              id="svgDepth"
+              label="Extrusion"
+              min="0.5"
+              max="100"
+              step="0.1"
+              value="12"
+              unit="%"
+              morphable={false}
+            />
+            <Checkbox id="svgRounded">Round extruded edges</Checkbox>
+            <ValueControl
+              id="svgRoundness"
+              label="Roundness"
+              min="0"
+              max="100"
+              step="0.5"
+              value="25"
+              unit="%"
+              disabled
+              morphable={false}
+            />
+            <p className="gradient-note">
+              Depth is proportional to the SVG span. Roundness is relative to the largest safe edge
+              radius.
+            </p>
+          </div>
+          <div id="svgCenterlineControls" hidden>
+            <ValueControl
+              id="svgCenterlinePruning"
+              label="Branch pruning"
+              min="1"
+              max="4"
+              step="0.1"
+              value="2"
+              morphable={false}
+            />
+            <p className="gradient-note">
+              Higher values remove small medial-axis branches caused by fine edge details.
+            </p>
+          </div>
         </div>
       </FieldGroup>
       <div className="model-card">
@@ -172,7 +198,7 @@ export function SourcePanel() {
         <div className="model-copy">
           <strong id="mName">demo · torus knot</strong>
           <span>
-            <b id="mTris">—</b> triangles
+            <b id="mTris">—</b> <span id="mUnits">triangles</span>
           </span>
         </div>
         <span className="status-dot" title="Model loaded" />

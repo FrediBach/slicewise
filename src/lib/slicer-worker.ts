@@ -8,6 +8,9 @@ self.addEventListener('message', ({ data }) => {
       V: new Float32Array(data.mesh.V),
       T: new Uint32Array(data.mesh.T),
       N: new Float32Array(data.mesh.N),
+      ...(data.mesh.lineArtOffsets
+        ? { lineArt: { offsets: new Uint32Array(data.mesh.lineArtOffsets) } }
+        : {}),
     };
     return;
   }

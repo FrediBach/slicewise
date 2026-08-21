@@ -32,4 +32,23 @@ describe('computeContours', () => {
     expect(result.svg.match(/data-morph-x-step=/g)).toHaveLength(3);
     expect(result.paths).toBeGreaterThan(0);
   });
+
+  it('renders normalized SVG centerlines directly as plotter paths', () => {
+    const mesh = {
+      V: new Float32Array([-1, 0, 0, 0, 0, 0, 1, 0, 0]),
+      T: new Uint32Array(),
+      N: new Float32Array(9),
+      lineArt: { offsets: new Uint32Array([0, 3]) },
+    };
+    const result = computeContours(
+      mesh,
+      { ...contourSettings, az: -90, el: 90, hide: false, sil: false },
+      false,
+    );
+
+    expect(result.toolpaths).toHaveLength(1);
+    expect(result.toolpaths[0].label).toBe('SVG centreline');
+    expect(result.toolpaths[0].runs[0]).toHaveLength(4);
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+  });
 });

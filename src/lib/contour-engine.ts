@@ -1,5 +1,7 @@
 'use strict';
 
+import { clipRunToRect } from './toolpaths';
+
 type NumericArray = ArrayLike<number> & Iterable<number>;
 type Vec2 = [x: number, y: number];
 type Vec3 = [x: number, y: number, z: number];
@@ -12,6 +14,7 @@ export interface ContourMesh {
   V: NumericArray;
   T: NumericArray;
   N?: NumericArray;
+  lineArt?: { offsets: NumericArray };
 }
 
 export interface GradientStop {
@@ -49,6 +52,7 @@ export interface ContourSettings {
   pw: number;
   ph: number;
   margin: number;
+  clipToArtboard: boolean;
   bg: boolean;
   halftone: boolean;
   halftoneSize: number;
@@ -1368,11 +1372,110 @@ function spiralContours(
   return { pts, values, segs };
 }
 
+function computeLineArtInstance(
+  mesh: ContourMesh,
+  settings: ContourSettings,
+  quick: boolean,
+): InternalContourResult {
+  const started = performance.now();
+  const W = settings.pw,
+    H = settings.ph;
+  const P = project(
+    mesh,
+    cameraBasis(settings.az, settings.el, settings.roll),
+    W,
+    H,
+    settings.margin,
+    settings.zoom,
+    settings.panX,
+    settings.panY,
+    settings.lens,
+    settings.lensAmount,
+  );
+  const offsets = mesh.lineArt!.offsets;
+  const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(settings.quality), 1, 10) - 1);
+  const runs: Polyline[] = [];
+  let pathData = '',
+    nodes = 0,
+    salt = 0;
+  for (let runIndex = 0; runIndex + 1 < offsets.length; runIndex++) {
+    const raw: Polyline = [];
+    for (let point = offsets[runIndex]; point < offsets[runIndex + 1]; point++)
+      raw.push(P.sx[point], P.sy[point]);
+    if (raw.length < 4) continue;
+    const simplified = simplify(raw, tolerance);
+    const styled = settings.humanizer
+      ? humanizeRun(simplified.run, settings.humanizerAmount, salt++)
+      : simplified.run;
+    const clippedRuns = settings.clipToArtboard ? clipRunToRect(styled, W, H) : [styled];
+    for (const run of clippedRuns) {
+      if (run.length < 4) continue;
+      pathData += serialiseRun(run, settings.quality, sharpVertices(run));
+      runs.push(run);
+      nodes += run.length / 2;
+    }
+  }
+  const blueprintGeometry: BlueprintGeometry = {
+    fieldMin: 0,
+    fieldMax: 0,
+    direction: [0, 0, 1],
+    vertices: mesh.V.length / 3,
+    triangles: 0,
+  };
+  const blueprint = blueprintDocument(settings, W, H, blueprintGeometry);
+  const attrs = `fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
+  let artwork: string,
+    renderedPaths = runs.length,
+    renderedNodes = nodes;
+  if (settings.chroma) {
+    const amount = clamp(settings.chromaAmount, 0.1, 6),
+      rotation = amount * 0.12,
+      cx = W / 2,
+      cy = H / 2;
+    artwork = `${settings.suppressBackground ? '' : `<rect width="${W}" height="${H}" fill="#000000"/>`}
+<g style="isolation:isolate">
+<path d="${pathData}" stroke="#ff2020" transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs} style="mix-blend-mode:screen"/>
+<path d="${pathData}" stroke="#25ff48" transform="translate(0 ${fmt(amount * 0.08)})" ${attrs} style="mix-blend-mode:screen"/>
+<path d="${pathData}" stroke="#2548ff" transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs} style="mix-blend-mode:screen"/>
+</g>`;
+    renderedPaths *= 3;
+    renderedNodes *= 3;
+  } else {
+    const background = settings.suppressBackground
+      ? ''
+      : settings.blueprint
+        ? blueprint.backdrop
+        : settings.bg
+          ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || '#ffffff'}"/>`
+          : '';
+    const dash = settings.halftone
+      ? `stroke-dasharray="${fmt(settings.halftoneSize * 0.5)} ${fmt(settings.halftoneSize * 0.5)}"`
+      : '';
+    artwork = `${background}<path d="${pathData}" stroke="${settings.blueprint ? '#f5f9ff' : settings.color}" ${dash} ${attrs}/>${settings.suppressBackground ? '' : blueprint.overlay}`;
+  }
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
+${artwork}
+</svg>`;
+  return {
+    svg,
+    toolpaths: runs.length ? [{ color: settings.color, label: 'SVG centreline', runs }] : [],
+    paths: renderedPaths,
+    nodes: renderedNodes,
+    bytes: new TextEncoder().encode(svg).byteLength,
+    ms: performance.now() - started,
+    W,
+    H,
+    quick,
+    blueprintGeometry,
+  };
+}
+
 function computeContourInstance(
   mesh: ContourMesh,
   settings: ContourSettings,
   quick: boolean,
 ): InternalContourResult {
+  if (mesh.lineArt) return computeLineArtInstance(mesh, settings, quick);
   const t0 = performance.now();
   const W = settings.pw,
     H = settings.ph;
@@ -1493,11 +1596,16 @@ function computeContourInstance(
         ? humanizeRun(simplified.run, settings.humanizerAmount, humanizerSalt++)
         : simplified.run;
       if (run.length < 4) continue;
-      const sharp = settings.humanizer ? sharpVertices(run) : simplified.sharp;
-      d += serialiseRun(run, quality, sharp);
-      plotRuns.push(run);
-      nodes += run.length / 2;
-      paths++;
+      const clippedRuns = settings.clipToArtboard ? clipRunToRect(run, W, H) : [run];
+      for (const clipped of clippedRuns) {
+        if (clipped.length < 4) continue;
+        const sharp =
+          clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
+        d += serialiseRun(clipped, quality, sharp);
+        plotRuns.push(clipped);
+        nodes += clipped.length / 2;
+        paths++;
+      }
     }
     return { d, runs: plotRuns };
   };
