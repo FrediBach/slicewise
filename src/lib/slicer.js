@@ -753,7 +753,7 @@ function deterministicDrawingNumber(settings,geometry){
     camera:[settings.az,settings.el,settings.roll,settings.zoom,settings.panX,settings.panY,settings.lens,settings.lensAmount],
     contours:[settings.lines,settings.gapEase,settings.easeStrength,settings.easeCycles,settings.easeCenter,settings.quality,settings.axis,settings.cutAz,settings.cutEl,settings.spiral,settings.hide,settings.sil],
     geometry:[geometry.fieldMin,geometry.fieldMax,geometry.direction,geometry.vertices,geometry.triangles],
-    output:[settings.sw,settings.blueprintStyle],
+    output:[settings.sw,settings.humanizer,settings.humanizerAmount,settings.blueprintStyle],
     morph:[settings.morphEnabled,settings.morphSteps,orderedTargets(settings.morphTargets),settings.morphSecondEnabled,settings.morphStepsY,orderedTargets(settings.morphTargets2)]
   });
   let hash=0x811c9dc5;
@@ -884,6 +884,58 @@ function simplify(run, tol){
   return {run:out,sharp:Uint8Array.from(sharp)};
 }
 
+/* --------------------------------------- deterministic hand-drawn wobble */
+function humanizeRun(run, amount, salt=0){
+  const strength=clamp(Number(amount) || 0,0,100)/100;
+  const count=run.length/2;
+  if (!strength || count<2) return run;
+  const closed=count>3 && Math.hypot(run[0]-run[(count-1)*2],run[1]-run[(count-1)*2+1])<1e-5;
+  const uniqueCount=closed ? count-1 : count;
+  if (uniqueCount<2) return run;
+
+  // Coordinate-derived phases keep the character stable across redraws and
+  // exports, while the salt prevents neighbouring contours moving in unison.
+  let hash=(0x811c9dc5^salt)>>>0;
+  const sampleCount=Math.min(uniqueCount,8);
+  for (let i=0;i<sampleCount;i++){
+    hash^=Math.round(run[i*2]*1000); hash=Math.imul(hash,0x01000193);
+    hash^=Math.round(run[i*2+1]*1000); hash=Math.imul(hash,0x01000193);
+  }
+  const random=()=>{
+    hash^=hash<<13; hash^=hash>>>17; hash^=hash<<5;
+    return (hash>>>0)/4294967296;
+  };
+  const phases=[random(),random(),random(),random()].map(value=>value*Math.PI*2);
+  const amplitude=.08+strength*.62;
+  const spacing=4.8-strength*2.2;
+  const points=[];
+  let distance=0;
+  const segmentCount=closed ? uniqueCount : uniqueCount-1;
+  for (let i=0;i<segmentCount;i++){
+    const next=(i+1)%uniqueCount;
+    const x0=run[i*2],y0=run[i*2+1],x1=run[next*2],y1=run[next*2+1];
+    const dx=x1-x0,dy=y1-y0,length=Math.hypot(dx,dy);
+    if (!length) continue;
+    const divisions=Math.max(1,Math.ceil(length/spacing));
+    for (let part=0;part<divisions;part++){
+      const t=part/divisions,s=distance+length*t;
+      const nx=-dy/length,ny=dx/length,tx=dx/length,ty=dy/length;
+      const normal=amplitude*(.58*Math.sin(s*.19+phases[0])+.29*Math.sin(s*.47+phases[1])+.13*Math.sin(s*1.07+phases[2]));
+      const along=amplitude*.13*Math.sin(s*.31+phases[3]);
+      points.push(x0+dx*t+nx*normal+tx*along,y0+dy*t+ny*normal+ty*along);
+    }
+    distance+=length;
+  }
+  if (!closed){
+    const i=uniqueCount-2,x0=run[i*2],y0=run[i*2+1],x1=run[(i+1)*2],y1=run[(i+1)*2+1];
+    const dx=x1-x0,dy=y1-y0,length=Math.hypot(dx,dy) || 1,s=distance;
+    const normal=amplitude*(.58*Math.sin(s*.19+phases[0])+.29*Math.sin(s*.47+phases[1])+.13*Math.sin(s*1.07+phases[2]));
+    const along=amplitude*.13*Math.sin(s*.31+phases[3]);
+    points.push(x1-dy/length*normal+dx/length*along,y1+dx/length*normal+dy/length*along);
+  } else if (points.length>=2) points.push(points[0],points[1]);
+  return points.length>=4 ? points : run;
+}
+
 /* ------------------------------------------ adaptive SVG curve output */
 function serialiseRun(run, quality, sharp){
   const n = run.length/2;
@@ -983,6 +1035,7 @@ const state = {
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
   chroma: false, chromaAmount: 1.5,
+  humanizer: false, humanizerAmount: 30,
   blueprint: false, blueprintStyle: "blue",
   morphEnabled: false, morphSteps: 4, morphTargets: {}, morphSecondEnabled: false, morphStepsY: 4, morphTargets2: {},
   exportFormat: "svg", gcodeProfile: "uunatek3", drawFeed: 3000, travelFeed: 6000, penUp: 0, penDown: -3, zFeed: 2000,
@@ -1225,14 +1278,16 @@ function computeContourInstance(mesh, settings, quick){
   // curved spans use Béziers while flat spans remain compact straight lines.
   const tolerance = 0.06 * Math.pow(0.72, quality-1);
   let nodes=0, paths=0;
+  let humanizerSalt=0;
   const serialiseGroup=runs=>{
     let d="";
     const plotRuns=[];
     for (const raw of runs){
       const simplified=simplify(raw,tolerance);
-      const run=simplified.run;
+      const run=settings.humanizer ? humanizeRun(simplified.run,settings.humanizerAmount,humanizerSalt++) : simplified.run;
       if (run.length<4) continue;
-      d+=serialiseRun(run,quality,simplified.sharp);
+      const sharp=settings.humanizer ? sharpVertices(run) : simplified.sharp;
+      d+=serialiseRun(run,quality,sharp);
       plotRuns.push(run);
       nodes+=run.length/2; paths++;
     }
@@ -1387,8 +1442,8 @@ let renderWaiters = [];
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,blueprint,blueprintStyle,morphEnabled,morphSteps,morphTargets,morphSecondEnabled,morphStepsY,morphTargets2} = state;
-  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,blueprint,blueprintStyle,documentTitle:state.name,morphEnabled,morphSteps,morphTargets:{...morphTargets},morphSecondEnabled,morphStepsY,morphTargets2:{...morphTargets2}};
+  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,humanizer,humanizerAmount,blueprint,blueprintStyle,morphEnabled,morphSteps,morphTargets,morphSecondEnabled,morphStepsY,morphTargets2} = state;
+  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,humanizer,humanizerAmount,blueprint,blueprintStyle,documentTitle:state.name,morphEnabled,morphSteps,morphTargets:{...morphTargets},morphSecondEnabled,morphStepsY,morphTargets2:{...morphTargets2}};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1676,6 +1731,7 @@ function bindExportPair(id, key){
 bindPair("az","az"); bindPair("el","el"); bindPair("rl","roll"); bindPair("zoom","zoom"); bindPair("panX","panX"); bindPair("panY","panY"); bindPair("lensAmount","lensAmount");
 bindPair("lines","lines"); bindPair("easeStrength","easeStrength"); bindPair("easeCycles","easeCycles"); bindPair("easeCenter","easeCenter"); bindPair("quality","quality"); bindPair("sw","sw"); bindPair("margin","margin");
 bindPair("chromaAmount","chromaAmount");
+bindPair("humanizerAmount","humanizerAmount");
 bindPair("halftoneSize","halftoneSize"); bindPair("halftoneContrast","halftoneContrast"); bindPair("halftoneCycles","halftoneCycles");
 bindPair("gradientColors","gradientColors");
 bindPair("cutAz","cutAz",activateCustomAxis); bindPair("cutEl","cutEl",activateCustomAxis);
@@ -1854,6 +1910,11 @@ function syncChromaAmount(){
   $("chromaAmountN").disabled=!state.chroma;
   $("chromaAmountControl").classList.toggle("is-disabled", !state.chroma);
 }
+function syncHumanizerControls(){
+  $("humanizerAmount").disabled=!state.humanizer;
+  $("humanizerAmountN").disabled=!state.humanizer;
+  $("humanizerAmountControl").classList.toggle("is-disabled", !state.humanizer);
+}
 function syncBlueprintControls(){
   $("blueprintStyle").disabled=!state.blueprint;
   $("blueprintStyleControl").classList.toggle("is-disabled", !state.blueprint);
@@ -1883,6 +1944,11 @@ $("chroma").addEventListener("change", e => {
   if (state.chroma) disableBlueprint();
   syncHalftoneControls();
   syncChromaAmount();
+  redraw(false);
+});
+$("humanizer").addEventListener("change", e => {
+  state.humanizer=e.target.checked;
+  syncHumanizerControls();
   redraw(false);
 });
 $("gradientEnabled").addEventListener("change", e => {
@@ -2092,11 +2158,11 @@ const historyPairs=[
   ["az","az"],["el","el"],["rl","roll"],["zoom","zoom"],["panX","panX"],["panY","panY"],["lensAmount","lensAmount"],
   ["lines","lines"],["quality","quality"],["easeStrength","easeStrength"],["easeCycles","easeCycles"],["easeCenter","easeCenter"],
   ["cutAz","cutAz"],["cutEl","cutEl"],["sw","sw"],["gradientColors","gradientColors"],["margin","margin"],
-  ["halftoneSize","halftoneSize"],["halftoneContrast","halftoneContrast"],["halftoneCycles","halftoneCycles"],["chromaAmount","chromaAmount"],
+  ["halftoneSize","halftoneSize"],["halftoneContrast","halftoneContrast"],["halftoneCycles","halftoneCycles"],["chromaAmount","chromaAmount"],["humanizerAmount","humanizerAmount"],
   ["morphSteps","morphSteps"],["morphStepsY","morphStepsY"]
 ];
 const historySelects=["lens","gapEase","axis","blueprintStyle"];
-const historyChecks=["spiral","hide","sil","bg","gradientEnabled","halftone","chroma","blueprint","morphEnabled","morphSecondEnabled"];
+const historyChecks=["spiral","hide","sil","bg","gradientEnabled","halftone","chroma","humanizer","blueprint","morphEnabled","morphSecondEnabled"];
 const parameterHistory=[];
 let parameterHistoryIndex=-1, parameterHistoryTimer=0, restoringParameters=false;
 function cloneParameterSnapshot(){ return structuredClone(settingsSnapshot()); }
@@ -2147,6 +2213,7 @@ function restoreParameterSnapshot(snapshot){
   syncEaseCenter();
   syncHalftoneControls();
   syncChromaAmount();
+  syncHumanizerControls();
   syncBlueprintControls();
   syncMorphControls();
   const morphTargetsById={}, morphTargets2ById={};
@@ -2287,17 +2354,18 @@ $("randomize").addEventListener("click", () => {
   randomizeColor("backgroundColor","backgroundColor",papers);
 
   const modes=[
-    {name:"ink",gradientEnabled:false,halftone:false,chroma:false},
-    {name:"ink",gradientEnabled:false,halftone:false,chroma:false},
-    {name:"gradient",gradientEnabled:true,halftone:false,chroma:false},
-    {name:"halftone",gradientEnabled:false,halftone:true,chroma:false},
-    {name:"chroma",gradientEnabled:false,halftone:false,chroma:true},
-    {name:"blueprint",gradientEnabled:false,halftone:false,chroma:false,blueprint:true}
+    {name:"ink",gradientEnabled:false,halftone:false,chroma:false,humanizer:false},
+    {name:"ink",gradientEnabled:false,halftone:false,chroma:false,humanizer:false},
+    {name:"gradient",gradientEnabled:true,halftone:false,chroma:false,humanizer:false},
+    {name:"halftone",gradientEnabled:false,halftone:true,chroma:false,humanizer:false},
+    {name:"chroma",gradientEnabled:false,halftone:false,chroma:true,humanizer:false},
+    {name:"humanizer",gradientEnabled:false,halftone:false,chroma:false,humanizer:true},
+    {name:"blueprint",gradientEnabled:false,halftone:false,chroma:false,humanizer:false,blueprint:true}
   ];
   for (const mode of modes) mode.blueprint=Boolean(mode.blueprint);
-  const availableModes=modes.filter(mode=>["gradientEnabled","halftone","chroma","blueprint"].every(id=>!randomLocks.has(id) || mode[id]===state[id]));
+  const availableModes=modes.filter(mode=>["gradientEnabled","halftone","chroma","humanizer","blueprint"].every(id=>!randomLocks.has(id) || mode[id]===state[id]));
   const colourMode=randomItem(availableModes.length ? availableModes : modes);
-  for (const id of ["gradientEnabled","halftone","chroma","blueprint"]){
+  for (const id of ["gradientEnabled","halftone","chroma","humanizer","blueprint"]){
     if (!randomLocks.has(id)) state[id]=colourMode[id];
   }
   $("gradientEnabled").checked=state.gradientEnabled;
@@ -2311,6 +2379,9 @@ $("randomize").addEventListener("click", () => {
   $("chroma").checked=state.chroma;
   randomizePair("chromaAmount", "chromaAmount", ()=>randomIn(.6, 3.2));
   syncChromaAmount();
+  $("humanizer").checked=state.humanizer;
+  randomizePair("humanizerAmount", "humanizerAmount", ()=>randomInt(18, 58));
+  syncHumanizerControls();
   $("blueprint").checked=state.blueprint;
   if (!randomLocks.has("blueprint")){
     state.blueprintStyle=randomItem(["blue","blue","blue","black"]);
@@ -2333,7 +2404,7 @@ function currentGCode(){
     zFeed:state.zFeed,
     machine:state.gcodeProfile==="uunatek3" ? "UUNA TEK 3.0 A3" : "Generic Z-axis plotter",
     origin:state.gcodeProfile==="uunatek3" ? "rear-left" : "bottom-left",
-    effects:{halftone:state.halftone,chroma:state.chroma,blueprint:state.blueprint}
+    effects:{halftone:state.halftone,chroma:state.chroma,humanizer:state.humanizer,blueprint:state.blueprint}
   });
 }
 function currentExport(){

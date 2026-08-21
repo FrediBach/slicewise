@@ -115,6 +115,8 @@ Paper presets are A6 105×148, A5 148×210, A4 210×297, A3 297×420, A2 420×59
 | Depth cycles (`halftoneCycles`) | Integer; **2**; 1–8 | Repeats the halftone tone wave this many times across normalized slice depth. |
 | Chromatic aberration (`chroma`) | Boolean; **off** | Draws the same contour geometry as red, green, and blue SVG layers with small opposing translations/rotations and screen blending on black. Enabling it disables both halftone and the colour gradient. G-code exports one unsplit base contour set. |
 | RGB split (`chromaAmount`) | Number; **1.5 mm**; 0.1–6, step 0.1 | Sets the horizontal red/blue separation and proportionally controls their small opposing rotations; green receives a small vertical shift. Enabled only with chromatic aberration. |
+| Humanizer (`humanizer`) | Boolean; **off** | Gives contours a hand-drawn character by applying deterministic, low-frequency variations along each path. The altered geometry is included in both SVG and G-code exports. |
+| Human touch (`humanizerAmount`) | Number; **30%**; 0–100, step 1 | Controls the strength and density of Humanizer's deviations. The default stays subtle; higher values create more obvious imprecision. Enabled only with Humanizer. |
 
 ## Export
 

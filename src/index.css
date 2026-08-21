@@ -79,6 +79,7 @@ button { -webkit-tap-highlight-color: transparent; }
 .control-row.is-disabled > .control-label label, .control-row.is-disabled > .control-stack > .control-inputs:first-child { opacity: .45; }
 .control-label { min-width: 0; display: flex; align-items: center; gap: 5px; }
 .control-label > label { min-width: 0; flex: 1; color: #6f746e; font-size: 10.5px; }
+#humanizerAmountControl .control-label > label { max-width: 34px; line-height: 1.12; }
 .control-stack { min-width: 0; display: grid; gap: 3px; }
 .control-inputs { display: flex; align-items: center; gap: 8px; }
 .morph-toggle { width: 20px; height: 20px; display: grid; flex: 0 0 auto; place-items: center; border: 1px solid transparent; background: transparent; color: #a0a49f; padding: 0; cursor: pointer; }

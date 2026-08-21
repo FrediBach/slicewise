@@ -662,6 +662,11 @@ export default function App() {
               <div className="effect-controls">
                 <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" disabled />
               </div>
+              <Checkbox id="humanizer" randomizable>Humanizer</Checkbox>
+              <div className="effect-controls">
+                <ValueControl id="humanizerAmount" label="Human touch" min="0" max="100" step="1" value="30" unit="%" disabled />
+                <p className="gradient-note blueprint-note">Adds stable, small hand-drawn variations to contour lines and plotter paths.</p>
+              </div>
               <Checkbox id="blueprint" randomizable>Technical blueprint</Checkbox>
               <div className="effect-controls">
                 <div className="control-row select-row is-disabled" id="blueprintStyleControl">
