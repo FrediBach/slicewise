@@ -87,7 +87,7 @@ Interactive preview state is intentionally distinct from exact export state. A c
 
 Pan and wheel zoom use a temporary SVG group transform for immediate feedback. Their exact clipped geometry is recomputed when the pointer gesture ends or wheel input has been idle for 140 ms. Orbit and roll still require worker projection and visibility work, so they use the lightweight quick-render path while dragging.
 
-For the model-space `up`, `x`, `y`, and custom slice axes, the contour engine caches a bounded set of 3D slice topologies per mesh. Orbiting can then reproject the cached polylines instead of rescanning every triangle at every contour level. Camera-axis slicing is excluded because its scalar field changes with the camera.
+For the model-space `up`, `x`, `y`, and custom slice axes, the contour engine caches a bounded set of 3D slice topologies per mesh. This includes divergent fan slices, whose virtual source axis is derived in model space. Orbiting can then reproject the cached polylines instead of rescanning every triangle at every contour level. Camera-axis slicing is excluded because its scalar field changes with the camera.
 
 The runtime publishes the latest timing samples through the browser Performance API as `slicewise:render:queue`, `slicewise:render:worker-roundtrip`, `slicewise:render:dom-apply`, and `slicewise:render:end-to-paint`. The visible Render statistic remains the contour engine's worker computation time.
 

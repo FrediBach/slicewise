@@ -24,6 +24,7 @@ export const contourSettings = {
   axis: 'up',
   cutAz: 0,
   cutEl: 90,
+  divergence: 0,
   spiral: false,
   hide: true,
   sil: true,

@@ -98,6 +98,17 @@ export function ContoursPanel() {
             unit="°"
           />
         </div>
+        <ValueControl
+          id="divergence"
+          label="Divergence"
+          min="0"
+          max="160"
+          step="1"
+          value="0"
+          unit="°"
+          morphable={false}
+          randomizable
+        />
       </FieldGroup>
       <FieldGroup title="Path construction" className="field-group--checks">
         <div className="check-grid">

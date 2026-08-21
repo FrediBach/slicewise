@@ -106,6 +106,24 @@ describe('contour projection modes', () => {
     expect(result.svg).not.toMatch(/NaN|Infinity/);
   });
 
+  it('fans slice planes from an inferred source without producing invalid paths', () => {
+    const parallel = computeContours(
+      makeContourMesh(),
+      { ...contourSettings, hide: false, sil: false },
+      true,
+    );
+    const divergent = computeContours(
+      makeContourMesh(),
+      { ...contourSettings, divergence: 160, hide: false, sil: false },
+      true,
+    );
+
+    expect(divergent.paths).toBeGreaterThan(0);
+    expect(divergent.paths).toBeGreaterThanOrEqual(contourSettings.lines);
+    expect(divergent.svg).not.toMatch(/NaN|Infinity/);
+    expect(divergent.svg).not.toBe(parallel.svg);
+  });
+
   it('constructs a continuous spiral toolpath', () => {
     const result = computeContours(
       makeContourMesh(),

@@ -140,6 +140,7 @@ const state: AppState = {
   axis: 'up',
   cutAz: 0,
   cutEl: 90,
+  divergence: 0,
   spiral: false,
   hide: true,
   sil: true,
@@ -269,6 +270,7 @@ if (typeof document !== 'undefined') {
       axis,
       cutAz,
       cutEl,
+      divergence,
       spiral,
       hide,
       sil,
@@ -318,6 +320,7 @@ if (typeof document !== 'undefined') {
       axis,
       cutAz,
       cutEl,
+      divergence,
       spiral,
       hide,
       sil,
@@ -880,6 +883,7 @@ if (typeof document !== 'undefined') {
   bindPair('gradientColors', 'gradientColors');
   bindPair('cutAz', 'cutAz', activateCustomAxis);
   bindPair('cutEl', 'cutEl', activateCustomAxis);
+  bindPair('divergence', 'divergence', syncSliceConstruction);
   bindPair('morphSteps', 'morphSteps');
   bindPair('morphStepsY', 'morphStepsY');
   bindExportPair('drawFeed', 'drawFeed');
@@ -1117,10 +1121,20 @@ if (typeof document !== 'undefined') {
     syncEaseCenter();
     redraw(false);
   });
+  function syncSliceConstruction(): void {
+    const fanEnabled = state.divergence > 0;
+    if (fanEnabled && state.spiral) {
+      state.spiral = false;
+      $('spiral').checked = false;
+    }
+    $('spiral').disabled = fanEnabled;
+    $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', fanEnabled);
+  }
   $('spiral').addEventListener('change', (e) => {
     state.spiral = inputTarget(e).checked;
     redraw(false);
   });
+  syncSliceConstruction();
   $('hide').addEventListener('change', (e) => {
     state.hide = inputTarget(e).checked;
     redraw(false);
@@ -1489,6 +1503,7 @@ if (typeof document !== 'undefined') {
     ['easeCenter', 'easeCenter'],
     ['cutAz', 'cutAz'],
     ['cutEl', 'cutEl'],
+    ['divergence', 'divergence'],
     ['sw', 'sw'],
     ['gradientColors', 'gradientColors'],
     ['margin', 'margin'],
@@ -1583,6 +1598,7 @@ if (typeof document !== 'undefined') {
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
     syncLensAmount();
     syncEaseCenter();
+    syncSliceConstruction();
     syncHalftoneControls();
     syncChromaAmount();
     syncHumanizerControls();
@@ -1744,7 +1760,13 @@ if (typeof document !== 'undefined') {
     $('customAxis').hidden = state.axis !== 'custom';
     randomizePair('cutAz', 'cutAz', () => randomInt(-180, 180));
     randomizePair('cutEl', 'cutEl', () => randomInt(-80, 80));
+    randomizePair('divergence', 'divergence', () => (Math.random() < 0.6 ? 0 : randomInt(15, 110)));
+    syncSliceConstruction();
     randomizeCheckbox('spiral', 'spiral', 0.22);
+    if (state.divergence > 0) {
+      state.spiral = false;
+      $('spiral').checked = false;
+    }
     randomizeCheckbox('hide', 'hide', 0.82);
     randomizeCheckbox('sil', 'sil', 0.78);
 

@@ -64,11 +64,12 @@ Canvas gestures provide equivalent controls: drag to change azimuth/elevation, S
 
 ### Slice plane
 
-| Parameter (ID)             | Type and default                 | What it does                                                                                                                                                                                            |
-| -------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Slice axis (`axis`)        | Select; **Height · topographic** | Chooses the scalar field intersected by the contours: model Z height (`up`), camera depth (`cam`), model X width (`x`), model Y depth (`y`), or a direction defined by a custom plane angle (`custom`). |
-| Custom azimuth (`cutAz`)   | Number; **0°**; −180–180, step 1 | Sets the horizontal direction of the custom slicing normal. Editing it automatically selects **Custom plane angle**.                                                                                    |
-| Custom elevation (`cutEl`) | Number; **90°**; −90–90, step 1  | Sets the vertical angle of the custom slicing normal. 90° is equivalent to the topographic Z direction. Editing it automatically selects **Custom plane angle**.                                        |
+| Parameter (ID)             | Type and default                 | What it does                                                                                                                                                                                                                                                       |
+| -------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Slice axis (`axis`)        | Select; **Height · topographic** | Chooses the scalar field intersected by the contours: model Z height (`up`), camera depth (`cam`), model X width (`x`), model Y depth (`y`), or a direction defined by a custom plane angle (`custom`).                                                            |
+| Custom azimuth (`cutAz`)   | Number; **0°**; −180–180, step 1 | Sets the horizontal direction of the custom slicing normal. Editing it automatically selects **Custom plane angle**.                                                                                                                                               |
+| Custom elevation (`cutEl`) | Number; **90°**; −90–90, step 1  | Sets the vertical angle of the custom slicing normal. 90° is equivalent to the topographic Z direction. Editing it automatically selects **Custom plane angle**.                                                                                                   |
+| Divergence (`divergence`)  | Number; **0°**; 0–160, step 1    | Fans the slice planes across the mesh's angular extent from an automatically placed virtual source axis outside the model. 0° keeps the planes parallel; larger angles move the source closer and increase convergence. Continuous spiral is unavailable above 0°. |
 
 ### Path construction
 
@@ -144,7 +145,7 @@ G-code uses millimetres, absolute positioning, and feed-per-minute mode (`G21`, 
 - **Randomize parameters** changes creative view, contour, colour, and effect settings within curated subranges. It deliberately keeps the loaded source and physical sheet dimensions stable. Its ranges can be narrower than the manual control ranges.
 - An open-lock button means the parameter participates in randomization. Clicking it shows a closed lock and excludes the base value—and any active morph target for that parameter—from later randomization.
 - **Lock all** and **Unlock all** temporarily set every randomization lock at once. Click the active bulk button again to restore the previous individual lock set. Changing an individual lock ends that temporary bulk state; the next bulk action starts from the newly edited set.
-- Randomization locks are available for morphable numeric/colour controls, Background colour, Camera lens, Gap easing, Slice axis, Continuous spiral, Remove hidden lines, Add outer silhouette, Use colour gradient, Halftone stroke, and Chromatic aberration.
+- Randomization locks are available for morphable numeric/colour controls, Divergence, Background colour, Camera lens, Gap easing, Slice axis, Continuous spiral, Remove hidden lines, Add outer silhouette, Use colour gradient, Halftone stroke, and Chromatic aberration.
 - **Undo** and **Redo** keep up to 100 snapshots of render parameters. Source selection, SVG extrusion, model up axis, paper preset as a label, export format/profile, and G-code-only values are not part of those snapshots.
 
 ## Display-only statistics
