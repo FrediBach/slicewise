@@ -14,17 +14,67 @@ function MorphIcon({ size = 13 }) {
 
 function RandomLock({ id, label }) {
   const [locked, setLocked] = useState(false);
+  useEffect(() => {
+    const update = event => {
+      const locks = event.detail?.locks;
+      const next = Array.isArray(locks) ? locks.includes(id) : Boolean(event.detail?.locked);
+      setLocked(next);
+      document.dispatchEvent(new CustomEvent("randomlockchange", { detail: { id, locked: next, source: "bulk" } }));
+    };
+    document.addEventListener("randomlockbulk", update);
+    return () => document.removeEventListener("randomlockbulk", update);
+  }, [id]);
   const toggle = () => {
     const next = !locked;
     setLocked(next);
-    document.dispatchEvent(new CustomEvent("randomlockchange", { detail: { id, locked: next } }));
+    document.dispatchEvent(new CustomEvent("randomlockchange", { detail: { id, locked: next, source: "individual" } }));
   };
   return (
-    <button type="button" className="random-lock" aria-pressed={locked}
+    <button type="button" className="random-lock" data-random-lock-id={id} aria-pressed={locked}
       aria-label={`${locked ? "Unlock" : "Lock"} ${label} randomization`}
       title={locked ? "Include in randomization" : "Exclude from randomization"} onClick={toggle}>
       {locked ? <Lock size={11} /> : <LockOpen size={11} />}
     </button>
+  );
+}
+
+function RandomLockActions() {
+  const [temporaryMode, setTemporaryMode] = useState(null);
+  const previousLocks = useRef([]);
+
+  useEffect(() => {
+    const individualChange = event => {
+      if (event.detail?.source !== "individual") return;
+      previousLocks.current = [];
+      setTemporaryMode(null);
+    };
+    document.addEventListener("randomlockchange", individualChange);
+    return () => document.removeEventListener("randomlockchange", individualChange);
+  }, []);
+
+  const apply = mode => {
+    if (temporaryMode === mode) {
+      document.dispatchEvent(new CustomEvent("randomlockbulk", { detail: { locks: previousLocks.current } }));
+      previousLocks.current = [];
+      setTemporaryMode(null);
+      return;
+    }
+    if (!temporaryMode) {
+      previousLocks.current = Array.from(document.querySelectorAll(".random-lock[aria-pressed=true]"), button => button.dataset.randomLockId);
+    }
+    document.dispatchEvent(new CustomEvent("randomlockbulk", { detail: { locked: mode === "lock" } }));
+    setTemporaryMode(mode);
+  };
+
+  return (
+    <div className="lock-actions" aria-label="Bulk randomization locks">
+      <Button type="button" variant="outline" className={`bulk-lock-button${temporaryMode === "lock" ? " active" : ""}`}
+        aria-pressed={temporaryMode === "lock"} title={temporaryMode === "lock" ? "Restore previous locks" : "Temporarily lock every randomizable value"}
+        onClick={() => apply("lock")}><Lock size={12} />{temporaryMode === "lock" ? "Restore locks" : "Lock all"}</Button>
+      <Button type="button" variant="outline" className={`bulk-lock-button${temporaryMode === "unlock" ? " active" : ""}`}
+        aria-pressed={temporaryMode === "unlock"} title={temporaryMode === "unlock" ? "Restore previous locks" : "Temporarily unlock every randomizable value"}
+        onClick={() => apply("unlock")}><LockOpen size={12} />{temporaryMode === "unlock" ? "Restore locks" : "Unlock all"}</Button>
+    </div>
   );
 }
 
@@ -647,6 +697,7 @@ export default function App() {
         </div>
 
         <footer className="actions">
+          <RandomLockActions />
           <div className="parameter-actions">
             <Button id="undo" variant="outline" className="history-button" disabled aria-label="Undo parameter change" title="Undo · Ctrl/⌘ Z"><Undo2 size={14} />Undo</Button>
             <Button id="redo" variant="outline" className="history-button" disabled aria-label="Redo parameter change" title="Redo · Ctrl/⌘ Shift Z"><Redo2 size={14} />Redo</Button>
