@@ -20,7 +20,6 @@ export interface GradientStop {
 }
 
 export interface ContourSettings {
-  [key: string]: unknown;
   az: number;
   el: number;
   roll: number;
@@ -1171,8 +1170,8 @@ export function computeContours(
   const hexColor=/^#[0-9a-f]{6}$/i;
   const validTargets = (targets: MorphTargets): Array<[string, MorphValue]> => Object.entries(targets || {}).filter(([key,value]) =>
     key==="color"
-      ? hexColor.test(String(value)) && hexColor.test(String(settings[key]))
-      : Number.isFinite(Number(value)) && Number.isFinite(Number(settings[key]))
+      ? hexColor.test(String(value)) && hexColor.test(String((settings as unknown as Record<string, unknown>)[key]))
+      : Number.isFinite(Number(value)) && Number.isFinite(Number((settings as unknown as Record<string, unknown>)[key]))
   );
   const targetsX=settings.morphEnabled ? validTargets(settings.morphTargets) : [];
   const targetsY=settings.morphEnabled && settings.morphSecondEnabled ? validTargets(settings.morphTargets2) : [];
@@ -1188,6 +1187,8 @@ export function computeContours(
     const amountX=stepsX===1 ? 0 : x/(stepsX-1);
     const amountY=stepsY===1 ? 0 : y/(stepsY-1);
     const instance: ContourSettings={...settings,suppressBackground:true};
+    const dynamicInstance=instance as unknown as Record<string, unknown>;
+    const dynamicSettings=settings as unknown as Record<string, unknown>;
     for (const key of targetKeys){
       const targetX=targetsXByKey.get(key), targetY=targetsYByKey.get(key);
       if (key==="color"){
@@ -1197,8 +1198,8 @@ export function computeContours(
         instance.color="#"+startColor.map((value,channel)=>clamp(Math.round(value+(colorX[channel]-value)*amountX+(colorY[channel]-value)*amountY),0,255).toString(16).padStart(2,"0")).join("");
         continue;
       }
-      const start=Number(settings[key]);
-      instance[key]=start+(targetX===undefined ? 0 : (Number(targetX)-start)*amountX)+(targetY===undefined ? 0 : (Number(targetY)-start)*amountY);
+      const start=Number(dynamicSettings[key]);
+      dynamicInstance[key]=start+(targetX===undefined ? 0 : (Number(targetX)-start)*amountX)+(targetY===undefined ? 0 : (Number(targetY)-start)*amountY);
     }
     results.push({...computeContourInstance(mesh,instance,quick),morphX:x,morphY:y});
   }
