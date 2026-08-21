@@ -14,6 +14,9 @@ const fmt = n => {
   const r = Math.round(n*100)/100;
   return Number.isInteger(r) ? String(r) : String(r);
 };
+const escapeXml = value => String(value ?? "").replace(/[&<>"']/g, character => ({
+  "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&apos;"
+})[character]);
 
 function applyLineGapEase(t, easing, center){
   const left=t/center, right=(t-center)/(1-center);
@@ -721,6 +724,7 @@ function splitPolylineByBands(poly, pts, values, bandCount){
 }
 
 function gradientPalette(settings){
+  if (settings.blueprint) return ["#f5f9ff"];
   if (!settings.gradientEnabled) return [settings.color];
   const stops=(settings.gradientStops || []).slice().sort((a,b)=>a.position-b.position);
   if (stops.length<2) return [settings.color];
@@ -739,6 +743,89 @@ function gradientPalette(settings){
     const ca=rgb(a.color), cb=rgb(b.color);
     return hex(ca.map((value,j)=>value+(cb[j]-value)*mix));
   });
+}
+
+function deterministicDrawingNumber(settings,geometry){
+  const orderedTargets=targets=>Object.fromEntries(Object.entries(targets || {}).sort(([a],[b])=>a.localeCompare(b)));
+  const signature=JSON.stringify({
+    object:settings.documentTitle,
+    sheet:[settings.pw,settings.ph,settings.margin],
+    camera:[settings.az,settings.el,settings.roll,settings.zoom,settings.panX,settings.panY,settings.lens,settings.lensAmount],
+    contours:[settings.lines,settings.gapEase,settings.easeStrength,settings.easeCycles,settings.easeCenter,settings.quality,settings.axis,settings.cutAz,settings.cutEl,settings.spiral,settings.hide,settings.sil],
+    geometry:[geometry.fieldMin,geometry.fieldMax,geometry.direction,geometry.vertices,geometry.triangles],
+    output:[settings.sw,settings.blueprintStyle],
+    morph:[settings.morphEnabled,settings.morphSteps,orderedTargets(settings.morphTargets),settings.morphSecondEnabled,settings.morphStepsY,orderedTargets(settings.morphTargets2)]
+  });
+  let hash=0x811c9dc5;
+  for (let i=0;i<signature.length;i++){
+    hash^=signature.charCodeAt(i);
+    hash=Math.imul(hash,0x01000193);
+  }
+  return `SW-${(hash>>>0).toString(36).toUpperCase().padStart(7,"0")}`;
+}
+
+function blueprintDocument(settings,W,H,geometry={}){
+  if (!settings.blueprint) return {backdrop:"",overlay:""};
+  const black=settings.blueprintStyle==="black";
+  const paper=black ? "#101417" : "#0b3f7a";
+  const ink="#f5f9ff";
+  const faint=black ? "#637079" : "#72a4d5";
+  const min=Math.min(W,H);
+  const edge=clamp(min*.035,2,9);
+  const inset=edge+clamp(min*.018,1.2,4);
+  const font=clamp(min*.018,1.35,3.1);
+  const tiny=font*.72;
+  const dimensionLabelOffset=Math.max(tiny*1.15,edge*.75);
+  const grid=clamp(min/28,2.5,10);
+  const titleW=clamp(W*.34,Math.min(32,W*.46),72);
+  const titleH=clamp(H*.12,Math.min(12,H*.2),25);
+  const tx=W-inset-titleW, ty=H-inset-titleH;
+  const cx=W/2, cy=H/2;
+  const name=escapeXml(String(settings.documentTitle || "UNTITLED CONTOUR STUDY").toUpperCase().slice(0,38));
+  const axis=escapeXml(String(settings.axis || "up").toUpperCase());
+  const drawing=deterministicDrawingNumber(settings,geometry);
+  const vector=(geometry.direction || [0,0,1]).map(value=>Number(value || 0).toFixed(3)).join(", ");
+  const fieldMin=Number(geometry.fieldMin || 0);
+  const fieldMax=Number(geometry.fieldMax || 0);
+  const fieldSpan=fieldMax-fieldMin;
+  const lineCount=Math.max(1,Math.round(settings.lines || 1));
+  const transform=`pₛ = ${fmt(settings.zoom || 1)}·D_${escapeXml(settings.lens || "clean")}(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
+  const slicing=settings.spiral
+    ? `Γₖ: ${lineCount}q(p) − atan2(v,u) = k + 0.5`
+    : `hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || "linear")}((i + 0.5) / ${lineCount})`;
+  const objectStats=`n̂_${axis} = [${vector}] · V=${Math.round(geometry.vertices || 0)} · F=${Math.round(geometry.triangles || 0)}`;
+  const common=`fill="none" stroke="${ink}" vector-effect="non-scaling-stroke"`;
+  const text=`fill="${ink}" stroke="none" font-family="DM Mono,ui-monospace,monospace"`;
+  const backdrop=`<rect width="${W}" height="${H}" fill="${paper}"/>
+<defs>
+  <pattern id="blueprint-grid" width="${fmt(grid)}" height="${fmt(grid)}" patternUnits="userSpaceOnUse"><path d="M ${fmt(grid)} 0 L 0 0 0 ${fmt(grid)}" fill="none" stroke="${faint}" stroke-width="0.16" opacity="0.28" vector-effect="non-scaling-stroke"/></pattern>
+</defs>
+<rect x="${fmt(edge)}" y="${fmt(edge)}" width="${fmt(W-edge*2)}" height="${fmt(H-edge*2)}" fill="url(#blueprint-grid)" stroke="${ink}" stroke-width="0.45" opacity="0.96" vector-effect="non-scaling-stroke"/>
+<path d="M ${fmt(inset)} ${fmt(edge)}v${fmt(edge*.55)}M${fmt(W-inset)} ${fmt(edge)}v${fmt(edge*.55)}M${fmt(edge)} ${fmt(inset)}h${fmt(edge*.55)}M${fmt(edge)} ${fmt(H-inset)}h${fmt(edge*.55)}" ${common} stroke-width="0.35" opacity="0.9"/>`;
+  const overlay=`<g id="technical-annotations">
+  <g ${text} font-size="${fmt(tiny)}" letter-spacing="${fmt(tiny*.1)}">
+    <text x="${fmt(cx)}" y="${fmt(dimensionLabelOffset)}" text-anchor="middle">${fmt(W)} mm · SHEET WIDTH</text>
+    <text x="${fmt(dimensionLabelOffset)}" y="${fmt(cy)}" text-anchor="middle" transform="rotate(-90 ${fmt(dimensionLabelOffset)} ${fmt(cy)})">${fmt(H)} mm · SHEET HEIGHT</text>
+  </g>
+  <g ${text} font-size="${fmt(tiny)}" opacity="0.78">
+    <text x="${fmt(inset+font)}" y="${fmt(H-inset-font*4.4)}">${transform}</text>
+    <text x="${fmt(inset+font)}" y="${fmt(H-inset-font*3.1)}">${objectStats}</text>
+    <text x="${fmt(inset+font)}" y="${fmt(H-inset-font*1.8)}">${slicing}</text>
+  </g>
+  <g transform="translate(${fmt(tx)} ${fmt(ty)})">
+    <rect width="${fmt(titleW)}" height="${fmt(titleH)}" fill="${paper}" fill-opacity="0.9" stroke="${ink}" stroke-width="0.45" vector-effect="non-scaling-stroke"/>
+    <path d="M0 ${fmt(titleH*.48)}H${fmt(titleW)}M${fmt(titleW*.66)} ${fmt(titleH*.48)}V${fmt(titleH)}M${fmt(titleW*.84)} ${fmt(titleH*.48)}V${fmt(titleH)}" ${common} stroke-width="0.3"/>
+    <text x="${fmt(titleW*.04)}" y="${fmt(titleH*.22)}" ${text} font-size="${fmt(font*.82)}" font-weight="600" letter-spacing="${fmt(font*.08)}">${name}</text>
+    <text x="${fmt(titleW*.04)}" y="${fmt(titleH*.39)}" ${text} font-size="${fmt(tiny)}">CONTOUR PROJECTION · TECHNICAL STUDY</text>
+    <text x="${fmt(titleW*.03)}" y="${fmt(titleH*.66)}" ${text} font-size="${fmt(tiny*.85)}">DRAWING NO.</text>
+    <text x="${fmt(titleW*.03)}" y="${fmt(titleH*.86)}" ${text} font-size="${fmt(tiny)}">${drawing}</text>
+    <text x="${fmt(titleW*.69)}" y="${fmt(titleH*.66)}" ${text} font-size="${fmt(tiny*.65)}" letter-spacing="0">PROJECTION</text>
+    <text x="${fmt(titleW*.69)}" y="${fmt(titleH*.86)}" ${text} font-size="${fmt(tiny*.82)}">${axis}</text>
+    <text x="${fmt(titleW*.87)}" y="${fmt(titleH*.66)}" ${text} font-size="${fmt(tiny*.85)}">REV</text>
+    <text x="${fmt(titleW*.9)}" y="${fmt(titleH*.88)}" ${text} font-size="${fmt(font)}">A</text>
+  </g>
+</g>`;
+  return {backdrop,overlay};
 }
 
 /* ------------------------------------ Ramer–Douglas–Peucker (iterative) */
@@ -896,6 +983,7 @@ const state = {
   gradientStops: [{position:0,color:"#ef4444"},{position:.2,color:"#f59e0b"},{position:.4,color:"#84cc16"},{position:.6,color:"#06b6d4"},{position:.8,color:"#3b82f6"},{position:1,color:"#8b5cf6"}],
   halftone: false, halftoneSize: 2.4, halftoneContrast: 75, halftoneCycles: 2,
   chroma: false, chromaAmount: 1.5,
+  blueprint: false, blueprintStyle: "blue",
   morphEnabled: false, morphSteps: 4, morphTargets: {}, morphSecondEnabled: false, morphStepsY: 4, morphTargets2: {},
   exportFormat: "svg", gcodeProfile: "uunatek3", drawFeed: 3000, travelFeed: 6000, penUp: 0, penDown: -3, zFeed: 2000,
   svg: "", svgBytes: 0, toolpaths: [], dragging: false
@@ -1071,6 +1159,7 @@ function computeContourInstance(mesh, settings, quick){
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
   const P = project(mesh, cam, W, H, settings.margin, settings.zoom, settings.panX, settings.panY, settings.lens, settings.lensAmount);
   const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);
+  const blueprintGeometry={fieldMin:field.min,fieldMax:field.max,direction:field.dir,vertices:mesh.V.length/3,triangles:mesh.T.length/3};
   const NV = mesh.V.length/3;
 
   let vis = null, visOutline = null, step = 0.6;
@@ -1164,6 +1253,7 @@ function computeContourInstance(mesh, settings, quick){
     else toolpaths.push({color:settings.color,label:"silhouette",runs:outlineGroup.runs});
   }
   const allPathData=colorPaths.flat().join("")+outlinePath;
+  const blueprint=blueprintDocument(settings,W,H,blueprintGeometry);
   let artwork, renderedPaths=paths, renderedNodes=nodes;
   if (settings.chroma){
     const amount=clamp(settings.chromaAmount, .1, 6);
@@ -1177,7 +1267,7 @@ function computeContourInstance(mesh, settings, quick){
 </g>`;
     renderedPaths*=3; renderedNodes*=3;
   } else {
-    const bg=settings.bg && !settings.suppressBackground ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || "#ffffff"}"/>` : "";
+    const bg=settings.suppressBackground ? "" : settings.blueprint ? blueprint.backdrop : settings.bg ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || "#ffffff"}"/>` : "";
     const attrs=`fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
     const spacing=clamp(settings.halftoneSize || 2.4,.5,8);
     const contrast=clamp((settings.halftoneContrast || 0)/100,0,1);
@@ -1191,14 +1281,14 @@ function computeContourInstance(mesh, settings, quick){
       return `stroke-dasharray="${fmt(dash)} ${fmt(gap)}" stroke-dashoffset="${fmt(offset)}"`;
     };
     const groups=colorPaths.map((tonePaths,i)=>tonePaths.map((d,tone)=>d ? `<path d="${d}" stroke="${palette[i]}" ${halftoneAttrs(tone)} ${attrs}/>` : "").join("\n")).join("\n");
-    const outline=outlinePath ? `<path d="${outlinePath}" stroke="${settings.color}" ${attrs}/>` : "";
-    artwork=`${bg}${groups}${outline}`;
+    const outline=outlinePath ? `<path d="${outlinePath}" stroke="${settings.blueprint ? "#f5f9ff" : settings.color}" ${attrs}/>` : "";
+    artwork=`${bg}${groups}${outline}${settings.suppressBackground ? "" : blueprint.overlay}`;
   }
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;
   const ms = performance.now() - t0;
-  return {svg, toolpaths, paths:renderedPaths, nodes:renderedNodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick};
+  return {svg, toolpaths, paths:renderedPaths, nodes:renderedNodes, bytes:new TextEncoder().encode(svg).byteLength, ms, W, H, quick, blueprintGeometry};
 }
 
 function svgArtwork(svg){
@@ -1244,12 +1334,15 @@ export function computeContours(mesh, settings, quick){
   }
 
   const W=settings.pw, H=settings.ph;
-  const background=settings.chroma
+  const blueprint=blueprintDocument(settings,W,H,results[0]?.blueprintGeometry);
+  const background=settings.blueprint
+    ? blueprint.backdrop
+    : settings.chroma
     ? `<rect width="${W}" height="${H}" fill="#000000"/>`
     : settings.bg ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || "#ffffff"}"/>` : "";
   const layers=results.map(result=>`<g data-morph-x-step="${result.morphX+1}" data-morph-y-step="${result.morphY+1}" data-morph-x="${stepsX===1 ? 0 : fmt(result.morphX/(stepsX-1))}" data-morph-y="${stepsY===1 ? 0 : fmt(result.morphY/(stepsY-1))}">${svgArtwork(result.svg)}</g>`).join("\n");
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
-${background}${layers}
+${background}${layers}${settings.blueprint ? blueprint.overlay : ""}
 </svg>`;
 
   const groups=new Map();
@@ -1294,8 +1387,8 @@ let renderWaiters = [];
 let renderTimer = 0, lastDispatch = 0, observedRenderMs = 0, meshVersion = 0;
 
 function settingsSnapshot(){
-  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets,morphSecondEnabled,morphStepsY,morphTargets2} = state;
-  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,morphEnabled,morphSteps,morphTargets:{...morphTargets},morphSecondEnabled,morphStepsY,morphTargets2:{...morphTargets2}};
+  const {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,blueprint,blueprintStyle,morphEnabled,morphSteps,morphTargets,morphSecondEnabled,morphStepsY,morphTargets2} = state;
+  return {az,el,roll,zoom,panX,panY,lens,lensAmount,lines,gapEase,easeStrength,easeCycles,easeCenter,quality,axis,cutAz,cutEl,spiral,hide,sil,sw,color,backgroundColor,gradientEnabled,gradientColors,gradientStops,pw,ph,margin,bg,halftone,halftoneSize,halftoneContrast,halftoneCycles,chroma,chromaAmount,blueprint,blueprintStyle,documentTitle:state.name,morphEnabled,morphSteps,morphTargets:{...morphTargets},morphSecondEnabled,morphStepsY,morphTargets2:{...morphTargets2}};
 }
 function throttleDelay(){
   const triangles = state.mesh ? state.mesh.T.length/3 : 0;
@@ -1320,7 +1413,7 @@ function applyRender(result, id){
   state.toolpaths = result.toolpaths || [];
   fitBed(result.W, result.H);
   $("artboardDimensions").textContent = `${result.W} × ${result.H} MM`;
-  $("bed").style.background = state.backgroundColor;
+  $("bed").style.background = state.blueprint ? (state.blueprintStyle==="black" ? "#101417" : "#0b3f7a") : state.backgroundColor;
   $("bed").innerHTML = result.svg;
   $("rPaths").textContent = result.paths.toLocaleString();
   $("rPts").textContent = Math.round(result.nodes).toLocaleString();
@@ -1761,9 +1854,20 @@ function syncChromaAmount(){
   $("chromaAmountN").disabled=!state.chroma;
   $("chromaAmountControl").classList.toggle("is-disabled", !state.chroma);
 }
+function syncBlueprintControls(){
+  $("blueprintStyle").disabled=!state.blueprint;
+  $("blueprintStyleControl").classList.toggle("is-disabled", !state.blueprint);
+}
+function disableBlueprint(){
+  if (!state.blueprint) return;
+  state.blueprint=false;
+  $("blueprint").checked=false;
+  syncBlueprintControls();
+}
 $("halftone").addEventListener("change", e => {
   state.halftone=e.target.checked;
   if (state.halftone && state.chroma){ state.chroma=false; $("chroma").checked=false; }
+  if (state.halftone) disableBlueprint();
   syncHalftoneControls();
   syncChromaAmount();
   redraw(false);
@@ -1776,6 +1880,7 @@ $("chroma").addEventListener("change", e => {
     $("gradientEnabled").checked=false;
     $("gradientEditor").classList.remove("enabled");
   }
+  if (state.chroma) disableBlueprint();
   syncHalftoneControls();
   syncChromaAmount();
   redraw(false);
@@ -1784,7 +1889,28 @@ $("gradientEnabled").addEventListener("change", e => {
   state.gradientEnabled=e.target.checked;
   $("gradientEditor").classList.toggle("enabled",state.gradientEnabled);
   if (state.gradientEnabled && state.chroma){ state.chroma=false; $("chroma").checked=false; }
+  if (state.gradientEnabled) disableBlueprint();
   syncChromaAmount();
+  redraw(false);
+});
+$("blueprint").addEventListener("change", e => {
+  state.blueprint=e.target.checked;
+  if (state.blueprint){
+    state.halftone=false;
+    state.chroma=false;
+    state.gradientEnabled=false;
+    $("halftone").checked=false;
+    $("chroma").checked=false;
+    $("gradientEnabled").checked=false;
+    $("gradientEditor").classList.remove("enabled");
+  }
+  syncHalftoneControls();
+  syncChromaAmount();
+  syncBlueprintControls();
+  redraw(false);
+});
+$("blueprintStyle").addEventListener("change", e => {
+  state.blueprintStyle=e.target.value;
   redraw(false);
 });
 $("gradientEditor").addEventListener("gradientchange", e => {
@@ -1816,7 +1942,7 @@ $("backgroundColorHex").addEventListener("change", () => redraw(false));
 function setBackgroundColor(v, quick){
   state.backgroundColor = v;
   $("backgroundSwatch").style.background = v;
-  $("bed").style.background = v;
+  if (!state.blueprint) $("bed").style.background = v;
   redraw(quick);
 }
 function activateCustomAxis(){
@@ -1969,8 +2095,8 @@ const historyPairs=[
   ["halftoneSize","halftoneSize"],["halftoneContrast","halftoneContrast"],["halftoneCycles","halftoneCycles"],["chromaAmount","chromaAmount"],
   ["morphSteps","morphSteps"],["morphStepsY","morphStepsY"]
 ];
-const historySelects=["lens","gapEase","axis"];
-const historyChecks=["spiral","hide","sil","bg","gradientEnabled","halftone","chroma","morphEnabled","morphSecondEnabled"];
+const historySelects=["lens","gapEase","axis","blueprintStyle"];
+const historyChecks=["spiral","hide","sil","bg","gradientEnabled","halftone","chroma","blueprint","morphEnabled","morphSecondEnabled"];
 const parameterHistory=[];
 let parameterHistoryIndex=-1, parameterHistoryTimer=0, restoringParameters=false;
 function cloneParameterSnapshot(){ return structuredClone(settingsSnapshot()); }
@@ -2011,7 +2137,7 @@ function restoreParameterSnapshot(snapshot){
   $("backgroundColor").value=state.backgroundColor;
   $("backgroundColorHex").value=state.backgroundColor;
   $("backgroundSwatch").style.background=state.backgroundColor;
-  $("bed").style.background=state.backgroundColor;
+  $("bed").style.background=state.blueprint ? (state.blueprintStyle==="black" ? "#101417" : "#0b3f7a") : state.backgroundColor;
   $("pw").value=state.pw;
   $("ph").value=state.ph;
   syncPaperPreset();
@@ -2021,6 +2147,7 @@ function restoreParameterSnapshot(snapshot){
   syncEaseCenter();
   syncHalftoneControls();
   syncChromaAmount();
+  syncBlueprintControls();
   syncMorphControls();
   const morphTargetsById={}, morphTargets2ById={};
   for (const [id,key] of morphKeyById){
@@ -2164,11 +2291,13 @@ $("randomize").addEventListener("click", () => {
     {name:"ink",gradientEnabled:false,halftone:false,chroma:false},
     {name:"gradient",gradientEnabled:true,halftone:false,chroma:false},
     {name:"halftone",gradientEnabled:false,halftone:true,chroma:false},
-    {name:"chroma",gradientEnabled:false,halftone:false,chroma:true}
+    {name:"chroma",gradientEnabled:false,halftone:false,chroma:true},
+    {name:"blueprint",gradientEnabled:false,halftone:false,chroma:false,blueprint:true}
   ];
-  const availableModes=modes.filter(mode=>["gradientEnabled","halftone","chroma"].every(id=>!randomLocks.has(id) || mode[id]===state[id]));
+  for (const mode of modes) mode.blueprint=Boolean(mode.blueprint);
+  const availableModes=modes.filter(mode=>["gradientEnabled","halftone","chroma","blueprint"].every(id=>!randomLocks.has(id) || mode[id]===state[id]));
   const colourMode=randomItem(availableModes.length ? availableModes : modes);
-  for (const id of ["gradientEnabled","halftone","chroma"]){
+  for (const id of ["gradientEnabled","halftone","chroma","blueprint"]){
     if (!randomLocks.has(id)) state[id]=colourMode[id];
   }
   $("gradientEnabled").checked=state.gradientEnabled;
@@ -2182,6 +2311,12 @@ $("randomize").addEventListener("click", () => {
   $("chroma").checked=state.chroma;
   randomizePair("chromaAmount", "chromaAmount", ()=>randomIn(.6, 3.2));
   syncChromaAmount();
+  $("blueprint").checked=state.blueprint;
+  if (!randomLocks.has("blueprint")){
+    state.blueprintStyle=randomItem(["blue","blue","blue","black"]);
+    $("blueprintStyle").value=state.blueprintStyle;
+  }
+  syncBlueprintControls();
 
   redraw(false);
   toast("Parameters randomized");
@@ -2198,7 +2333,7 @@ function currentGCode(){
     zFeed:state.zFeed,
     machine:state.gcodeProfile==="uunatek3" ? "UUNA TEK 3.0 A3" : "Generic Z-axis plotter",
     origin:state.gcodeProfile==="uunatek3" ? "rear-left" : "bottom-left",
-    effects:{halftone:state.halftone,chroma:state.chroma}
+    effects:{halftone:state.halftone,chroma:state.chroma,blueprint:state.blueprint}
   });
 }
 function currentExport(){

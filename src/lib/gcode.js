@@ -84,6 +84,7 @@ export function generateGCode(groups, sheet, options = {}) {
   ];
   if (effects.halftone) lines.push("; Note: SVG dash styling is exported as continuous plotter paths");
   if (effects.chroma) lines.push("; Note: chromatic SVG offsets are exported as one base contour set");
+  if (effects.blueprint) lines.push("; Note: blueprint border and annotations are SVG-only; G-code contains the base contour set");
   lines.push("G21 ; millimetres", "G90 ; absolute positioning", "G94 ; feed per minute", `G1 Z${clampPrecision(penUp)} F${clampPrecision(zFeed)} ; pen up`);
 
   let tool = 0;

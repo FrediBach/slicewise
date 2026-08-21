@@ -662,6 +662,20 @@ export default function App() {
               <div className="effect-controls">
                 <ValueControl id="chromaAmount" label="RGB split" min="0.1" max="6" step="0.1" value="1.5" unit="mm" disabled />
               </div>
+              <Checkbox id="blueprint" randomizable>Technical blueprint</Checkbox>
+              <div className="effect-controls">
+                <div className="control-row select-row is-disabled" id="blueprintStyleControl">
+                  <label className="blueprint-stock-label" htmlFor="blueprintStyle">Document stock</label>
+                  <div className="select-wrap">
+                    <select id="blueprintStyle" defaultValue="blue" disabled>
+                      <option value="blue">Blueprint blue · white ink</option>
+                      <option value="black">Technical black · white ink</option>
+                    </select>
+                    <ChevronDown size={14} />
+                  </div>
+                </div>
+                <p className="gradient-note blueprint-note">Adds a drafting grid, measured border, callouts, formula notes and a technical title block to the SVG.</p>
+              </div>
             </FieldGroup>
             <FieldGroup title="Export format">
               <div className="control-row select-row">

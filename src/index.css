@@ -52,6 +52,8 @@ button { -webkit-tap-highlight-color: transparent; }
 .generative-controls .gradient-note { margin: 8px 4px 1px 0; }
 .generative-controls.is-building { opacity: .72; }
 .effect-controls { margin: 4px 0 9px 6px; padding-left: 8px; border-left: 1px solid #d8dbd6; }
+.blueprint-note { margin: 5px 5px 2px 0; line-height: 1.45; }
+.blueprint-stock-label { color: #6f746e; font-size: 10.5px; }
 .dropzone { min-height: 92px; display: grid; place-items: center; align-content: center; gap: 4px; border: 1px dashed #b8bcb6; background: white; cursor: pointer; transition: .18s ease; }
 .demo-row { margin: -4px 0 10px; }
 .dropzone:hover, .dropzone.over { border-color: var(--blue); background: #f7f7ff; }
