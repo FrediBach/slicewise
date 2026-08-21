@@ -116,6 +116,7 @@ Run all checks before committing:
 ```bash
 npm run lint
 npm run typecheck
+npm test
 npm run build
 ```
 

@@ -35,6 +35,16 @@ npm run build
 
 `npm run preview` serves the generated `dist` build locally.
 
+## Testing
+
+```bash
+npm test
+npm run test:watch
+npm run test:coverage
+```
+
+Tests are colocated with the modules they protect. The initial suite focuses on mesh parsing and normalization, contour generation, deterministic colour pairing, generative-mesh invariants, G-code output, and gradient-editor interactions. See [TESTING.md](./TESTING.md) for conventions and coverage scope.
+
 ## Repository guide
 
 ```text
