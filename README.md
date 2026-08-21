@@ -43,7 +43,7 @@ npm run test:watch
 npm run test:coverage
 ```
 
-Tests are colocated with the modules they protect. The suite covers ASCII and binary mesh parsing, SVG extrusion, contour modes and effects, deterministic colour pairing, every generative field family, G-code output, and React control-event contracts. See [TESTING.md](./TESTING.md) for conventions, fixtures, and enforced coverage thresholds.
+Tests are colocated with the modules they protect. The suite covers ASCII and binary mesh parsing, SVG extrusion, contour modes and effects, deterministic colour pairing, every generative field family, G-code output, and React control-event contracts. See the [testing guide](./docs/TESTING.md) for conventions, fixtures, and enforced coverage thresholds.
 
 ## Repository guide
 
@@ -68,7 +68,13 @@ src/
 └── main.tsx                   React entry point
 ```
 
-See [ARCHITECTURE.md](./ARCHITECTURE.md) for runtime data flow, module boundaries, worker behavior, and extension guidance. User-facing controls and their ranges are documented in [PARAMETERS.md](./PARAMETERS.md).
+## Documentation
+
+- [Architecture](./docs/ARCHITECTURE.md) describes runtime data flow, module boundaries, worker behavior, and extension guidance.
+- [Parameter reference](./docs/PARAMETERS.md) documents user-facing controls, defaults, ranges, and export behavior.
+- [Testing guide](./docs/TESTING.md) covers test conventions, fixtures, coverage, and verification commands.
+
+Contributor and coding-agent guidance lives in [AGENTS.md](./AGENTS.md).
 
 ## Deployment
 

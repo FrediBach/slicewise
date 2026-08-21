@@ -95,7 +95,7 @@ Both return structured errors instead of throwing across the worker boundary.
 2. Give it a stable, unique ID.
 3. Add the setting and binding in `slicer.ts`.
 4. Include render-relevant values in `settingsSnapshot()`.
-5. Document the control in `PARAMETERS.md`.
+5. Document the control in [`PARAMETERS.md`](./PARAMETERS.md).
 
 ### Add an import format or demo mesh
 
