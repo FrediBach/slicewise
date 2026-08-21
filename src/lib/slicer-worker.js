@@ -1,4 +1,4 @@
-import { computeContours } from "./slicer.js";
+import { computeContours } from "./contour-engine.js";
 
 let mesh = null;
 

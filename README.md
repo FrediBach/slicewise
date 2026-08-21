@@ -1,37 +1,68 @@
 # Slicewise
 
-A browser-based contour studio that slices 3D meshes into clean, single-weight SVG or plotter G-code paths for plotting, laser work, and illustration.
+Slicewise is a local-first browser studio for turning 3D meshes and filled SVG artwork into contour drawings. It previews the result interactively and exports clean SVG or plotter-ready G-code.
 
-## Features
+All geometry processing happens in the browser. Uploaded artwork and models are not sent to a server.
 
-- Imports binary/ASCII STL, OBJ, ASCII/binary PLY, and filled SVG artwork
-- Proportionally extrudes SVGs with fine depth control and optional rounded edges
-- Includes torus-knot, rippled-sphere, rounded-cube, and ring-torus demos
-- Generates topographic, camera-depth, width, or depth contours
-- Optional continuous helicoidal slicing for pen-down spiral paths
-- Optional hidden-line removal and silhouette generation
-- Interactive orbit, roll, and zoom controls
-- Configurable sheet size, margin, ink and background colours, and stroke width
-- Local-only mesh processing with SVG and configurable plotter G-code download or clipboard export
-- Built-in UUNA TEK 3.0 A3 G-code profile with rear-left origin and Z-axis pen control
-- Responsive React interface with shadcn-compatible component structure
+## Capabilities
 
-## Development
+- Import binary or ASCII STL, OBJ, ASCII or binary PLY, and filled SVG artwork.
+- Extrude SVG artwork with proportional depth and optional rounded edges.
+- Start from built-in demo meshes or generate implicit-surface meshes.
+- Slice by model height, camera depth, width, depth, or a custom plane.
+- Create discrete contours or continuous helicoidal paths.
+- Remove hidden lines and add silhouettes.
+- Morph selected parameters across one- or two-dimensional instance grids.
+- Apply gradients, halftone strokes, chromatic aberration, humanization, and blueprint styling.
+- Export SVG or configurable plotter G-code, including a UUNA TEK 3.0 A3 profile.
+
+## Getting started
+
+Requirements: a current Node.js release and npm.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Production checks:
+Vite prints the local development URL. Production verification uses:
 
 ```bash
 npm run lint
 npm run build
 ```
 
-The Vercel configuration builds the Vite app to `dist` and rewrites application routes to `index.html`.
+`npm run preview` serves the generated `dist` build locally.
 
-## Architecture
+## Repository guide
 
-The interface lives in `src/App.jsx`, reusable UI primitives are under `src/components/ui`, and the dependency-free geometry pipeline is in `src/lib/slicer.js`. The original single-file prototype remains in `slicewise.html` for reference.
+```text
+src/
+├── App.jsx                    Application composition and runtime bootstrap
+├── components/
+│   ├── controls/              Stateful form controls shared by feature panels
+│   ├── panels/                Source, morph, view, contour, and output panels
+│   └── ui/                    Small visual primitives
+├── lib/
+│   ├── contour-engine.js      DOM-free mesh-to-SVG contour pipeline
+│   ├── mesh.js                Mesh parsers, normalization, normals, demo meshes
+│   ├── slicer.js              Browser state, bindings, history, and export flow
+│   ├── slicer-worker.js       Contour worker message adapter
+│   ├── generativeMesh.ts      Implicit-field mesh generation
+│   ├── generative-mesh-worker.ts
+│   ├── svg-mesh.js            SVG parsing and extrusion
+│   ├── gcode.js               Plotter G-code serialization
+│   └── colorPair.js           Perceptual random colour pairing
+├── index.css                  Application styles
+└── main.jsx                   React entry point
+```
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for runtime data flow, module boundaries, worker behavior, and extension guidance. User-facing controls and their ranges are documented in [PARAMETERS.md](./PARAMETERS.md).
+
+## Deployment
+
+The Vercel configuration builds the Vite application into `dist` and rewrites application routes to `index.html`. `slicewise.html` is the original standalone prototype and remains reference material; the maintained application starts at `src/main.jsx`.
+
+## License
+
+See [LICENSE](./LICENSE).
