@@ -23,7 +23,75 @@
 // Defaults
 // ---------------------------------------------------------------------------
 
-const DEFAULTS = {
+export type RandomSource = () => number;
+
+export interface RgbColor {
+  r: number;
+  g: number;
+  b: number;
+}
+
+export interface OklabColor {
+  L: number;
+  a: number;
+  b: number;
+}
+
+export interface OklchColor {
+  L: number;
+  C: number;
+  H: number;
+}
+
+export type ColorInput = string | RgbColor | OklchColor;
+export type NumericRange = readonly [minimum: number, maximum: number];
+
+export interface ColorHarmony {
+  name: string;
+  offsets: readonly number[];
+  weight: number;
+}
+
+export interface CreateColorPairOptions {
+  color?: ColorInput | null;
+  minLightnessDiff?: number;
+  lightnessRange?: NumericRange;
+  chromaRange?: NumericRange;
+  minContrast?: number | null;
+  harmonies?: readonly ColorHarmony[];
+  hueJitter?: number;
+  seed?: number | null;
+  rng?: RandomSource | null;
+}
+
+export interface FormattedColor {
+  hex: string;
+  rgb: RgbColor;
+  oklch: OklchColor;
+  css: string;
+}
+
+export interface ColorPair {
+  a: FormattedColor;
+  b: FormattedColor;
+  harmony: string;
+  lightnessDiff: number;
+  contrast: number;
+}
+
+interface ColorPairConfig {
+  color: ColorInput | null;
+  minLightnessDiff: number;
+  lightnessRange: NumericRange;
+  chromaRange: NumericRange;
+  minContrast: number | null;
+  harmonies: readonly ColorHarmony[];
+  hueJitter: number;
+  seed: number | null;
+  rng: RandomSource | null;
+}
+
+const DEFAULTS: ColorPairConfig = {
   color: null,
   /** Minimum perceptual lightness gap, in Oklab L units (0..1). */
   minLightnessDiff: 0.25,
@@ -51,7 +119,7 @@ const DEFAULTS = {
 // Deterministic RNG — generative art needs reproducible seeds
 // ---------------------------------------------------------------------------
 
-function mulberry32(seed) {
+function mulberry32(seed: number): RandomSource {
   // Sequential seeds (1, 2, 3…) are the common case in generative art, but
   // mulberry32's first outputs are strongly correlated across nearby states.
   // Scramble the seed with a splitmix-style avalanche before use.
@@ -60,7 +128,7 @@ function mulberry32(seed) {
   a = Math.imul(a ^ (a >>> 15), 0x735a2d97) >>> 0;
   a = (a ^ (a >>> 15)) >>> 0;
 
-  return function () {
+  return function (): number {
     a = (a + 0x6d2b79f5) >>> 0;
     let t = a;
     t = Math.imul(t ^ (t >>> 15), t | 1);
@@ -73,17 +141,18 @@ function mulberry32(seed) {
 // Color space conversions (Björn Ottosson's Oklab)
 // ---------------------------------------------------------------------------
 
-const clamp = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+const clamp = (x: number, lo: number, hi: number): number =>
+  Math.min(hi, Math.max(lo, x));
 
-function srgbToLinear(c) {
+function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
-function linearToSrgb(c) {
+function linearToSrgb(c: number): number {
   return c <= 0.0031308 ? 12.92 * c : 1.055 * Math.pow(c, 1 / 2.4) - 0.055;
 }
 
-function linearRgbToOklab({ r, g, b }) {
+function linearRgbToOklab({ r, g, b }: RgbColor): OklabColor {
   const l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
   const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
   const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
@@ -97,7 +166,7 @@ function linearRgbToOklab({ r, g, b }) {
   };
 }
 
-function oklabToLinearRgb({ L, a, b }) {
+function oklabToLinearRgb({ L, a, b }: OklabColor): RgbColor {
   const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
   const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
   const s_ = L - 0.0894841775 * a - 1.291485548 * b;
@@ -111,13 +180,13 @@ function oklabToLinearRgb({ L, a, b }) {
   };
 }
 
-const oklchToOklab = ({ L, C, H }) => ({
+const oklchToOklab = ({ L, C, H }: OklchColor): OklabColor => ({
   L,
   a: C * Math.cos((H * Math.PI) / 180),
   b: C * Math.sin((H * Math.PI) / 180),
 });
 
-function oklabToOklch({ L, a, b }) {
+function oklabToOklch({ L, a, b }: OklabColor): OklchColor {
   const C = Math.hypot(a, b);
   let H = (Math.atan2(b, a) * 180) / Math.PI;
   if (H < 0) H += 360;
@@ -130,7 +199,7 @@ function oklabToOklch({ L, a, b }) {
 
 const EPS = 1e-5;
 
-function inSrgbGamut(oklch) {
+function inSrgbGamut(oklch: OklchColor): boolean {
   const { r, g, b } = oklabToLinearRgb(oklchToOklab(oklch));
   return (
     r >= -EPS && r <= 1 + EPS &&
@@ -144,7 +213,7 @@ function inSrgbGamut(oklch) {
  * Binary search: the in-gamut set along the chroma axis is a single interval
  * starting at 0, so bisection converges reliably. ~1e-4 precision in 20 steps.
  */
-function maxChroma(L, H) {
+function maxChroma(L: number, H: number): number {
   let lo = 0, hi = 0.4;
   if (inSrgbGamut({ L, C: hi, H })) return hi;
   for (let i = 0; i < 20; i++) {
@@ -156,7 +225,7 @@ function maxChroma(L, H) {
 }
 
 /** Clip chroma to the gamut boundary, preserving L and H exactly. */
-const gamutMap = ({ L, C, H }) => ({
+const gamutMap = ({ L, C, H }: OklchColor): OklchColor => ({
   L: clamp(L, 0, 1),
   C: Math.min(C, maxChroma(clamp(L, 0, 1), H)),
   H: ((H % 360) + 360) % 360,
@@ -166,7 +235,7 @@ const gamutMap = ({ L, C, H }) => ({
 // Serialization
 // ---------------------------------------------------------------------------
 
-function oklchToRgb255(oklch) {
+function oklchToRgb255(oklch: OklchColor): RgbColor {
   const lin = oklabToLinearRgb(oklchToOklab(oklch));
   return {
     r: Math.round(clamp(linearToSrgb(lin.r), 0, 1) * 255),
@@ -175,13 +244,15 @@ function oklchToRgb255(oklch) {
   };
 }
 
-function oklchToHex(oklch) {
+function oklchToHex(oklch: OklchColor): string {
   const { r, g, b } = oklchToRgb255(oklch);
   return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
 }
 
 /** Accepts '#rgb', '#rrggbb', {r,g,b} in 0–255, or an {L,C,H} object. */
-function parseColor(input) {
+function parseColor(input: null | undefined): null;
+function parseColor(input: ColorInput): OklchColor;
+function parseColor(input: ColorInput | null | undefined): OklchColor | null {
   if (input == null) return null;
 
   if (typeof input === 'object' && 'L' in input && 'C' in input && 'H' in input) {
@@ -212,8 +283,8 @@ function parseColor(input) {
 }
 
 /** WCAG 2.1 contrast ratio, 1..21. Separate from Oklab L on purpose. */
-function contrastRatio(oklchA, oklchB) {
-  const lum = (oklch) => {
+function contrastRatio(oklchA: OklchColor, oklchB: OklchColor): number {
+  const lum = (oklch: OklchColor): number => {
     const { r, g, b } = oklchToRgb255(oklch);
     const [R, G, B] = [r, g, b].map((v) => srgbToLinear(v / 255));
     return 0.2126 * R + 0.7152 * G + 0.0722 * B;
@@ -226,9 +297,12 @@ function contrastRatio(oklchA, oklchB) {
 // Sampling helpers
 // ---------------------------------------------------------------------------
 
-const lerp = (a, b, t) => a + (b - a) * t;
+const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
-function pickWeighted(items, rng) {
+function pickWeighted<T extends { weight: number }>(
+  items: readonly T[],
+  rng: RandomSource,
+): T {
   const total = items.reduce((sum, it) => sum + it.weight, 0);
   let t = rng() * total;
   for (const it of items) {
@@ -238,7 +312,8 @@ function pickWeighted(items, rng) {
   return items[items.length - 1];
 }
 
-const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
+const pick = <T>(arr: readonly T[], rng: RandomSource): T =>
+  arr[Math.floor(rng() * arr.length)];
 
 /**
  * Sample a partner lightness uniformly over the feasible set:
@@ -246,7 +321,12 @@ const pick = (arr, rng) => arr[Math.floor(rng() * arr.length)];
  * That set is two intervals. Choosing a side with probability proportional to
  * its width keeps the result uniform rather than biased toward the near side.
  */
-function pickPartnerLightness(L0, minDiff, [lo, hi], rng) {
+function pickPartnerLightness(
+  L0: number,
+  minDiff: number,
+  [lo, hi]: NumericRange,
+  rng: RandomSource,
+): number {
   const downRoom = Math.max(0, L0 - minDiff - lo);
   const upRoom = Math.max(0, hi - (L0 + minDiff));
 
@@ -271,19 +351,10 @@ function pickPartnerLightness(L0, minDiff, [lo, hi], rng) {
  * Create two colors that work together, or a partner for a color you already
  * have.
  *
- * @param {object}  [opts]
- * @param {string|object} [opts.color]   Fix one color; the other is generated.
- * @param {number}  [opts.minLightnessDiff=0.25]  Oklab L gap, 0..1.
- * @param {[number,number]} [opts.lightnessRange=[0.28,0.9]]
- * @param {[number,number]} [opts.chromaRange=[0.45,0.95]]  Fraction of gamut max.
- * @param {number|null} [opts.minContrast=null]  Optional WCAG floor.
- * @param {number}  [opts.seed]  Integer seed for reproducible output.
- * @param {Function}[opts.rng]   Custom () => [0,1) generator.
- * @returns {{a: Color, b: Color, harmony: string, lightnessDiff: number, contrast: number}}
  */
-function createColorPair(opts = {}) {
-  const cfg = { ...DEFAULTS, ...opts };
-  const rng =
+function createColorPair(opts: CreateColorPairOptions = {}): ColorPair {
+  const cfg: ColorPairConfig = { ...DEFAULTS, ...opts };
+  const rng: RandomSource =
     cfg.rng ??
     (cfg.seed != null ? mulberry32(cfg.seed) : Math.random);
 
@@ -291,7 +362,7 @@ function createColorPair(opts = {}) {
   const [loC, hiC] = cfg.chromaRange;
 
   // --- Color A: either the fixed input, or sampled fresh ---------------------
-  let a = parseColor(cfg.color);
+  let a = cfg.color == null ? null : parseColor(cfg.color);
   if (!a) {
     const H = rng() * 360;
     const L = lerp(loL, hiL, rng());
@@ -327,7 +398,7 @@ function createColorPair(opts = {}) {
     }
   }
 
-  const format = (c) => ({
+  const format = (c: OklchColor): FormattedColor => ({
     hex: oklchToHex(c),
     rgb: oklchToRgb255(c),
     oklch: { L: +c.L.toFixed(4), C: +c.C.toFixed(4), H: +c.H.toFixed(2) },
