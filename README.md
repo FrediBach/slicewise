@@ -58,7 +58,8 @@ src/
 │   └── ui/                    Small visual primitives
 ├── lib/
 │   ├── contour-engine.ts      DOM-free mesh-to-SVG contour pipeline
-│   ├── mesh.ts                Mesh parsers, normalization, normals, demo meshes
+│   ├── demo-meshes/           Built-in procedural mesh generators
+│   ├── mesh.ts                Mesh parsers, normalization, and normals
 │   ├── slicer.ts              Browser state, bindings, history, and export flow
 │   ├── slicer-worker.ts       Contour worker message adapter
 │   ├── generativeMesh.ts      Implicit-field mesh generation

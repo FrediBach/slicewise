@@ -54,6 +54,7 @@ Coverage currently measures the focused core under active test:
 
 - `colorPair.ts`
 - `contour-engine.ts`
+- `demo-meshes/index.ts`
 - `gcode.ts`
 - `generativeMesh.ts`
 - `mesh.ts`

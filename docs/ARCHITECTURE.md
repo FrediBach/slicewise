@@ -21,9 +21,9 @@ React panels and controls
         ▼
 lib/slicer.ts ────────────────┐
         │                     │
-        │ mesh upload/demo    │ settings snapshot
+        │ mesh source         │ settings snapshot
         ▼                     ▼
-lib/mesh.ts             slicer-worker.ts
+mesh.ts / demo-meshes/  slicer-worker.ts
                               │
                               ▼
                       contour-engine.ts
@@ -51,7 +51,8 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 
 ### Geometry and export layer
 
-- `mesh.ts` parses supported mesh formats, welds and normalizes uploaded geometry, calculates vertex normals, and creates built-in demo meshes.
+- `mesh.ts` parses supported mesh formats, welds and normalizes geometry, and calculates vertex normals.
+- `demo-meshes/index.ts` contains the deterministic procedural generators for the built-in demo sources.
 - `contour-engine.ts` is the pure rendering core. It projects geometry, calculates scalar fields, slices triangles, chains line segments, performs visibility and silhouette work, applies output effects, and returns SVG plus grouped toolpaths. It must not read the DOM.
 - `slicer-worker.ts` is deliberately small: it stores the current transferable mesh, invokes `computeContours`, and reports results or errors.
 - `generativeMesh.ts` generates indexed meshes from implicit fields. Its worker transfers array buffers rather than cloning large arrays.
@@ -99,7 +100,7 @@ Both return structured errors instead of throwing across the worker boundary.
 
 ### Add an import format or demo mesh
 
-Implement parsing or procedural geometry in `mesh.ts`, returning `{ verts, tris }`. Register uploads or demos in `slicer.ts`; normalization and normal calculation happen when the mesh is installed.
+Implement import parsing in `mesh.ts` or procedural demo geometry in `demo-meshes/`, returning `{ verts, tris }`. Register uploads or demos in `slicer.ts`; normalization and normal calculation happen when the mesh is installed.
 
 ### Add a contour algorithm or output effect
 

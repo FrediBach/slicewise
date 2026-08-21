@@ -1,4 +1,5 @@
-import { sphereDemo, vertexNormals, weld } from '../../lib/mesh';
+import { sphereDemo } from '../../lib/demo-meshes';
+import { vertexNormals, weld } from '../../lib/mesh';
 
 export const makeContourMesh = () => {
   const normalized = weld(sphereDemo('ripple', 24, 12));

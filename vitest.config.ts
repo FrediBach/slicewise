@@ -14,6 +14,7 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: [
         'src/lib/{colorPair,contour-engine,gcode,generativeMesh,mesh,svg-mesh}.ts',
+        'src/lib/demo-meshes/index.ts',
         'src/components/controls/{FormControls,GradientChooser}.tsx',
       ],
       exclude: ['src/**/*.d.ts', 'src/test/**'],

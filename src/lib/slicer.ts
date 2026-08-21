@@ -9,18 +9,8 @@ import {
   type GradientStop,
 } from './contour-engine';
 import { GEN_DEFAULTS, type GeneratedMesh, type GenerativeParams } from './generativeMesh';
-import {
-  parseOBJ,
-  parsePLY,
-  parseSTL,
-  radialColumnDemo,
-  ringTorus,
-  sphereDemo,
-  tetrapodDemo,
-  torusKnot,
-  vertexNormals,
-  weld,
-} from './mesh';
+import { radialColumnDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from './demo-meshes';
+import { parseOBJ, parsePLY, parseSTL, vertexNormals, weld } from './mesh';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
