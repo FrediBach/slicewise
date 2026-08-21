@@ -1,6 +1,7 @@
 'use strict';
 
 import { clipRunToRect } from './toolpaths';
+import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
 
 type NumericArray = ArrayLike<number> & Iterable<number>;
 type Vec2 = [x: number, y: number];
@@ -71,6 +72,7 @@ export interface ContourSettings {
   morphSecondEnabled: boolean;
   morphStepsY: number;
   morphTargets2: MorphTargets;
+  previewDetail?: number;
   suppressBackground?: boolean;
 }
 
@@ -1461,7 +1463,9 @@ function computeLineArtInstance(
     settings.lensAmount,
   );
   const offsets = mesh.lineArt!.offsets;
-  const quality = quick ? Math.min(3, settings.quality) : settings.quality;
+  const quality = quick
+    ? previewCurveQuality(settings.quality, settings.previewDetail)
+    : settings.quality;
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
   const runs: Polyline[] = [];
   let pathData = '',
@@ -1597,9 +1601,11 @@ function computeContourInstance(
     Array.from({ length: toneBandCount }, (): Polyline[] => []),
   );
   const outlineOut: Polyline[] = [];
-  const N = quick ? Math.min(settings.lines, 20) : settings.lines;
+  const N = quick ? previewLineCount(settings.lines, settings.previewDetail) : settings.lines;
   const quality = clamp(
-    Math.round(quick ? Math.min(settings.quality, 3) : settings.quality),
+    Math.round(
+      quick ? previewCurveQuality(settings.quality, settings.previewDetail) : settings.quality,
+    ),
     1,
     10,
   );
@@ -1809,10 +1815,20 @@ export function computeContours(
 
   const started = performance.now();
   const stepsX = targetsX.length
-    ? Math.min(quick ? 3 : 24, clamp(Math.round(settings.morphSteps || 2), 2, 24))
+    ? quick
+      ? previewMorphSteps(
+          clamp(Math.round(settings.morphSteps || 2), 2, 24),
+          settings.previewDetail,
+        )
+      : clamp(Math.round(settings.morphSteps || 2), 2, 24)
     : 1;
   const stepsY = targetsY.length
-    ? Math.min(quick ? 3 : 24, clamp(Math.round(settings.morphStepsY || 2), 2, 24))
+    ? quick
+      ? previewMorphSteps(
+          clamp(Math.round(settings.morphStepsY || 2), 2, 24),
+          settings.previewDetail,
+        )
+      : clamp(Math.round(settings.morphStepsY || 2), 2, 24)
     : 1;
   const targetsXByKey = new Map(targetsX),
     targetsYByKey = new Map(targetsY);

@@ -11,6 +11,14 @@ import {
 import { GEN_DEFAULTS, type GeneratedMesh, type GenerativeParams } from './generativeMesh';
 import { radialColumnDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from './demo-meshes';
 import { parseOBJ, parsePLY, parseSTL, vertexNormals, weld } from './mesh';
+import {
+  initialPreviewPerformance,
+  observePreviewPerformance,
+  previewCurveQuality,
+  previewDetail,
+  previewLineCount,
+  previewMorphSteps,
+} from './preview-detail';
 import { previewViewTransform, renderDisposition } from './render-scheduling';
 
 type RawMesh = {
@@ -215,8 +223,8 @@ if (typeof document !== 'undefined') {
   let renderWaiters: Array<() => void> = [];
   let renderTimer = 0,
     lastDispatch = 0,
-    observedRenderMs = 0,
     meshVersion = 0;
+  let previewPerformance = initialPreviewPerformance();
 
   function recordMeasure(name: string, start: number, end: number): void {
     try {
@@ -229,9 +237,16 @@ if (typeof document !== 'undefined') {
 
   function measureNextPaint(request: RenderRequest): void {
     requestAnimationFrame(() =>
-      requestAnimationFrame(() =>
-        recordMeasure('slicewise:render:end-to-paint', request.queuedAt, performance.now()),
-      ),
+      requestAnimationFrame(() => {
+        const paintedAt = performance.now();
+        recordMeasure('slicewise:render:end-to-paint', request.queuedAt, paintedAt);
+        if (request.quick && request.meshVersion === meshVersion) {
+          const startedAt = request.dispatchedAt ?? request.queuedAt;
+          previewPerformance = observePreviewPerformance(previewPerformance, paintedAt - startedAt);
+          if (queuedRender?.quick)
+            queuedRender.settings.previewDetail = previewDetail(previewPerformance);
+        }
+      }),
     );
   }
 
@@ -338,15 +353,16 @@ if (typeof document !== 'undefined') {
   }
   function throttleDelay(): number {
     const triangles = state.mesh ? state.mesh.T.length / 3 : 0;
-    const previewLines = Math.min(state.lines, 20);
+    const detail = previewDetail(previewPerformance);
+    const previewLines = previewLineCount(state.lines, detail);
     const visibilityCost = state.hide ? 1.55 : 1;
-    const previewQuality = Math.min(state.quality, 3);
-    const curveCost = 1 + Math.max(0, previewQuality - 1) * 0.055;
+    const quality = previewCurveQuality(state.quality, detail);
+    const curveCost = 1 + Math.max(0, quality - 1) * 0.055;
     const morphCost =
       state.morphEnabled && Object.keys(state.morphTargets).length
-        ? Math.min(state.morphSteps, 3) *
+        ? previewMorphSteps(state.morphSteps, detail) *
           (state.morphSecondEnabled && Object.keys(state.morphTargets2).length
-            ? Math.min(state.morphStepsY, 3)
+            ? previewMorphSteps(state.morphStepsY, detail)
             : 1)
         : 1;
     const score = triangles * previewLines * visibilityCost * curveCost * morphCost;
@@ -355,8 +371,11 @@ if (typeof document !== 'undefined') {
     else if (score < 1500000) complexityDelay = 32;
     else if (score < 4000000) complexityDelay = 60;
     else if (score < 9000000) complexityDelay = 100;
-    // Adapt when a particular device or mesh is slower than the static estimate.
-    return Math.min(180, Math.max(complexityDelay, observedRenderMs * 0.4));
+    // Once measured, the device's end-to-painted-frame cost is more useful than
+    // the conservative static estimate used for the first few frames.
+    return previewPerformance.averageMs
+      ? Math.min(180, Math.max(16, previewPerformance.averageMs * 1.1))
+      : complexityDelay;
   }
   let previewView = { zoom: state.zoom, panX: state.panX, panY: state.panY };
   function installPreviewRoot(): void {
@@ -395,7 +414,6 @@ if (typeof document !== 'undefined') {
     $('rMs').textContent = Math.round(result.ms) + ' ms';
   }
   function applyRender(result: ContourResult, request: RenderRequest): void {
-    observedRenderMs = observedRenderMs ? observedRenderMs * 0.72 + result.ms * 0.28 : result.ms;
     appliedRequestId = request.id;
     state.svg = result.svg;
     state.svgBytes = result.bytes;
@@ -451,11 +469,13 @@ if (typeof document !== 'undefined') {
     // Preserve a queued final-quality request; otherwise only the latest input
     // matters. This coalesces pointer and slider events while the worker is busy.
     const renderQuick = quick && queuedRender?.quick !== false;
+    const settings = settingsSnapshot();
+    if (renderQuick) settings.previewDetail = previewDetail(previewPerformance);
     queuedRender = {
       id: ++requestId,
       meshVersion,
       quick: renderQuick,
-      settings: settingsSnapshot(),
+      settings,
       queuedAt: performance.now(),
     };
     scheduleRender();
@@ -463,10 +483,12 @@ if (typeof document !== 'undefined') {
   function invalidateRenderState(): void {
     requestId++;
     if (!queuedRender) return;
+    const settings = settingsSnapshot();
+    if (queuedRender.quick) settings.previewDetail = previewDetail(previewPerformance);
     queuedRender = {
       ...queuedRender,
       id: requestId,
-      settings: settingsSnapshot(),
+      settings,
       queuedAt: performance.now(),
     };
   }
@@ -513,6 +535,7 @@ if (typeof document !== 'undefined') {
 
   /* --------------------------------------------------------- load model */
   function sendMeshToWorker(mesh: RenderMesh): void {
+    previewPerformance = initialPreviewPerformance();
     const V = mesh.V.slice(),
       T = mesh.T.slice(),
       N = mesh.N.slice();

@@ -27,6 +27,24 @@ describe('computeContours', () => {
     expect(result.toolpaths).toEqual([]);
   });
 
+  it('allows quick previews to reach full contour and curve detail', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      lines: 30,
+      quality: 8,
+    };
+    const preview = computeContours(makeContourMesh(), { ...settings, previewDetail: 1 }, true);
+    const exact = computeContours(makeContourMesh(), settings, false);
+
+    expect(preview.svg).toBe(exact.svg);
+    expect(preview.paths).toBe(exact.paths);
+    expect(preview.nodes).toBe(exact.nodes);
+    expect(preview.toolpaths).toEqual([]);
+    expect(exact.toolpaths.length).toBeGreaterThan(0);
+  });
+
   it('renders every requested morph step into labeled SVG groups', () => {
     const result = computeContours(
       makeContourMesh(),
@@ -57,6 +75,7 @@ describe('computeContours', () => {
         morphSecondEnabled: true,
         morphStepsY: 12,
         morphTargets2: { zoom: 1.5 },
+        previewDetail: 0.5,
       },
       true,
     );
