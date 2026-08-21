@@ -802,7 +802,7 @@ function blueprintDocument(settings,W,H,geometry={}){
 </defs>
 <rect x="${fmt(edge)}" y="${fmt(edge)}" width="${fmt(W-edge*2)}" height="${fmt(H-edge*2)}" fill="url(#blueprint-grid)" stroke="${ink}" stroke-width="0.45" opacity="0.96" vector-effect="non-scaling-stroke"/>
 <path d="M ${fmt(inset)} ${fmt(edge)}v${fmt(edge*.55)}M${fmt(W-inset)} ${fmt(edge)}v${fmt(edge*.55)}M${fmt(edge)} ${fmt(inset)}h${fmt(edge*.55)}M${fmt(edge)} ${fmt(H-inset)}h${fmt(edge*.55)}" ${common} stroke-width="0.35" opacity="0.9"/>`;
-  const overlay=`<g id="technical-annotations">
+  const overlay=`<g id="technical-annotations" style="pointer-events:none;user-select:none;-webkit-user-select:none">
   <g ${text} font-size="${fmt(tiny)}" letter-spacing="${fmt(tiny*.1)}">
     <text x="${fmt(cx)}" y="${fmt(dimensionLabelOffset)}" text-anchor="middle">${fmt(W)} mm · SHEET WIDTH</text>
     <text x="${fmt(dimensionLabelOffset)}" y="${fmt(cy)}" text-anchor="middle" transform="rotate(-90 ${fmt(dimensionLabelOffset)} ${fmt(cy)})">${fmt(H)} mm · SHEET HEIGHT</text>
