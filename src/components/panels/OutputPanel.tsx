@@ -53,9 +53,25 @@ export function OutputPanel() {
         <div className="control-row">
           <label htmlFor="pw">Dimensions</label>
           <div className="sheet-control">
-            <input type="number" id="pw" min="10" max="2000" step="1" defaultValue="210" />
+            <input
+              type="number"
+              id="pw"
+              min="10"
+              max="2000"
+              step="1"
+              defaultValue="210"
+              aria-label="Artboard width"
+            />
             <span>×</span>
-            <input type="number" id="ph" min="10" max="2000" step="1" defaultValue="210" />
+            <input
+              type="number"
+              id="ph"
+              min="10"
+              max="2000"
+              step="1"
+              defaultValue="210"
+              aria-label="Artboard height"
+            />
             <span className="unit">mm</span>
           </div>
         </div>

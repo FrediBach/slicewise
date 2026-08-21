@@ -1501,17 +1501,27 @@ function computeContourInstance(
     }
     return { d, runs: plotRuns };
   };
-  const serialised = out.map((toneGroups) => toneGroups.map(serialiseGroup));
-  const colorPaths = serialised.map((toneGroups) => toneGroups.map((group) => group.d));
+  const colorPaths: string[][] = [];
+  const toolpaths: ContourToolpathGroup[] = [];
+  for (let index = 0; index < out.length; index++) {
+    const pathsForColor: string[] = [];
+    const runsForColor: Polyline[] = [];
+    for (const toneGroup of out[index]) {
+      const group = serialiseGroup(toneGroup);
+      pathsForColor.push(group.d);
+      runsForColor.push(...group.runs);
+    }
+    colorPaths.push(pathsForColor);
+    if (runsForColor.length) {
+      toolpaths.push({
+        color: palette[index],
+        label: settings.gradientEnabled ? `gradient colour ${index + 1}` : 'contours',
+        runs: runsForColor,
+      });
+    }
+  }
   const outlineGroup = serialiseGroup(outlineOut);
   const outlinePath = outlineGroup.d;
-  const toolpaths = serialised
-    .map((toneGroups, index) => ({
-      color: palette[index],
-      label: settings.gradientEnabled ? `gradient colour ${index + 1}` : 'contours',
-      runs: toneGroups.flatMap((group) => group.runs),
-    }))
-    .filter((group) => group.runs.length);
   if (outlineGroup.runs.length) {
     const matching = toolpaths.find(
       (group) => group.color.toLowerCase() === settings.color.toLowerCase(),

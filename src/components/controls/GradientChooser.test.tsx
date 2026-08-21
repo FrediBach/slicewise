@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { GradientChooser } from './GradientChooser';
@@ -45,5 +45,17 @@ describe('GradientChooser', () => {
       expect(screen.getAllByRole('button', { name: /remove stop/i })).toHaveLength(2),
     );
     expect(screen.getAllByRole('button', { name: /remove stop/i })[0]).toBeDisabled();
+  });
+
+  it('preserves a stop identity and focus when its position changes the sort order', () => {
+    render(<GradientChooser />);
+    const movingStop = screen.getAllByRole('slider')[1] as HTMLInputElement;
+    movingStop.focus();
+
+    fireEvent.change(movingStop, { target: { value: '50' } });
+
+    expect(screen.getAllByRole('slider')[2]).toBe(movingStop);
+    expect(movingStop.value).toBe('50');
+    expect(document.activeElement).toBe(movingStop);
   });
 });
