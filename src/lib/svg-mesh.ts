@@ -1,22 +1,24 @@
-import { ExtrudeGeometry } from "three";
+import { ExtrudeGeometry, type Shape, type Vector2 } from "three";
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js";
+import type { ParsedMesh } from "./mesh";
 
-const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
+const clamp=(value: number,min: number,max: number): number=>Math.max(min,Math.min(max,value));
 
-export function parseSVG(text, depthPercent=12, rounded=false, roundnessPercent=25){
+export function parseSVG(text: string, depthPercent=12, rounded=false, roundnessPercent=25): ParsedMesh {
   let data;
   try { data=new SVGLoader().parse(text); }
   catch { throw new Error("That file isn't readable as SVG — check that its paths are valid"); }
 
-  const shapes=[];
+  const shapes: Shape[]=[];
   for (const path of data.paths){
-    if (path.userData?.style?.fill === "none") continue;
+    const style = path.userData?.style as { fill?: string } | undefined;
+    if (style?.fill === "none") continue;
     shapes.push(...path.toShapes());
   }
   if (!shapes.length) throw new Error("No filled shapes found in that SVG — convert strokes to outlines first");
 
   let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
-  const include=point=>{
+  const include=(point: Vector2): void=>{
     if (point.x<minx) minx=point.x; if (point.x>maxx) maxx=point.x;
     if (point.y<miny) miny=point.y; if (point.y>maxy) maxy=point.y;
   };
@@ -30,7 +32,7 @@ export function parseSVG(text, depthPercent=12, rounded=false, roundnessPercent=
   const depth=span*clamp(depthPercent,0.5,100)/100;
   const maxRadius=Math.min(depth/2,span*.25);
   const bevel=rounded ? maxRadius*clamp(roundnessPercent,0,100)/100 : 0;
-  const verts=[], tris=[];
+  const verts: number[]=[], tris: number[]=[];
   for (const shape of shapes){
     const sourceGeometry=new ExtrudeGeometry(shape,{
       depth,
@@ -53,4 +55,3 @@ export function parseSVG(text, depthPercent=12, rounded=false, roundnessPercent=
   }
   return {verts:Float64Array.from(verts),tris:Uint32Array.from(tris)};
 }
-
