@@ -15,6 +15,7 @@ Read the relevant documentation before making changes:
 ```bash
 npm install
 npm run dev
+npm run format:check
 npm run lint
 npm run typecheck
 npm test
@@ -40,6 +41,7 @@ Add or update the smallest test at the closest stable boundary for behavior chan
 Before handing off a change, run the checks relevant to it. For a full verification pass, run:
 
 ```bash
+npm run format:check
 npm run lint
 npm run typecheck
 npm test

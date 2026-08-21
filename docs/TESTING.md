@@ -13,6 +13,7 @@ npm run test:coverage    # run tests and write coverage/index.html
 The normal pre-commit verification sequence is:
 
 ```bash
+npm run format:check
 npm run lint
 npm run typecheck
 npm test

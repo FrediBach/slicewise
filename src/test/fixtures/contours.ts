@@ -1,7 +1,7 @@
-import { sphereDemo, vertexNormals, weld } from "../../lib/mesh";
+import { sphereDemo, vertexNormals, weld } from '../../lib/mesh';
 
 export const makeContourMesh = () => {
-  const normalized = weld(sphereDemo("ripple", 24, 12));
+  const normalized = weld(sphereDemo('ripple', 24, 12));
   return { ...normalized, N: vertexNormals(normalized.V, normalized.T) };
 };
 
@@ -12,28 +12,28 @@ export const contourSettings = {
   zoom: 1,
   panX: 0,
   panY: 0,
-  lens: "clean",
+  lens: 'clean',
   lensAmount: 100,
   lines: 8,
-  gapEase: "linear",
+  gapEase: 'linear',
   easeStrength: 100,
   easeCycles: 1,
   easeCenter: 50,
   quality: 3,
-  axis: "up",
+  axis: 'up',
   cutAz: 0,
   cutEl: 90,
   spiral: false,
   hide: true,
   sil: true,
   sw: 0.35,
-  color: "#15181a",
-  backgroundColor: "#ffffff",
+  color: '#15181a',
+  backgroundColor: '#ffffff',
   gradientEnabled: false,
   gradientColors: 3,
   gradientStops: [
-    { position: 0, color: "#ef4444" },
-    { position: 1, color: "#3b82f6" },
+    { position: 0, color: '#ef4444' },
+    { position: 1, color: '#3b82f6' },
   ],
   pw: 120,
   ph: 100,
@@ -48,8 +48,8 @@ export const contourSettings = {
   humanizer: false,
   humanizerAmount: 30,
   blueprint: false,
-  blueprintStyle: "blue",
-  documentTitle: "test sphere",
+  blueprintStyle: 'blue',
+  documentTitle: 'test sphere',
   morphEnabled: false,
   morphSteps: 3,
   morphTargets: {},

@@ -1,22 +1,22 @@
-import react from "@vitejs/plugin-react";
-import { defineConfig } from "vitest/config";
-import path from "node:path";
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vitest/config';
+import path from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
+  resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
   test: {
-    environment: "node",
-    setupFiles: ["./src/test/setup.ts"],
+    environment: 'node',
+    setupFiles: ['./src/test/setup.ts'],
     coverage: {
-      provider: "v8",
-      reporter: ["text", "html"],
-      reportsDirectory: "coverage",
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      reportsDirectory: 'coverage',
       include: [
-        "src/lib/{colorPair,contour-engine,gcode,generativeMesh,mesh,svg-mesh}.ts",
-        "src/components/controls/{FormControls,GradientChooser}.tsx",
+        'src/lib/{colorPair,contour-engine,gcode,generativeMesh,mesh,svg-mesh}.ts',
+        'src/components/controls/{FormControls,GradientChooser}.tsx',
       ],
-      exclude: ["src/**/*.d.ts", "src/test/**"],
+      exclude: ['src/**/*.d.ts', 'src/test/**'],
       thresholds: {
         statements: 85,
         branches: 70,

@@ -1,74 +1,86 @@
-import { describe, expect, it } from "vitest";
-import { generateGCode, type ToolpathGroup } from "./gcode";
+import { describe, expect, it } from 'vitest';
+import { generateGCode, type ToolpathGroup } from './gcode';
 
 const group = (runs: number[][]): ToolpathGroup => ({
-  color: "#123456",
-  label: "contours",
+  color: '#123456',
+  label: 'contours',
   runs,
 });
 
-describe("generateGCode", () => {
-  it("converts SVG coordinates to a bottom-left machine origin", () => {
+describe('generateGCode', () => {
+  it('converts SVG coordinates to a bottom-left machine origin', () => {
     const output = generateGCode([group([[10, 20, 30, 40]])], { width: 200, height: 100 });
 
-    expect(output).toContain("; Origin: bottom-left of sheet; +X right; +Y up");
-    expect(output).toContain("G0 X30 Y60 F3000");
-    expect(output).toContain("G1 X10 Y80 F1200");
+    expect(output).toContain('; Origin: bottom-left of sheet; +X right; +Y up');
+    expect(output).toContain('G0 X30 Y60 F3000');
+    expect(output).toContain('G1 X10 Y80 F1200');
   });
 
-  it("preserves Y coordinates for the rear-left plotter origin", () => {
+  it('preserves Y coordinates for the rear-left plotter origin', () => {
     const output = generateGCode(
       [group([[10, 20, 30, 40]])],
       { width: 200, height: 100 },
-      { origin: "rear-left", drawFeed: 2400, travelFeed: 4800 },
+      { origin: 'rear-left', drawFeed: 2400, travelFeed: 4800 },
     );
 
-    expect(output).toContain("; Origin: rear-left of sheet; +X right; +Y toward front");
-    expect(output).toContain("G0 X10 Y20 F4800");
-    expect(output).toContain("G1 X30 Y40 F2400");
+    expect(output).toContain('; Origin: rear-left of sheet; +X right; +Y toward front');
+    expect(output).toContain('G0 X10 Y20 F4800');
+    expect(output).toContain('G1 X30 Y40 F2400');
   });
 
-  it("orders runs from the nearest endpoint and requests pen changes", () => {
+  it('orders runs from the nearest endpoint and requests pen changes', () => {
     const output = generateGCode(
       [
-        group([[100, 100, 110, 100], [10, 0, 1, 0]]),
-        { color: "#abcdef", label: "outline", runs: [[5, 5, 6, 6]] },
+        group([
+          [100, 100, 110, 100],
+          [10, 0, 1, 0],
+        ]),
+        { color: '#abcdef', label: 'outline', runs: [[5, 5, 6, 6]] },
       ],
       { width: 120, height: 120 },
-      { origin: "rear-left" },
+      { origin: 'rear-left' },
     );
 
-    const firstMove = output.split("\n").find(line => line.startsWith("G0 X"));
-    expect(firstMove).toBe("G0 X1 Y0 F3000");
-    expect(output).toContain("M0 ; change pen to #abcdef");
+    const firstMove = output.split('\n').find((line) => line.startsWith('G0 X'));
+    expect(firstMove).toBe('G0 X1 Y0 F3000');
+    expect(output).toContain('M0 ; change pen to #abcdef');
   });
 
-  it("drops unusable paths and sanitizes user text in comments", () => {
+  it('drops unusable paths and sanitizes user text in comments', () => {
     const output = generateGCode(
-      [{ color: "black", label: "empty", runs: [[1, 2], [Number.NaN, 0, 2, 2]] }],
+      [
+        {
+          color: 'black',
+          label: 'empty',
+          runs: [
+            [1, 2],
+            [Number.NaN, 0, 2, 2],
+          ],
+        },
+      ],
       { width: -1, height: Number.NaN },
-      { name: "study (draft)\n2", machine: "plotter (A)" },
+      { name: 'study (draft)\n2', machine: 'plotter (A)' },
     );
 
-    expect(output).toContain("; Source: study  draft  2");
-    expect(output).toContain("; Machine: plotter  A");
-    expect(output).toContain("; Sheet: 210 x 210 mm");
-    expect(output).not.toContain("; Tool 1:");
+    expect(output).toContain('; Source: study  draft  2');
+    expect(output).toContain('; Machine: plotter  A');
+    expect(output).toContain('; Sheet: 210 x 210 mm');
+    expect(output).not.toContain('; Tool 1:');
   });
 
-  it("deduplicates near-identical points and clamps numeric precision", () => {
+  it('deduplicates near-identical points and clamps numeric precision', () => {
     const output = generateGCode(
       [group([[0, 0, 0.0001, 0.0001, 1.23456, 2.34567]])],
       { width: 10, height: 10 },
-      { origin: "rear-left" },
+      { origin: 'rear-left' },
     );
 
-    expect(output).toContain("G0 X0 Y0 F3000");
-    expect(output).toContain("G1 X1.235 Y2.346 F1200");
-    expect(output).not.toContain("0.0001");
+    expect(output).toContain('G0 X0 Y0 F3000');
+    expect(output).toContain('G1 X1.235 Y2.346 F1200');
+    expect(output).not.toContain('0.0001');
   });
 
-  it("emits configured machine motion and effect notes", () => {
+  it('emits configured machine motion and effect notes', () => {
     const output = generateGCode(
       [group([[0, 0, 1, 1]])],
       { width: 10, height: 10 },
@@ -76,25 +88,25 @@ describe("generateGCode", () => {
         penUp: 3.25,
         penDown: -2.5,
         zFeed: 900,
-        machine: "UUNA TEK",
+        machine: 'UUNA TEK',
         effects: { halftone: true, chroma: true, humanizer: true, blueprint: true },
       },
     );
 
-    expect(output).toContain("G1 Z3.25 F900 ; pen up");
-    expect(output).toContain("G1 Z-2.5 F900 ; pen down");
-    expect(output).toContain("SVG dash styling is exported as continuous plotter paths");
-    expect(output).toContain("chromatic SVG offsets are exported as one base contour set");
-    expect(output).toContain("Humanizer: hand-drawn variations are included");
-    expect(output).toContain("blueprint border and annotations are SVG-only");
+    expect(output).toContain('G1 Z3.25 F900 ; pen up');
+    expect(output).toContain('G1 Z-2.5 F900 ; pen down');
+    expect(output).toContain('SVG dash styling is exported as continuous plotter paths');
+    expect(output).toContain('chromatic SVG offsets are exported as one base contour set');
+    expect(output).toContain('Humanizer: hand-drawn variations are included');
+    expect(output).toContain('blueprint border and annotations are SVG-only');
   });
 
-  it("always returns controller setup and shutdown for an empty drawing", () => {
+  it('always returns controller setup and shutdown for an empty drawing', () => {
     const output = generateGCode([], {}, {});
 
-    expect(output).toContain("G21 ; millimetres");
-    expect(output).toContain("G90 ; absolute positioning");
-    expect(output).toContain("G0 X0 Y0 F3000");
-    expect(output.endsWith("M2\n")).toBe(true);
+    expect(output).toContain('G21 ; millimetres');
+    expect(output).toContain('G90 ; absolute positioning');
+    expect(output).toContain('G0 X0 Y0 F3000');
+    expect(output.endsWith('M2\n')).toBe(true);
   });
 });

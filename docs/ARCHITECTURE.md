@@ -114,6 +114,7 @@ Keep serialization in a focused library module like `gcode.ts`. Let `slicer.ts` 
 Run all checks before committing:
 
 ```bash
+npm run format:check
 npm run lint
 npm run typecheck
 npm test

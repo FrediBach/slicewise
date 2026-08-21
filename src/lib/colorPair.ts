@@ -141,8 +141,7 @@ function mulberry32(seed: number): RandomSource {
 // Color space conversions (Björn Ottosson's Oklab)
 // ---------------------------------------------------------------------------
 
-const clamp = (x: number, lo: number, hi: number): number =>
-  Math.min(hi, Math.max(lo, x));
+const clamp = (x: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, x));
 
 function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
@@ -157,7 +156,9 @@ function linearRgbToOklab({ r, g, b }: RgbColor): OklabColor {
   const m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
   const s = 0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b;
 
-  const l_ = Math.cbrt(l), m_ = Math.cbrt(m), s_ = Math.cbrt(s);
+  const l_ = Math.cbrt(l),
+    m_ = Math.cbrt(m),
+    s_ = Math.cbrt(s);
 
   return {
     L: 0.2104542553 * l_ + 0.793617785 * m_ - 0.0040720468 * s_,
@@ -171,7 +172,9 @@ function oklabToLinearRgb({ L, a, b }: OklabColor): RgbColor {
   const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
   const s_ = L - 0.0894841775 * a - 1.291485548 * b;
 
-  const l = l_ * l_ * l_, m = m_ * m_ * m_, s = s_ * s_ * s_;
+  const l = l_ * l_ * l_,
+    m = m_ * m_ * m_,
+    s = s_ * s_ * s_;
 
   return {
     r: 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
@@ -201,11 +204,7 @@ const EPS = 1e-5;
 
 function inSrgbGamut(oklch: OklchColor): boolean {
   const { r, g, b } = oklabToLinearRgb(oklchToOklab(oklch));
-  return (
-    r >= -EPS && r <= 1 + EPS &&
-    g >= -EPS && g <= 1 + EPS &&
-    b >= -EPS && b <= 1 + EPS
-  );
+  return r >= -EPS && r <= 1 + EPS && g >= -EPS && g <= 1 + EPS && b >= -EPS && b <= 1 + EPS;
 }
 
 /**
@@ -214,7 +213,8 @@ function inSrgbGamut(oklch: OklchColor): boolean {
  * starting at 0, so bisection converges reliably. ~1e-4 precision in 20 steps.
  */
 function maxChroma(L: number, H: number): number {
-  let lo = 0, hi = 0.4;
+  let lo = 0,
+    hi = 0.4;
   if (inSrgbGamut({ L, C: hi, H })) return hi;
   for (let i = 0; i < 20; i++) {
     const mid = (lo + hi) / 2;
@@ -262,7 +262,11 @@ function parseColor(input: ColorInput | null | undefined): OklchColor | null {
   let r, g, b;
   if (typeof input === 'string') {
     let hex = input.trim().replace(/^#/, '');
-    if (hex.length === 3) hex = hex.split('').map((c) => c + c).join('');
+    if (hex.length === 3)
+      hex = hex
+        .split('')
+        .map((c) => c + c)
+        .join('');
     if (!/^[0-9a-f]{6}$/i.test(hex)) throw new Error(`Bad color: ${input}`);
     r = parseInt(hex.slice(0, 2), 16);
     g = parseInt(hex.slice(2, 4), 16);
@@ -278,7 +282,7 @@ function parseColor(input: ColorInput | null | undefined): OklchColor | null {
       r: srgbToLinear(r / 255),
       g: srgbToLinear(g / 255),
       b: srgbToLinear(b / 255),
-    })
+    }),
   );
 }
 
@@ -299,10 +303,7 @@ function contrastRatio(oklchA: OklchColor, oklchB: OklchColor): number {
 
 const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
-function pickWeighted<T extends { weight: number }>(
-  items: readonly T[],
-  rng: RandomSource,
-): T {
+function pickWeighted<T extends { weight: number }>(items: readonly T[], rng: RandomSource): T {
   const total = items.reduce((sum, it) => sum + it.weight, 0);
   let t = rng() * total;
   for (const it of items) {
@@ -312,8 +313,7 @@ function pickWeighted<T extends { weight: number }>(
   return items[items.length - 1];
 }
 
-const pick = <T>(arr: readonly T[], rng: RandomSource): T =>
-  arr[Math.floor(rng() * arr.length)];
+const pick = <T>(arr: readonly T[], rng: RandomSource): T => arr[Math.floor(rng() * arr.length)];
 
 /**
  * Sample a partner lightness uniformly over the feasible set:
@@ -338,9 +338,7 @@ function pickPartnerLightness(
   }
 
   const goDown = rng() * (downRoom + upRoom) < downRoom;
-  return goDown
-    ? lerp(lo, L0 - minDiff, rng())
-    : lerp(L0 + minDiff, hi, rng());
+  return goDown ? lerp(lo, L0 - minDiff, rng()) : lerp(L0 + minDiff, hi, rng());
 }
 
 // ---------------------------------------------------------------------------
@@ -354,9 +352,7 @@ function pickPartnerLightness(
  */
 function createColorPair(opts: CreateColorPairOptions = {}): ColorPair {
   const cfg: ColorPairConfig = { ...DEFAULTS, ...opts };
-  const rng: RandomSource =
-    cfg.rng ??
-    (cfg.seed != null ? mulberry32(cfg.seed) : Math.random);
+  const rng: RandomSource = cfg.rng ?? (cfg.seed != null ? mulberry32(cfg.seed) : Math.random);
 
   const [loL, hiL] = cfg.lightnessRange;
   const [loC, hiC] = cfg.chromaRange;
@@ -389,11 +385,7 @@ function createColorPair(opts: CreateColorPairOptions = {}): ColorPair {
   if (cfg.minContrast) {
     const dir = b.L >= a.L ? 1 : -1;
     let steps = 0;
-    while (
-      contrastRatio(a, b) < cfg.minContrast &&
-      b.L > 0 && b.L < 1 &&
-      steps++ < 120
-    ) {
+    while (contrastRatio(a, b) < cfg.minContrast && b.L > 0 && b.L < 1 && steps++ < 120) {
       b = gamutMap({ L: clamp(b.L + dir * 0.01, 0, 1), C: b.C, H: b.H });
     }
   }
@@ -414,11 +406,4 @@ function createColorPair(opts: CreateColorPairOptions = {}): ColorPair {
   };
 }
 
-export {
-  createColorPair,
-  parseColor,
-  maxChroma,
-  contrastRatio,
-  oklchToHex,
-  mulberry32,
-};
+export { createColorPair, parseColor, maxChroma, contrastRatio, oklchToHex, mulberry32 };

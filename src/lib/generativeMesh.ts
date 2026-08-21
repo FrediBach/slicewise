@@ -31,13 +31,7 @@
 // Parameters
 // ---------------------------------------------------------------------------
 
-export type GenField =
-  | 'gyroid'
-  | 'schwarzP'
-  | 'diamond'
-  | 'neovius'
-  | 'metaballs'
-  | 'supershape';
+export type GenField = 'gyroid' | 'schwarzP' | 'diamond' | 'neovius' | 'metaballs' | 'supershape';
 
 export interface GenerativeParams {
   /** 0–9999. Drives every randomized aspect of the field. */
@@ -125,7 +119,7 @@ function makeRng(seed: number): () => number {
     s ^= s << 13;
     s ^= s >>> 17;
     s ^= s << 5;
-    return ((s >>> 0) / 4294967296);
+    return (s >>> 0) / 4294967296;
   };
 }
 
@@ -135,8 +129,12 @@ function smoothstep(t: number): number {
 
 /** 3D value noise on the integer lattice. */
 function valueNoise(x: number, y: number, z: number, seed: number): number {
-  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
-  const tx = smoothstep(x - xi), ty = smoothstep(y - yi), tz = smoothstep(z - zi);
+  const xi = Math.floor(x),
+    yi = Math.floor(y),
+    zi = Math.floor(z);
+  const tx = smoothstep(x - xi),
+    ty = smoothstep(y - yi),
+    tz = smoothstep(z - zi);
 
   const c000 = hashInt(xi, yi, zi, seed);
   const c100 = hashInt(xi + 1, yi, zi, seed);
@@ -157,7 +155,10 @@ function valueNoise(x: number, y: number, z: number, seed: number): number {
 }
 
 function fbm(x: number, y: number, z: number, seed: number): number {
-  let sum = 0, amp = 0.5, f = 1, norm = 0;
+  let sum = 0,
+    amp = 0.5,
+    f = 1,
+    norm = 0;
   for (let o = 0; o < 4; o++) {
     sum += amp * valueNoise(x * f, y * f, z * f, seed + o * 7919);
     norm += amp;
@@ -189,11 +190,22 @@ const SPHERE_R = 0.95;
 /** Grid half-extent. Must exceed SPHERE_R so boundary samples are always outside. */
 const BOUND = 1.12;
 
-interface Metaball { x: number; y: number; z: number; r: number; }
+interface Metaball {
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+}
 
 interface SupershapeCoeffs {
-  m1: number; n11: number; n12: number; n13: number;
-  m2: number; n21: number; n22: number; n23: number;
+  m1: number;
+  n11: number;
+  n12: number;
+  n13: number;
+  m2: number;
+  n21: number;
+  n22: number;
+  n23: number;
 }
 
 /**
@@ -263,8 +275,14 @@ class Field {
       const lobes = () => 2 * (1 + Math.floor(rng() * 6));
       const expo = () => 0.4 + rng() * 3.5;
       this.ss = {
-        m1: lobes(), n11: 0.5 + rng() * 2.0, n12: expo(), n13: expo(),
-        m2: lobes(), n21: 0.5 + rng() * 2.0, n22: expo(), n23: expo(),
+        m1: lobes(),
+        n11: 0.5 + rng() * 2.0,
+        n12: expo(),
+        n13: expo(),
+        m2: lobes(),
+        n21: 0.5 + rng() * 2.0,
+        n22: expo(),
+        n23: expo(),
       };
     }
   }
@@ -282,15 +300,13 @@ class Field {
   /** Raw implicit value before iso subtraction, already domain-scaled. */
   private raw(x: number, y: number, z: number): number {
     const p = this.p;
-    const X = x * this.fxy, Y = y * this.fxy, Z = z * this.fz;
+    const X = x * this.fxy,
+      Y = y * this.fxy,
+      Z = z * this.fz;
 
     switch (p.genField) {
       case 'gyroid':
-        return (
-          Math.sin(X) * Math.cos(Y) +
-          Math.sin(Y) * Math.cos(Z) +
-          Math.sin(Z) * Math.cos(X)
-        );
+        return Math.sin(X) * Math.cos(Y) + Math.sin(Y) * Math.cos(Z) + Math.sin(Z) * Math.cos(X);
       case 'schwarzP':
         return Math.cos(X) + Math.cos(Y) + Math.cos(Z);
       case 'diamond':
@@ -321,10 +337,12 @@ class Field {
     const dSphere = Math.sqrt(x * x + y * y + z * z) - SPHERE_R;
 
     // Twist the sampling domain about Z.
-    let tx = x, ty = y;
+    let tx = x,
+      ty = y;
     if (this.twist !== 0) {
       const ang = this.twist * z;
-      const c = Math.cos(ang), s = Math.sin(ang);
+      const c = Math.cos(ang),
+        s = Math.sin(ang);
       tx = x * c - y * s;
       ty = x * s + y * c;
     }
@@ -340,7 +358,9 @@ class Field {
       let sum = 0;
       for (let i = 0; i < this.balls.length; i++) {
         const b = this.balls[i];
-        const dx = tx - b.x, dy = ty - b.y, dz = z - b.z;
+        const dx = tx - b.x,
+          dy = ty - b.y,
+          dz = z - b.z;
         const q = (dx * dx + dy * dy + dz * dz) / (b.r * b.r);
         if (q < 1) {
           const w = 1 - q;
@@ -394,9 +414,18 @@ function clamp(v: number, lo: number, hi: number): number {
 
 /** Cube corner i has offsets (i&1, (i>>1)&1, (i>>2)&1). */
 const EDGE_CORNERS: ReadonlyArray<readonly [number, number]> = [
-  [0, 1], [2, 3], [4, 5], [6, 7], // along X
-  [0, 2], [1, 3], [4, 6], [5, 7], // along Y
-  [0, 4], [1, 5], [2, 6], [3, 7], // along Z
+  [0, 1],
+  [2, 3],
+  [4, 5],
+  [6, 7], // along X
+  [0, 2],
+  [1, 3],
+  [4, 6],
+  [5, 7], // along Y
+  [0, 4],
+  [1, 5],
+  [2, 6],
+  [3, 7], // along Z
 ];
 
 export function generateMesh(
@@ -408,7 +437,7 @@ export function generateMesh(
   const res = Math.max(8, Math.min(256, Math.round(params.genRes)));
   const field = new Field(params);
 
-  const n = res + 1;                 // samples per axis
+  const n = res + 1; // samples per axis
   const step = (2 * BOUND) / res;
   const nn = n * n;
 
@@ -437,11 +466,15 @@ export function generateMesh(
   const cellFirstVert = new Int32Array(cellCount).fill(-1);
   const cellComp = new Uint16Array(cellCount);
 
-  const px: number[] = [], py: number[] = [], pz: number[] = [];
+  const px: number[] = [],
+    py: number[] = [],
+    pz: number[] = [];
   const corner = new Float64Array(8);
   const compOf = new Int8Array(8);
   const stack = new Int8Array(8);
-  const accX = new Float64Array(4), accY = new Float64Array(4), accZ = new Float64Array(4);
+  const accX = new Float64Array(4),
+    accY = new Float64Array(4),
+    accZ = new Float64Array(4);
   const accN = new Int32Array(4);
 
   for (let k = 0; k < res; k++) {
@@ -478,15 +511,22 @@ export function generateMesh(
           nComp++;
         }
 
-        accX.fill(0); accY.fill(0); accZ.fill(0); accN.fill(0);
+        accX.fill(0);
+        accY.fill(0);
+        accZ.fill(0);
+        accN.fill(0);
         for (let e = 0; e < 12; e++) {
-          const a = EDGE_CORNERS[e][0], b = EDGE_CORNERS[e][1];
-          const va = corner[a], vb = corner[b];
+          const a = EDGE_CORNERS[e][0],
+            b = EDGE_CORNERS[e][1];
+          const va = corner[a],
+            vb = corner[b];
           const ina = va < 0;
           if (ina === vb < 0) continue;
           const g = compOf[ina ? a : b]; // the inside endpoint owns the crossing
           const t = va / (va - vb);
-          const ax = a & 1, ay = (a >> 1) & 1, az = (a >> 2) & 1;
+          const ax = a & 1,
+            ay = (a >> 1) & 1,
+            az = (a >> 2) & 1;
           accX[g] += ax + ((b & 1) - ax) * t;
           accY[g] += ay + (((b >> 1) & 1) - ay) * t;
           accZ[g] += az + (((b >> 2) & 1) - az) * t;
@@ -540,7 +580,7 @@ export function generateMesh(
 
         // +X edge: low endpoint is corner 0/2/6/4 in the four surrounding
         // cells; add 1 for the high endpoint.
-        if (j > 0 && k > 0 && in0 !== (grid[base + 1] < 0)) {
+        if (j > 0 && k > 0 && in0 !== grid[base + 1] < 0) {
           const o = in0 ? 0 : 1;
           emit(
             vertexIn(i, j, k, 0 + o),
@@ -551,7 +591,7 @@ export function generateMesh(
           );
         }
         // +Y edge: add 2 for the high endpoint.
-        if (i > 0 && k > 0 && in0 !== (grid[base + n] < 0)) {
+        if (i > 0 && k > 0 && in0 !== grid[base + n] < 0) {
           const o = in0 ? 0 : 2;
           emit(
             vertexIn(i, j, k, 0 + o),
@@ -562,7 +602,7 @@ export function generateMesh(
           );
         }
         // +Z edge: add 4 for the high endpoint.
-        if (i > 0 && j > 0 && in0 !== (grid[base + nn] < 0)) {
+        if (i > 0 && j > 0 && in0 !== grid[base + nn] < 0) {
           const o = in0 ? 0 : 4;
           emit(
             vertexIn(i, j, k, 0 + o),
@@ -583,7 +623,9 @@ export function generateMesh(
   const h = step * 0.5;
 
   for (let v = 0; v < vertexCount; v++) {
-    const x = px[v], y = py[v], z = pz[v];
+    const x = px[v],
+      y = py[v],
+      z = pz[v];
     positions[v * 3] = x;
     positions[v * 3 + 1] = y;
     positions[v * 3 + 2] = z;
@@ -609,12 +651,15 @@ export function generateMesh(
     const SHIFT = 4194304;
     const counts = new Map<number, number>();
     for (let t = 0; t < tris.length; t += 3) {
-      const a = tris[t], b = tris[t + 1], c = tris[t + 2];
+      const a = tris[t],
+        b = tris[t + 1],
+        c = tris[t + 2];
       counts.set(a * SHIFT + b, (counts.get(a * SHIFT + b) ?? 0) + 1);
       counts.set(b * SHIFT + c, (counts.get(b * SHIFT + c) ?? 0) + 1);
       counts.set(c * SHIFT + a, (counts.get(c * SHIFT + a) ?? 0) + 1);
     }
-    let open = 0, nonManifold = 0;
+    let open = 0,
+      nonManifold = 0;
     for (const [key, count] of counts) {
       if (count > 1) nonManifold += count - 1;
       const a = Math.floor(key / SHIFT);
@@ -640,20 +685,42 @@ export function meshToStl(mesh: GeneratedMesh): ArrayBuffer {
 
   let o = 84;
   for (let t = 0; t < triCount; t++) {
-    const ia = mesh.indices[t * 3], ib = mesh.indices[t * 3 + 1], ic = mesh.indices[t * 3 + 2];
-    const ax = mesh.positions[ia * 3], ay = mesh.positions[ia * 3 + 1], az = mesh.positions[ia * 3 + 2];
-    const bx = mesh.positions[ib * 3], by = mesh.positions[ib * 3 + 1], bz = mesh.positions[ib * 3 + 2];
-    const cx = mesh.positions[ic * 3], cy = mesh.positions[ic * 3 + 1], cz = mesh.positions[ic * 3 + 2];
+    const ia = mesh.indices[t * 3],
+      ib = mesh.indices[t * 3 + 1],
+      ic = mesh.indices[t * 3 + 2];
+    const ax = mesh.positions[ia * 3],
+      ay = mesh.positions[ia * 3 + 1],
+      az = mesh.positions[ia * 3 + 2];
+    const bx = mesh.positions[ib * 3],
+      by = mesh.positions[ib * 3 + 1],
+      bz = mesh.positions[ib * 3 + 2];
+    const cx = mesh.positions[ic * 3],
+      cy = mesh.positions[ic * 3 + 1],
+      cz = mesh.positions[ic * 3 + 2];
 
-    const ux = bx - ax, uy = by - ay, uz = bz - az;
-    const vx = cx - ax, vy = cy - ay, vz = cz - az;
-    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const ux = bx - ax,
+      uy = by - ay,
+      uz = bz - az;
+    const vx = cx - ax,
+      vy = cy - ay,
+      vz = cz - az;
+    const nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx;
     const nl = Math.hypot(nx, ny, nz) || 1;
 
-    dv.setFloat32(o, nx / nl, true); dv.setFloat32(o + 4, ny / nl, true); dv.setFloat32(o + 8, nz / nl, true);
-    dv.setFloat32(o + 12, ax, true); dv.setFloat32(o + 16, ay, true); dv.setFloat32(o + 20, az, true);
-    dv.setFloat32(o + 24, bx, true); dv.setFloat32(o + 28, by, true); dv.setFloat32(o + 32, bz, true);
-    dv.setFloat32(o + 36, cx, true); dv.setFloat32(o + 40, cy, true); dv.setFloat32(o + 44, cz, true);
+    dv.setFloat32(o, nx / nl, true);
+    dv.setFloat32(o + 4, ny / nl, true);
+    dv.setFloat32(o + 8, nz / nl, true);
+    dv.setFloat32(o + 12, ax, true);
+    dv.setFloat32(o + 16, ay, true);
+    dv.setFloat32(o + 20, az, true);
+    dv.setFloat32(o + 24, bx, true);
+    dv.setFloat32(o + 28, by, true);
+    dv.setFloat32(o + 32, bz, true);
+    dv.setFloat32(o + 36, cx, true);
+    dv.setFloat32(o + 40, cy, true);
+    dv.setFloat32(o + 44, cz, true);
     o += 50;
   }
   return buf;
