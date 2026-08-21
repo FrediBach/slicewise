@@ -1,7 +1,34 @@
 "use strict";
 
+export type RawMesh = {
+  verts: Float32Array | Float64Array;
+  tris: Uint32Array;
+};
+
+export type ParsedMesh = {
+  verts: Float64Array;
+  tris: Uint32Array;
+};
+
+export type NormalizedMesh = {
+  V: Float32Array;
+  T: Uint32Array;
+};
+
+type PlyProperty =
+  | { list: false; type: string; name: string }
+  | { list: true; countType: string; type: string; name: string };
+
+type PlyElement = {
+  name: string;
+  count: number;
+  props: PlyProperty[];
+};
+
+type Vec3 = number[];
+
 /* ------------------------------------------------------------- parsing */
-function parseSTL(buf){
+function parseSTL(buf: ArrayBuffer): ParsedMesh {
   const dv = new DataView(buf);
   if (buf.byteLength >= 84){
     const n = dv.getUint32(80, true);
@@ -11,7 +38,7 @@ function parseSTL(buf){
   if (/facet\s+normal/i.test(txt)) return parseSTLAscii(txt);
   throw new Error("That file isn't readable as STL — re-export it as binary or ASCII STL");
 }
-function parseSTLBinary(dv, n){
+function parseSTLBinary(dv: DataView, n: number): ParsedMesh {
   const verts = new Float64Array(n*9), tris = new Uint32Array(n*3);
   let o = 84;
   for (let i=0;i<n;i++){
@@ -27,10 +54,10 @@ function parseSTLBinary(dv, n){
   }
   return {verts, tris};
 }
-function parseSTLAscii(txt){
-  const v = [];
+function parseSTLAscii(txt: string): ParsedMesh {
+  const v: number[] = [];
   const re = /vertex\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)\s+(-?[\d.eE+-]+)/g;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(txt))) v.push(+m[1], +m[2], +m[3]);
   const n = Math.floor(v.length/9)*3;
   const tris = new Uint32Array(n);
@@ -38,8 +65,8 @@ function parseSTLAscii(txt){
   return {verts: Float64Array.from(v.slice(0, n*3)), tris};
 }
 
-function parseOBJ(text){
-  const v = [], f = [];
+function parseOBJ(text: string): ParsedMesh {
+  const v: number[] = [], f: number[] = [];
   const lines = text.split(/\r?\n/);
   for (const line of lines){
     if (line.charCodeAt(0) === 118 && line[1] === ' '){          // "v "
@@ -47,7 +74,7 @@ function parseOBJ(text){
       v.push(+p[1], +p[2], +p[3]);
     } else if (line.charCodeAt(0) === 102 && (line[1] === ' ' || line[1] === '\t')){ // "f "
       const p = line.trim().split(/\s+/);
-      const idx = [];
+      const idx: number[] = [];
       for (let i=1;i<p.length;i++){
         const s = p[i].split('/')[0];
         if (!s) continue;
@@ -62,15 +89,15 @@ function parseOBJ(text){
   return {verts: Float64Array.from(v), tris: Uint32Array.from(f)};
 }
 
-function parsePLY(buf){
+function parsePLY(buf: ArrayBuffer): ParsedMesh {
   const bytes = new Uint8Array(buf);
   const headTxt = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 20000)));
   const endIdx = headTxt.indexOf("end_header");
   if (endIdx < 0) throw new Error("That file isn't readable as PLY — the header is missing");
   const headEnd = headTxt.indexOf("\n", endIdx) + 1;
   const header = headTxt.slice(0, headEnd).split(/\r?\n/);
-  let fmtType = "ascii", cur = null;
-  const elems = [];
+  let fmtType = "ascii", cur: PlyElement | null = null;
+  const elems: PlyElement[] = [];
   for (const raw of header){
     const t = raw.trim().split(/\s+/);
     if (t[0] === "format") fmtType = t[1];
@@ -84,12 +111,12 @@ function parsePLY(buf){
   const fEl = elems.find(e => e.name === "face");
   if (!vEl) throw new Error("PLY has no vertex element");
   const verts = new Float64Array(vEl.count*3);
-  const faces = [];
+  const faces: number[] = [];
 
   if (fmtType === "ascii"){
     const body = new TextDecoder().decode(bytes.subarray(headEnd)).split(/\r?\n/);
     let li = 0;
-    const next = () => { while (li < body.length && !body[li].trim()) li++; return body[li++].trim().split(/\s+/); };
+    const next = (): string[] => { while (li < body.length && !body[li].trim()) li++; return body[li++].trim().split(/\s+/); };
     const xi = vEl.props.findIndex(p=>p.name==="x"), yi = vEl.props.findIndex(p=>p.name==="y"), zi = vEl.props.findIndex(p=>p.name==="z");
     for (let i=0;i<vEl.count;i++){ const t = next(); verts[i*3]=+t[xi]; verts[i*3+1]=+t[yi]; verts[i*3+2]=+t[zi]; }
     if (fEl) for (let i=0;i<fEl.count;i++){
@@ -100,7 +127,7 @@ function parsePLY(buf){
     const le = fmtType.indexOf("little") >= 0;
     const dv = new DataView(buf);
     let o = headEnd;
-    const read = (type) => {
+    const read = (type: string): number => {
       switch(type){
         case "char": case "int8":   return dv.getInt8(o++);
         case "uchar": case "uint8": return dv.getUint8(o++);
@@ -123,7 +150,7 @@ function parsePLY(buf){
           }
           verts[i*3]=rec.x; verts[i*3+1]=rec.y; verts[i*3+2]=rec.z;
         } else if (el === fEl){
-          let poly = null;
+          let poly: number[] | null = null;
           for (const p of el.props){
             if (p.list){
               const k = read(p.countType), arr = [];
@@ -146,7 +173,7 @@ function parsePLY(buf){
 }
 
 /* ------------------------------------------------- weld + normalise */
-function weld(raw){
+function weld(raw: RawMesh): NormalizedMesh {
   const {verts, tris} = raw;
   let minx=Infinity,miny=Infinity,minz=Infinity,maxx=-Infinity,maxy=-Infinity,maxz=-Infinity;
   for (let i=0;i<verts.length;i+=3){
@@ -157,8 +184,8 @@ function weld(raw){
   }
   const diag = Math.hypot(maxx-minx, maxy-miny, maxz-minz) || 1;
   const q = diag * 1e-6;
-  const map = new Map();
-  const out = [];
+  const map = new Map<string, number>();
+  const out: number[] = [];
   const remap = new Uint32Array(verts.length/3);
   for (let i=0, vi=0; i<verts.length; i+=3, vi++){
     const key = Math.round(verts[i]/q)+"_"+Math.round(verts[i+1]/q)+"_"+Math.round(verts[i+2]/q);
@@ -187,7 +214,7 @@ function weld(raw){
   return {V, T: t2.subarray(0,n)};
 }
 
-function vertexNormals(V, T){
+function vertexNormals(V: Float32Array, T: Uint32Array): Float32Array {
   const N = new Float32Array(V.length);
   for (let i=0;i<T.length;i+=3){
     const a=T[i]*3, b=T[i+1]*3, c=T[i+2]*3;
@@ -206,25 +233,25 @@ function vertexNormals(V, T){
 }
 
 /* ------------------------------------------------------ demo geometry */
-function torusKnot(p=2, q=3, R=1, r=0.26, tubeSeg=360, radSeg=28){
-  const verts = [], tris = [];
-  const sub = (a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]];
-  const cross = (a,b)=>[a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
-  const dot = (a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
-  const norm = a=>{ const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l]; };
-  const pt = (u)=>{
+function torusKnot(p=2, q=3, R=1, r=0.26, tubeSeg=360, radSeg=28): ParsedMesh {
+  const verts: number[] = [], tris: number[] = [];
+  const sub = (a: Vec3,b: Vec3): Vec3 => [a[0]-b[0],a[1]-b[1],a[2]-b[2]];
+  const cross = (a: Vec3,b: Vec3): Vec3 => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+  const dot = (a: Vec3,b: Vec3): number => a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+  const norm = (a: Vec3): Vec3 => { const l=Math.hypot(a[0],a[1],a[2])||1; return [a[0]/l,a[1]/l,a[2]/l]; };
+  const pt = (u: number): Vec3 => {
     const qu=q/p*u, cq=Math.cos(qu);
     return [ (2+cq)*0.5*Math.cos(u)*R, (2+cq)*0.5*Math.sin(u)*R, Math.sin(qu)*0.5*R ];
   };
   // centreline + tangents
-  const C = [], T = [];
+  const C: Vec3[] = [], T: Vec3[] = [];
   for (let i=0;i<tubeSeg;i++){
     const u = i/tubeSeg*Math.PI*2*p;
     C.push(pt(u));
     T.push(norm(sub(pt(u+1e-4), pt(u-1e-4))));
   }
   // rotation-minimising frame (parallel transport), then unwind the closing twist
-  const N = [];
+  const N: Vec3[] = [];
   const n0 = norm(cross(T[0], Math.abs(T[0][2])<0.9 ? [0,0,1] : [1,0,0]));
   N.push(n0);
   for (let i=1;i<tubeSeg;i++){
@@ -253,9 +280,9 @@ function torusKnot(p=2, q=3, R=1, r=0.26, tubeSeg=360, radSeg=28){
   return {verts: Float64Array.from(verts), tris: Uint32Array.from(tris)};
 }
 
-function sphereDemo(kind="ripple", segments=128, rings=64){
-  const verts=[], tris=[];
-  const signedPow=(v,p)=>Math.sign(v)*Math.pow(Math.abs(v),p);
+function sphereDemo(kind: "ripple" | "cube" | "diamond"="ripple", segments=128, rings=64): ParsedMesh {
+  const verts: number[] = [], tris: number[] = [];
+  const signedPow=(v: number,p: number): number => Math.sign(v)*Math.pow(Math.abs(v),p);
   for (let i=0;i<=rings;i++){
     const phi=i/rings*Math.PI, sp=Math.sin(phi), cp=Math.cos(phi);
     for (let j=0;j<segments;j++){
@@ -282,8 +309,8 @@ function sphereDemo(kind="ripple", segments=128, rings=64){
   return {verts:Float64Array.from(verts), tris:Uint32Array.from(tris)};
 }
 
-function ringTorus(major=.72, minor=.3, majorSeg=192, minorSeg=64){
-  const verts=[], tris=[];
+function ringTorus(major=.72, minor=.3, majorSeg=192, minorSeg=64): ParsedMesh {
+  const verts: number[] = [], tris: number[] = [];
   for (let i=0;i<majorSeg;i++){
     const u=i/majorSeg*Math.PI*2, cu=Math.cos(u), su=Math.sin(u);
     for (let j=0;j<minorSeg;j++){
@@ -300,13 +327,13 @@ function ringTorus(major=.72, minor=.3, majorSeg=192, minorSeg=64){
   return {verts:Float64Array.from(verts), tris:Uint32Array.from(tris)};
 }
 
-function radialColumnDemo(kind, segments=160, rings=80){
-  const verts=[], tris=[];
+function radialColumnDemo(kind: "twist" | "hourglass", segments=160, rings=80): ParsedMesh {
+  const verts: number[] = [], tris: number[] = [];
   for (let i=0;i<=rings;i++){
     const t=i/rings, z=t*2-1;
     for (let j=0;j<segments;j++){
       const theta=j/segments*Math.PI*2;
-      let radius;
+      let radius: number;
       if (kind === "twist"){
         const profile=.68+.08*Math.cos(z*Math.PI);
         radius=profile*(1+.18*Math.cos(theta*5+z*Math.PI*1.35));
@@ -334,8 +361,8 @@ function radialColumnDemo(kind, segments=160, rings=80){
   return {verts:Float64Array.from(verts),tris:Uint32Array.from(tris)};
 }
 
-function tetrapodDemo(segments=160,rings=80){
-  const verts=[],tris=[];
+function tetrapodDemo(segments=160,rings=80): ParsedMesh {
+  const verts: number[] = [],tris: number[] = [];
   const tripodRadius=Math.sqrt(8/9);
   const directions=[
     [0,0,1],
