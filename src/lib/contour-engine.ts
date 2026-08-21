@@ -123,6 +123,12 @@ interface PointSegments {
   segs: number[];
 }
 
+interface CachedSlice {
+  position: number;
+  worldPoints: number[];
+  polylines: number[][];
+}
+
 interface SpiralSegments extends PointSegments {
   values: number[];
 }
@@ -283,8 +289,7 @@ function projectCameraPoint(
 }
 
 /* ------------------------------------------------- marching triangles */
-function sliceLevel(
-  P: Projection,
+function sliceLevelWorld(
   mesh: ContourMesh,
   S: NumericArray,
   level: number,
@@ -297,7 +302,6 @@ function sliceLevel(
   const idx = new Map<number, number>(); // edge key -> point index
   const pts: number[] = [],
     segs: number[] = [];
-  const { r, u, f, scale, ox, oy, lens, lensAmount } = P;
   const getPoint = (a: number, b: number): number => {
     const key = a < b ? a * NV + b : b * NV + a;
     let id = idx.get(key);
@@ -310,16 +314,7 @@ function sliceLevel(
       const x = V[ai] + (V[bi] - V[ai]) * t;
       const y = V[ai + 1] + (V[bi + 1] - V[ai + 1]) * t;
       const z = V[ai + 2] + (V[bi + 2] - V[ai + 2]) * t;
-      const screen = projectCameraPoint(
-        x * r[0] + y * r[1] + z * r[2],
-        x * u[0] + y * u[1] + z * u[2],
-        scale,
-        ox,
-        oy,
-        lens,
-        lensAmount,
-      );
-      pts.push(screen[0], screen[1], x * f[0] + y * f[1] + z * f[2]);
+      pts.push(x, y, z);
       idx.set(key, id);
       return id;
     }
@@ -373,16 +368,7 @@ function sliceLevel(
       else hi = t;
     }
     const p = sample((lo + hi) * 0.5);
-    const screen = projectCameraPoint(
-      p[0] * r[0] + p[1] * r[1] + p[2] * r[2],
-      p[0] * u[0] + p[1] * u[1] + p[2] * u[2],
-      scale,
-      ox,
-      oy,
-      lens,
-      lensAmount,
-    );
-    pts.push(screen[0], screen[1], p[0] * f[0] + p[1] * f[1] + p[2] * f[2]);
+    pts.push(p[0], p[1], p[2]);
     idx.set(key, id);
     return id;
   };
@@ -411,6 +397,27 @@ function sliceLevel(
     if (e1 !== e2) segs.push(e1, e2);
   }
   return { pts, segs };
+}
+
+function projectWorldPoints(points: NumericArray, P: Projection): number[] {
+  const projected: number[] = [];
+  const { r, u, f, scale, ox, oy, lens, lensAmount } = P;
+  for (let i = 0; i < points.length; i += 3) {
+    const x = points[i],
+      y = points[i + 1],
+      z = points[i + 2];
+    const screen = projectCameraPoint(
+      x * r[0] + y * r[1] + z * r[2],
+      x * u[0] + y * u[1] + z * u[2],
+      scale,
+      ox,
+      oy,
+      lens,
+      lensAmount,
+    );
+    projected.push(screen[0], screen[1], x * f[0] + y * f[1] + z * f[2]);
+  }
+  return projected;
 }
 
 /* ------------------------------------------- chain segments into runs */
@@ -453,6 +460,67 @@ function chain(pts: NumericArray, segs: NumericArray): number[][] {
   for (let v = 0; v < n; v++) if (deg[v] === 1) walk(v); // open runs first
   for (let s = 0; s < segs.length; s += 2) if (!used[s >> 1]) walk(segs[s]); // then loops
   return polys;
+}
+
+const contourTopologyCache = new WeakMap<ContourMesh, Map<string, CachedSlice[]>>();
+
+function contourSlices(
+  mesh: ContourMesh,
+  settings: ContourSettings,
+  field: ScalarField,
+  count: number,
+  curveStrength: number,
+): CachedSlice[] {
+  const cacheable = settings.axis !== 'cam';
+  const key = cacheable
+    ? JSON.stringify([
+        settings.axis,
+        settings.cutAz,
+        settings.cutEl,
+        count,
+        settings.gapEase,
+        settings.easeStrength,
+        settings.easeCenter,
+        settings.easeCycles,
+        curveStrength,
+      ])
+    : '';
+  let cache = contourTopologyCache.get(mesh);
+  const cached = key && cache?.get(key);
+  if (cached) return cached;
+
+  const slices: CachedSlice[] = [];
+  const span = field.max - field.min;
+  const vertexCount = mesh.V.length / 3;
+  for (let i = 0; i < count; i++) {
+    const position = easeLineGap(
+      (i + 0.5) / count,
+      settings.gapEase,
+      settings.easeStrength,
+      settings.easeCenter,
+      settings.easeCycles,
+    );
+    const level = field.min + span * position;
+    const { pts, segs } = sliceLevelWorld(
+      mesh,
+      field.S,
+      level,
+      vertexCount,
+      field.dir,
+      curveStrength,
+    );
+    slices.push({ position, worldPoints: pts, polylines: segs.length ? chain(pts, segs) : [] });
+  }
+
+  if (key) {
+    if (!cache) {
+      cache = new Map();
+      contourTopologyCache.set(mesh, cache);
+    }
+    if (cache.size >= 8) cache.delete(cache.keys().next().value!);
+    cache.set(key, slices);
+  }
+  return slices;
 }
 
 /* ------------------------------------------------------- depth buffer */
@@ -1393,9 +1461,11 @@ function computeLineArtInstance(
     settings.lensAmount,
   );
   const offsets = mesh.lineArt!.offsets;
-  const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(settings.quality), 1, 10) - 1);
+  const quality = quick ? Math.min(3, settings.quality) : settings.quality;
+  const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
   const runs: Polyline[] = [];
   let pathData = '',
+    paths = 0,
     nodes = 0,
     salt = 0;
   for (let runIndex = 0; runIndex + 1 < offsets.length; runIndex++) {
@@ -1410,8 +1480,9 @@ function computeLineArtInstance(
     const clippedRuns = settings.clipToArtboard ? clipRunToRect(styled, W, H) : [styled];
     for (const run of clippedRuns) {
       if (run.length < 4) continue;
-      pathData += serialiseRun(run, settings.quality, sharpVertices(run));
-      runs.push(run);
+      pathData += serialiseRun(run, quality, sharpVertices(run));
+      if (!quick) runs.push(run);
+      paths++;
       nodes += run.length / 2;
     }
   }
@@ -1425,7 +1496,7 @@ function computeLineArtInstance(
   const blueprint = blueprintDocument(settings, W, H, blueprintGeometry);
   const attrs = `fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
   let artwork: string,
-    renderedPaths = runs.length,
+    renderedPaths = paths,
     renderedNodes = nodes;
   if (settings.chroma) {
     const amount = clamp(settings.chromaAmount, 0.1, 6),
@@ -1458,7 +1529,8 @@ ${artwork}
 </svg>`;
   return {
     svg,
-    toolpaths: runs.length ? [{ color: settings.color, label: 'SVG centreline', runs }] : [],
+    toolpaths:
+      !quick && runs.length ? [{ color: settings.color, label: 'SVG centreline', runs }] : [],
     paths: renderedPaths,
     nodes: renderedNodes,
     bytes: new TextEncoder().encode(svg).byteLength,
@@ -1500,8 +1572,6 @@ function computeContourInstance(
     vertices: mesh.V.length / 3,
     triangles: mesh.T.length / 3,
   };
-  const NV = mesh.V.length / 3;
-
   let vis: VisibilityTest | null = null,
     visOutline: VisibilityTest | null = null,
     step = 0.6;
@@ -1527,12 +1597,16 @@ function computeContourInstance(
     Array.from({ length: toneBandCount }, (): Polyline[] => []),
   );
   const outlineOut: Polyline[] = [];
-  const N = settings.lines;
-  const quality = clamp(Math.round(settings.quality), 1, 10);
+  const N = quick ? Math.min(settings.lines, 20) : settings.lines;
+  const quality = clamp(
+    Math.round(quick ? Math.min(settings.quality, 3) : settings.quality),
+    1,
+    10,
+  );
   const curveStrength = (quality - 1) / 9;
-  const span = field.max - field.min;
   if (settings.spiral) {
-    const { pts, values, segs } = spiralContours(P, mesh, field, settings);
+    const previewSettings = quick && N !== settings.lines ? { ...settings, lines: N } : settings;
+    const { pts, values, segs } = spiralContours(P, mesh, field, previewSettings);
     if (segs.length)
       for (const poly of chain(pts, segs)) {
         if (settings.gradientEnabled) {
@@ -1556,22 +1630,20 @@ function computeContourInstance(
         } else emitPath(poly, pts, vis, step, out[0][0]);
       }
   } else {
-    for (let i = 0; i < N; i++) {
-      const position = easeLineGap(
-        (i + 0.5) / N,
-        settings.gapEase,
-        settings.easeStrength,
-        settings.easeCenter,
-        settings.easeCycles,
-      );
-      const level = field.min + span * position;
-      const { pts, segs } = sliceLevel(P, mesh, field.S, level, NV, field.dir, curveStrength);
-      if (!segs.length) continue;
+    for (const { position, worldPoints, polylines } of contourSlices(
+      mesh,
+      settings,
+      field,
+      N,
+      curveStrength,
+    )) {
+      if (!polylines.length) continue;
+      const pts = projectWorldPoints(worldPoints, P);
       const band = settings.gradientEnabled
         ? clamp(Math.floor(position * palette.length), 0, palette.length - 1)
         : 0;
       const tone = settings.halftone ? toneBand(position) : 0;
-      for (const poly of chain(pts, segs)) emitPath(poly, pts, vis, step, out[band][tone]);
+      for (const poly of polylines) emitPath(poly, pts, vis, step, out[band][tone]);
     }
   }
   if (settings.sil) {
@@ -1602,7 +1674,7 @@ function computeContourInstance(
         const sharp =
           clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
         d += serialiseRun(clipped, quality, sharp);
-        plotRuns.push(clipped);
+        if (!quick) plotRuns.push(clipped);
         nodes += clipped.length / 2;
         paths++;
       }
@@ -1736,8 +1808,12 @@ export function computeContours(
   if (!targetsX.length && !targetsY.length) return computeContourInstance(mesh, settings, quick);
 
   const started = performance.now();
-  const stepsX = targetsX.length ? clamp(Math.round(settings.morphSteps || 2), 2, 24) : 1;
-  const stepsY = targetsY.length ? clamp(Math.round(settings.morphStepsY || 2), 2, 24) : 1;
+  const stepsX = targetsX.length
+    ? Math.min(quick ? 3 : 24, clamp(Math.round(settings.morphSteps || 2), 2, 24))
+    : 1;
+  const stepsY = targetsY.length
+    ? Math.min(quick ? 3 : 24, clamp(Math.round(settings.morphStepsY || 2), 2, 24))
+    : 1;
   const targetsXByKey = new Map(targetsX),
     targetsYByKey = new Map(targetsY);
   const targetKeys = new Set([...targetsXByKey.keys(), ...targetsYByKey.keys()]);

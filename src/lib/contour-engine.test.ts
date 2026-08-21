@@ -15,6 +15,18 @@ describe('computeContours', () => {
     expect(result.bytes).toBe(new TextEncoder().encode(result.svg).byteLength);
   });
 
+  it('keeps quick previews lightweight and out of export toolpaths', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      { ...contourSettings, lines: 30, quality: 9 },
+      true,
+    );
+
+    expect(result.svg).toContain('<path');
+    expect(result.paths).toBeGreaterThan(0);
+    expect(result.toolpaths).toEqual([]);
+  });
+
   it('renders every requested morph step into labeled SVG groups', () => {
     const result = computeContours(
       makeContourMesh(),
@@ -31,6 +43,28 @@ describe('computeContours', () => {
     expect(result.svg).toContain('data-morph-x-step="3"');
     expect(result.svg.match(/data-morph-x-step=/g)).toHaveLength(3);
     expect(result.paths).toBeGreaterThan(0);
+  });
+
+  it('caps large morph grids in quick previews', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        hide: false,
+        morphEnabled: true,
+        morphSteps: 12,
+        morphTargets: { az: 90 },
+        morphSecondEnabled: true,
+        morphStepsY: 12,
+        morphTargets2: { zoom: 1.5 },
+      },
+      true,
+    );
+
+    expect(result.svg.match(/data-morph-x-step=/g)).toHaveLength(9);
+    expect(result.svg).toContain('data-morph-x-step="3"');
+    expect(result.svg).toContain('data-morph-y-step="3"');
+    expect(result.svg).not.toContain('data-morph-x-step="4"');
   });
 
   it('renders normalized SVG centerlines directly as plotter paths', () => {

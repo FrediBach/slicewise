@@ -81,7 +81,15 @@ These event names and their payloads are internal interfaces. Change producers a
 
 ## Rendering and concurrency
 
-Contour requests are assigned monotonically increasing IDs and mesh versions. The main thread ignores stale responses, so quick interactive renders cannot overwrite newer settings. The runtime adjusts throttling using triangle count, contour count, visibility work, curve quality, and morph instance count.
+Contour requests are assigned monotonically increasing IDs and mesh versions. Results from replaced meshes and stale full-quality responses are ignored; stale quick responses may be shown transiently but cannot overwrite exact export state. The runtime adjusts throttling using triangle count, contour count, visibility work, curve quality, and morph instance count.
+
+Interactive preview state is intentionally distinct from exact export state. A completed quick response may replace the visible preview even when a newer gesture request is queued, but only the latest full-quality response updates the stored SVG and toolpaths used by copy and download. Quick responses cap contour density, curve quality, and morph-grid dimensions and omit export toolpaths. Export actions automatically request a current full-quality result when necessary.
+
+Pan and wheel zoom use a temporary SVG group transform for immediate feedback. Their exact clipped geometry is recomputed when the pointer gesture ends or wheel input has been idle for 140 ms. Orbit and roll still require worker projection and visibility work, so they use the lightweight quick-render path while dragging.
+
+For the model-space `up`, `x`, `y`, and custom slice axes, the contour engine caches a bounded set of 3D slice topologies per mesh. Orbiting can then reproject the cached polylines instead of rescanning every triangle at every contour level. Camera-axis slicing is excluded because its scalar field changes with the camera.
+
+The runtime publishes the latest timing samples through the browser Performance API as `slicewise:render:queue`, `slicewise:render:worker-roundtrip`, `slicewise:render:dom-apply`, and `slicewise:render:end-to-paint`. The visible Render statistic remains the contour engine's worker computation time.
 
 There are two worker entry points:
 

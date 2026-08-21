@@ -11,6 +11,7 @@ import {
 import { GEN_DEFAULTS, type GeneratedMesh, type GenerativeParams } from './generativeMesh';
 import { radialColumnDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from './demo-meshes';
 import { parseOBJ, parsePLY, parseSTL, vertexNormals, weld } from './mesh';
+import { previewViewTransform, renderDisposition } from './render-scheduling';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -59,6 +60,8 @@ type RenderRequest = {
   meshVersion: number;
   quick: boolean;
   settings: ContourSettings;
+  queuedAt: number;
+  dispatchedAt?: number;
 };
 
 type RenderWorkerMessage =
@@ -207,12 +210,30 @@ if (typeof document !== 'undefined') {
     appliedRequestId = 0,
     failedRequestId = 0;
   let queuedRender: RenderRequest | null = null,
+    activeRender: RenderRequest | null = null,
     renderInFlight = false;
   let renderWaiters: Array<() => void> = [];
   let renderTimer = 0,
     lastDispatch = 0,
     observedRenderMs = 0,
     meshVersion = 0;
+
+  function recordMeasure(name: string, start: number, end: number): void {
+    try {
+      performance.clearMeasures(name);
+      performance.measure(name, { start, end });
+    } catch {
+      // Performance measurements are diagnostics and must not affect rendering.
+    }
+  }
+
+  function measureNextPaint(request: RenderRequest): void {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() =>
+        recordMeasure('slicewise:render:end-to-paint', request.queuedAt, performance.now()),
+      ),
+    );
+  }
 
   function settingsSnapshot(): ContourSettings {
     const {
@@ -317,16 +338,18 @@ if (typeof document !== 'undefined') {
   }
   function throttleDelay(): number {
     const triangles = state.mesh ? state.mesh.T.length / 3 : 0;
+    const previewLines = Math.min(state.lines, 20);
     const visibilityCost = state.hide ? 1.55 : 1;
-    const curveCost = 1 + Math.max(0, state.quality - 1) * 0.055;
+    const previewQuality = Math.min(state.quality, 3);
+    const curveCost = 1 + Math.max(0, previewQuality - 1) * 0.055;
     const morphCost =
       state.morphEnabled && Object.keys(state.morphTargets).length
-        ? state.morphSteps *
+        ? Math.min(state.morphSteps, 3) *
           (state.morphSecondEnabled && Object.keys(state.morphTargets2).length
-            ? state.morphStepsY
+            ? Math.min(state.morphStepsY, 3)
             : 1)
         : 1;
-    const score = triangles * state.lines * visibilityCost * curveCost * morphCost;
+    const score = triangles * previewLines * visibilityCost * curveCost * morphCost;
     let complexityDelay = 150;
     if (score < 450000) complexityDelay = 16;
     else if (score < 1500000) complexityDelay = 32;
@@ -335,12 +358,22 @@ if (typeof document !== 'undefined') {
     // Adapt when a particular device or mesh is slower than the static estimate.
     return Math.min(180, Math.max(complexityDelay, observedRenderMs * 0.4));
   }
-  function applyRender(result: ContourResult, id: number): void {
-    observedRenderMs = observedRenderMs ? observedRenderMs * 0.72 + result.ms * 0.28 : result.ms;
-    appliedRequestId = id;
-    state.svg = result.svg;
-    state.svgBytes = result.bytes;
-    state.toolpaths = result.toolpaths || [];
+  let previewView = { zoom: state.zoom, panX: state.panX, panY: state.panY };
+  function installPreviewRoot(): void {
+    const svg = $('bed').querySelector<SVGSVGElement>('svg');
+    if (!svg) return;
+    const root = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    root.dataset.previewRoot = '';
+    while (svg.firstChild) root.appendChild(svg.firstChild);
+    svg.appendChild(root);
+  }
+  function applyViewTransform(): void {
+    const root = $('bed').querySelector<SVGGElement>('[data-preview-root]');
+    if (!root) return;
+    const [scale, tx, ty] = previewViewTransform(previewView, state, state.pw, state.ph);
+    root.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${tx} ${ty})`);
+  }
+  function applyPreview(result: ContourResult, request: RenderRequest): void {
     fitBed(result.W, result.H);
     $('artboardDimensions').textContent = `${result.W} × ${result.H} MM`;
     $('bed').style.background = state.blueprint
@@ -349,10 +382,25 @@ if (typeof document !== 'undefined') {
         : '#0b3f7a'
       : state.backgroundColor;
     $('bed').innerHTML = result.svg;
+    installPreviewRoot();
+    previewView = {
+      zoom: request.settings.zoom,
+      panX: request.settings.panX,
+      panY: request.settings.panY,
+    };
+    applyViewTransform();
     $('rPaths').textContent = result.paths.toLocaleString();
     $('rPts').textContent = Math.round(result.nodes).toLocaleString();
     updateExportSize();
     $('rMs').textContent = Math.round(result.ms) + ' ms';
+  }
+  function applyRender(result: ContourResult, request: RenderRequest): void {
+    observedRenderMs = observedRenderMs ? observedRenderMs * 0.72 + result.ms * 0.28 : result.ms;
+    appliedRequestId = request.id;
+    state.svg = result.svg;
+    state.svgBytes = result.bytes;
+    state.toolpaths = result.toolpaths || [];
+    applyPreview(result, request);
   }
   function notifyRenderWaiters(): void {
     const waiters = renderWaiters;
@@ -360,7 +408,9 @@ if (typeof document !== 'undefined') {
     for (const resolve of waiters) resolve();
   }
   async function waitForCurrentRender(): Promise<void> {
-    while (renderInFlight || queuedRender || appliedRequestId !== requestId) {
+    for (;;) {
+      if (!renderInFlight && !queuedRender && appliedRequestId === requestId) return;
+      if (!renderInFlight && !queuedRender) redraw(false);
       const awaitedRequestId = requestId;
       await new Promise<void>((resolve) => renderWaiters.push(resolve));
       if (failedRequestId >= awaitedRequestId && appliedRequestId < awaitedRequestId) {
@@ -372,10 +422,19 @@ if (typeof document !== 'undefined') {
     if (renderInFlight || !queuedRender) return;
     const request = queuedRender;
     queuedRender = null;
+    activeRender = request;
     renderInFlight = true;
     lastDispatch = performance.now();
+    request.dispatchedAt = lastDispatch;
+    recordMeasure('slicewise:render:queue', request.queuedAt, lastDispatch);
     $('bedwrap').classList.add('busy');
-    renderWorker.postMessage({ type: 'render', ...request });
+    renderWorker.postMessage({
+      type: 'render',
+      id: request.id,
+      meshVersion: request.meshVersion,
+      quick: request.quick,
+      settings: request.settings,
+    });
   }
   function scheduleRender(): void {
     if (renderInFlight || !queuedRender) return;
@@ -397,14 +456,45 @@ if (typeof document !== 'undefined') {
       meshVersion,
       quick: renderQuick,
       settings: settingsSnapshot(),
+      queuedAt: performance.now(),
     };
     scheduleRender();
   }
+  function invalidateRenderState(): void {
+    requestId++;
+    if (!queuedRender) return;
+    queuedRender = {
+      ...queuedRender,
+      id: requestId,
+      settings: settingsSnapshot(),
+      queuedAt: performance.now(),
+    };
+  }
   renderWorker.addEventListener('message', ({ data }: MessageEvent<RenderWorkerMessage>) => {
+    const completedRequest = activeRender;
+    activeRender = null;
     renderInFlight = false;
-    if (data.meshVersion === meshVersion && data.type === 'result' && data.id === requestId)
-      applyRender(data.result, data.id);
-    else if (data.meshVersion === meshVersion && data.type === 'error') {
+    if (completedRequest?.dispatchedAt !== undefined)
+      recordMeasure(
+        'slicewise:render:worker-roundtrip',
+        completedRequest.dispatchedAt,
+        performance.now(),
+      );
+    if (data.type === 'result' && completedRequest?.id === data.id) {
+      const disposition = renderDisposition({
+        responseId: data.id,
+        latestRequestId: requestId,
+        sameMesh: data.meshVersion === meshVersion,
+        quick: data.result.quick,
+      });
+      if (disposition !== 'discard') {
+        const applyStarted = performance.now();
+        if (disposition === 'commit') applyRender(data.result, completedRequest);
+        else applyPreview(data.result, completedRequest);
+        recordMeasure('slicewise:render:dom-apply', applyStarted, performance.now());
+        measureNextPaint(completedRequest);
+      }
+    } else if (data.meshVersion === meshVersion && data.type === 'error') {
       failedRequestId = data.id;
       showError(data.message);
     }
@@ -413,6 +503,7 @@ if (typeof document !== 'undefined') {
     scheduleRender();
   });
   renderWorker.addEventListener('error', () => {
+    activeRender = null;
     renderInFlight = false;
     failedRequestId = requestId;
     notifyRenderWaiters();
@@ -1302,6 +1393,8 @@ if (typeof document !== 'undefined') {
         );
         syncPair('panX', state.panX);
         syncPair('panY', state.panY);
+        invalidateRenderState();
+        applyViewTransform();
       } else if (mode === 'roll') {
         state.roll = clamp(Math.round(ro0 + dx * 0.5), -180, 180);
         $('rl').value = String(state.roll);
@@ -1318,7 +1411,7 @@ if (typeof document !== 'undefined') {
         $('el').value = String(state.el);
         $('elN').value = String(state.el);
       }
-      redraw(true);
+      if (mode !== 'pan') redraw(true);
     });
     const end = (): void => {
       if (!state.dragging) return;
@@ -1337,6 +1430,7 @@ if (typeof document !== 'undefined') {
       syncPair('zoom', state.zoom);
       syncPair('panX', state.panX);
       syncPair('panY', state.panY);
+      applyViewTransform();
       redraw(false);
     });
     bed.addEventListener(
@@ -1347,7 +1441,8 @@ if (typeof document !== 'undefined') {
         state.zoom = Math.round(z * 100) / 100;
         $('zoom').value = String(state.zoom);
         $('zoomN').value = String(state.zoom);
-        redraw(true);
+        invalidateRenderState();
+        applyViewTransform();
         clearTimeout(wheelEnd);
         wheelEnd = setTimeout(() => redraw(false), 140);
       },

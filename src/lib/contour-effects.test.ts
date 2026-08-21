@@ -15,7 +15,7 @@ describe('contour output effects', () => {
         halftone: true,
         halftoneCycles: 3,
       },
-      true,
+      false,
     );
 
     expect(result.svg).toContain('stroke-dasharray="');
@@ -116,7 +116,7 @@ describe('contour projection modes', () => {
         sil: false,
         lines: 12,
       },
-      true,
+      false,
     );
 
     expect(result.paths).toBeGreaterThan(0);
