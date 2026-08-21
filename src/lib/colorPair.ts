@@ -1,5 +1,5 @@
 /**
- * colorPair.js — perceptually-grounded random color pairs for generative art.
+ * colorPair.ts — perceptually-grounded random color pairs for generative art.
  *
  * Everything happens in OKLCH (cylindrical Oklab). Three properties make it the
  * right space for this job:
@@ -24,6 +24,7 @@
 // ---------------------------------------------------------------------------
 
 const DEFAULTS = {
+  color: null,
   /** Minimum perceptual lightness gap, in Oklab L units (0..1). */
   minLightnessDiff: 0.25,
   /** Allowed lightness band. Avoids crushed blacks and washed-out whites. */

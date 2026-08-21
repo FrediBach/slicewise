@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Checkbox, ValueControl } from "./FormControls";
 
-const GRADIENT_PRESETS = [
+type GradientStop = [position: number, color: string];
+type GradientPreset = { name: string; stops: GradientStop[] };
+
+const GRADIENT_PRESETS: GradientPreset[] = [
   { name: "Rainbow", stops: [[0,"#ef4444"],[.2,"#f59e0b"],[.4,"#84cc16"],[.6,"#06b6d4"],[.8,"#3b82f6"],[1,"#8b5cf6"]] },
   { name: "Sunset", stops: [[0,"#4c1d95"],[.42,"#db2777"],[.72,"#f97316"],[1,"#facc15"]] },
   { name: "Ocean", stops: [[0,"#082f49"],[.5,"#0891b2"],[1,"#a7f3d0"]] },
@@ -11,8 +14,8 @@ const GRADIENT_PRESETS = [
 ];
 
 function GradientChooser() {
-  const rootRef = useRef(null);
-  const [stops, setStops] = useState(GRADIENT_PRESETS[0].stops);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [stops, setStops] = useState<GradientStop[]>(GRADIENT_PRESETS[0].stops);
   const [preset, setPreset] = useState("Rainbow");
 
   useEffect(() => {
@@ -23,7 +26,7 @@ function GradientChooser() {
   }, [stops]);
 
   useEffect(() => {
-    const restore = event => {
+    const restore = (event: CustomEvent<{ gradientStops?: Array<{ position: number; color: string }> }>) => {
       if (event.detail?.gradientStops) {
         setPreset("");
         setStops(event.detail.gradientStops.map(stop => [stop.position, stop.color]));
@@ -33,11 +36,11 @@ function GradientChooser() {
     return () => document.removeEventListener("restoreparameters", restore);
   }, []);
 
-  const updateStop = (index, next) => {
+  const updateStop = (index: number, next: GradientStop) => {
     setPreset("");
     setStops(current => current.map((stop, i) => i === index ? next : stop).sort((a,b) => a[0]-b[0]));
   };
-  const removeStop = index => {
+  const removeStop = (index: number) => {
     if (stops.length <= 2) return;
     setPreset("");
     setStops(current => current.filter((_, i) => i !== index));
@@ -50,7 +53,8 @@ function GradientChooser() {
     }
     const a=stops[insertAt], b=stops[insertAt+1];
     setPreset("");
-    setStops(current => [...current, [(a[0]+b[0])/2, a[1]]].sort((x,y) => x[0]-y[0]));
+    const midpoint: GradientStop = [(a[0] + b[0]) / 2, a[1]];
+    setStops(current => [...current, midpoint].sort((x,y) => x[0]-y[0]));
   };
 
   const cssGradient = `linear-gradient(90deg, ${stops.map(([p,c]) => `${c} ${Math.round(p*100)}%`).join(", ")})`;
@@ -89,4 +93,3 @@ function GradientChooser() {
 }
 
 export { GradientChooser };
-

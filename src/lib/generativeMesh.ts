@@ -588,9 +588,9 @@ export function generateMesh(
     positions[v * 3 + 1] = y;
     positions[v * 3 + 2] = z;
 
-    let gx = field.eval(x + h, y, z) - field.eval(x - h, y, z);
-    let gy = field.eval(x, y + h, z) - field.eval(x, y - h, z);
-    let gz = field.eval(x, y, z + h) - field.eval(x, y, z - h);
+    const gx = field.eval(x + h, y, z) - field.eval(x - h, y, z);
+    const gy = field.eval(x, y + h, z) - field.eval(x, y - h, z);
+    const gz = field.eval(x, y, z + h) - field.eval(x, y, z - h);
     const len = Math.hypot(gx, gy, gz) || 1;
     normals[v * 3] = gx / len;
     normals[v * 3 + 1] = gy / len;
@@ -647,7 +647,7 @@ export function meshToStl(mesh: GeneratedMesh): ArrayBuffer {
 
     const ux = bx - ax, uy = by - ay, uz = bz - az;
     const vx = cx - ax, vy = cy - ay, vz = cz - az;
-    let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
     const nl = Math.hypot(nx, ny, nz) || 1;
 
     dv.setFloat32(o, nx / nl, true); dv.setFloat32(o + 4, ny / nl, true); dv.setFloat32(o + 8, nz / nl, true);

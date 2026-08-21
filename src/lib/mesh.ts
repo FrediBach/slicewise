@@ -49,9 +49,9 @@ function parseOBJ(text){
       const p = line.trim().split(/\s+/);
       const idx = [];
       for (let i=1;i<p.length;i++){
-        let s = p[i].split('/')[0];
+        const s = p[i].split('/')[0];
         if (!s) continue;
-        let n = parseInt(s,10);
+        const n = parseInt(s,10);
         if (Number.isNaN(n)) continue;
         idx.push(n > 0 ? n-1 : v.length/3 + n);
       }
@@ -69,7 +69,8 @@ function parsePLY(buf){
   if (endIdx < 0) throw new Error("That file isn't readable as PLY — the header is missing");
   const headEnd = headTxt.indexOf("\n", endIdx) + 1;
   const header = headTxt.slice(0, headEnd).split(/\r?\n/);
-  let fmtType = "ascii", elems = [], cur = null;
+  let fmtType = "ascii", cur = null;
+  const elems = [];
   for (const raw of header){
     const t = raw.trim().split(/\s+/);
     if (t[0] === "format") fmtType = t[1];
@@ -115,7 +116,7 @@ function parsePLY(buf){
     for (const el of elems){
       for (let i=0;i<el.count;i++){
         if (el === vEl){
-          const rec = {};
+          const rec: Record<string, number> = {};
           for (const p of el.props){
             if (p.list){ const k = read(p.countType); for (let j=0;j<k;j++) read(p.type); }
             else rec[p.name] = read(p.type);
@@ -224,7 +225,7 @@ function torusKnot(p=2, q=3, R=1, r=0.26, tubeSeg=360, radSeg=28){
   }
   // rotation-minimising frame (parallel transport), then unwind the closing twist
   const N = [];
-  let n0 = norm(cross(T[0], Math.abs(T[0][2])<0.9 ? [0,0,1] : [1,0,0]));
+  const n0 = norm(cross(T[0], Math.abs(T[0][2])<0.9 ? [0,0,1] : [1,0,0]));
   N.push(n0);
   for (let i=1;i<tubeSeg;i++){
     const prev = N[i-1], t = T[i];
@@ -380,4 +381,3 @@ export {
   vertexNormals,
   weld,
 };
-

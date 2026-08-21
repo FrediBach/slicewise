@@ -1,6 +1,6 @@
 # Slicewise parameter reference
 
-This document describes the user-facing parameters in Slicewise as implemented in `src/App.jsx` and `src/lib/slicer.js`. Ranges are the limits enforced by the interface. Unless noted otherwise, changing a parameter redraws the preview and affects both SVG and G-code output.
+This document describes the user-facing parameters in Slicewise as implemented in `src/App.tsx` and `src/lib/slicer.ts`. Ranges are the limits enforced by the interface. Unless noted otherwise, changing a parameter redraws the preview and affects both SVG and G-code output.
 
 ## Source model
 

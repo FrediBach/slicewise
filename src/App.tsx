@@ -11,10 +11,10 @@ import { OutputPanel } from "./components/panels/OutputPanel";
 export default function App() {
   useEffect(() => {
     globalThis.slicewiseParseSVG = async (...args) => {
-      const { parseSVG } = await import("./lib/svg-mesh.js");
+      const { parseSVG } = await import("./lib/svg-mesh");
       return parseSVG(...args);
     };
-    import("./lib/slicer.js");
+    import("./lib/slicer");
     return () => { delete globalThis.slicewiseParseSVG; };
   }, []);
 

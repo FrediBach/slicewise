@@ -1,8 +1,24 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Check, Lock, LockOpen } from "lucide-react";
 import { Button } from "../ui/button";
 
-function MorphIcon({ size = 13 }) {
+type CustomDetail = Record<string, any>;
+
+type RandomLockProps = { id: string; label: string };
+type ValueControlProps = {
+  id: string;
+  label: string;
+  min: string | number;
+  max: string | number;
+  step: string | number;
+  value: string | number;
+  unit?: string;
+  disabled?: boolean;
+  morphable?: boolean;
+  randomizable?: boolean;
+};
+
+function MorphIcon({ size = 13 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
       <path d="M2 4h7m0 0L7 2m2 2L7 6M14 12H7m0 0 2-2m-2 2 2 2" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" />
@@ -10,10 +26,10 @@ function MorphIcon({ size = 13 }) {
   );
 }
 
-function RandomLock({ id, label }) {
+function RandomLock({ id, label }: RandomLockProps) {
   const [locked, setLocked] = useState(false);
   useEffect(() => {
-    const update = event => {
+    const update = (event: CustomEvent<CustomDetail>) => {
       const locks = event.detail?.locks;
       const next = Array.isArray(locks) ? locks.includes(id) : Boolean(event.detail?.locked);
       setLocked(next);
@@ -37,11 +53,11 @@ function RandomLock({ id, label }) {
 }
 
 function RandomLockActions() {
-  const [temporaryMode, setTemporaryMode] = useState(null);
-  const previousLocks = useRef([]);
+  const [temporaryMode, setTemporaryMode] = useState<"lock" | "unlock" | null>(null);
+  const previousLocks = useRef<string[]>([]);
 
   useEffect(() => {
-    const individualChange = event => {
+    const individualChange = (event: CustomEvent<CustomDetail>) => {
       if (event.detail?.source !== "individual") return;
       previousLocks.current = [];
       setTemporaryMode(null);
@@ -50,7 +66,7 @@ function RandomLockActions() {
     return () => document.removeEventListener("randomlockchange", individualChange);
   }, []);
 
-  const apply = mode => {
+  const apply = (mode: "lock" | "unlock") => {
     if (temporaryMode === mode) {
       document.dispatchEvent(new CustomEvent("randomlockbulk", { detail: { locks: previousLocks.current } }));
       previousLocks.current = [];
@@ -58,7 +74,7 @@ function RandomLockActions() {
       return;
     }
     if (!temporaryMode) {
-      previousLocks.current = Array.from(document.querySelectorAll(".random-lock[aria-pressed=true]"), button => button.dataset.randomLockId);
+      previousLocks.current = Array.from(document.querySelectorAll<HTMLButtonElement>(".random-lock[aria-pressed=true]"), button => button.dataset.randomLockId || "");
     }
     document.dispatchEvent(new CustomEvent("randomlockbulk", { detail: { locked: mode === "lock" } }));
     setTemporaryMode(mode);
@@ -76,17 +92,17 @@ function RandomLockActions() {
   );
 }
 
-function ValueControl({ id, label, min, max, step, value, unit, disabled = false, morphable = true, randomizable = morphable }) {
+function ValueControl({ id, label, min, max, step, value, unit, disabled = false, morphable = true, randomizable = morphable }: ValueControlProps) {
   const [morphMode, setMorphMode] = useState(0);
   const [morphValue, setMorphValue] = useState(Number(value));
   const [morphValueY, setMorphValueY] = useState(Number(value));
-  const announceMorph = (dimension, active, nextValue) => {
+  const announceMorph = (dimension: number, active: boolean, nextValue: string | number) => {
     document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active, value: Number(nextValue) } }));
   };
   const toggleMorph = () => {
-    const secondEnabled = Boolean(document.getElementById("morphSecondEnabled")?.checked);
+    const secondEnabled = Boolean((document.getElementById("morphSecondEnabled") as HTMLInputElement | null)?.checked);
     const nextMode = (morphMode + 1) % (secondEnabled ? 3 : 2);
-    const mainValue = Number(document.getElementById(id)?.value ?? value);
+    const mainValue = Number((document.getElementById(id) as HTMLInputElement | null)?.value ?? value);
     if (nextMode === 1 && morphMode === 0) {
       setMorphValue(mainValue);
       announceMorph(1, true, mainValue);
@@ -99,7 +115,7 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
     }
     setMorphMode(nextMode);
   };
-  const changeMorphValue = (dimension, next) => {
+  const changeMorphValue = (dimension: number, next: string | number) => {
     const parsed = Math.min(Number(max), Math.max(Number(min), Number(next)));
     if (!Number.isFinite(parsed)) return;
     if (dimension === 1) setMorphValue(parsed);
@@ -108,7 +124,7 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
   };
 
   useEffect(() => {
-    const update = event => {
+    const update = (event: CustomEvent<CustomDetail>) => {
       const dimension = event.detail?.dimension || 1;
       if (event.detail?.id !== id || morphMode < dimension) return;
       const parsed = Math.min(Number(max), Math.max(Number(min), Number(event.detail.value)));
@@ -118,13 +134,13 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
       document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active: true, value: parsed } }));
     };
     document.addEventListener("randomizemorph", update);
-    const secondDimension = event => {
+    const secondDimension = (event: CustomEvent<CustomDetail>) => {
       if (event.detail?.enabled || morphMode < 2) return;
       setMorphMode(1);
       document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension: 2, active: false, value: morphValueY } }));
     };
     document.addEventListener("morphseconddimension", secondDimension);
-    const restore = event => {
+    const restore = (event: CustomEvent<CustomDetail>) => {
       if (!morphable) return;
       const targetsX = event.detail?.morphTargetsById || {};
       const targetsY = event.detail?.morphTargets2ById || {};
@@ -142,7 +158,7 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
     };
   }, [id, max, min, morphMode, morphValueY, morphable]);
 
-  const morphInputs = (dimension, targetValue) => (
+  const morphInputs = (dimension: number, targetValue: number) => (
     <div className="control-inputs morph-inputs" data-dimension={dimension}>
       <span className="morph-axis" aria-hidden="true">{dimension === 1 ? "X" : "Y"}</span>
       <input type="range" id={`${id}Morph${dimension}`} min={min} max={max} step={step} value={targetValue}
@@ -180,19 +196,21 @@ function ValueControl({ id, label, min, max, step, value, unit, disabled = false
   );
 }
 
-function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
+type ColorControlProps = RandomLockProps & { defaultValue: string; swatchId: string; morphable?: boolean };
+
+function ColorControl({ id, label, defaultValue, swatchId, morphable = true }: ColorControlProps) {
   const [morphMode, setMorphMode] = useState(0);
   const [target, setTarget] = useState(defaultValue);
   const [targetText, setTargetText] = useState(defaultValue);
   const [targetY, setTargetY] = useState(defaultValue);
   const [targetTextY, setTargetTextY] = useState(defaultValue);
-  const announce = (dimension, active, value) => {
+  const announce = (dimension: number, active: boolean, value: string) => {
     document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active, value } }));
   };
   const toggle = () => {
-    const secondEnabled = Boolean(document.getElementById("morphSecondEnabled")?.checked);
+    const secondEnabled = Boolean((document.getElementById("morphSecondEnabled") as HTMLInputElement | null)?.checked);
     const nextMode = (morphMode + 1) % (secondEnabled ? 3 : 2);
-    const main = document.getElementById(id)?.value || defaultValue;
+    const main = (document.getElementById(id) as HTMLInputElement | null)?.value || defaultValue;
     if (nextMode === 1 && morphMode === 0) {
       setTarget(main);
       setTargetText(main);
@@ -207,7 +225,7 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
     }
     setMorphMode(nextMode);
   };
-  const setValidTarget = (dimension, value) => {
+  const setValidTarget = (dimension: number, value: string) => {
     const valid = /^#[0-9a-f]{6}$/i.test(value);
     if (!valid) return;
     if (dimension === 1) setTarget(value);
@@ -216,7 +234,7 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
   };
 
   useEffect(() => {
-    const update = event => {
+    const update = (event: CustomEvent<CustomDetail>) => {
       const dimension = event.detail?.dimension || 1;
       if (event.detail?.id !== id || morphMode < dimension) return;
       const value = event.detail.value;
@@ -225,13 +243,13 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
       document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension, active: true, value } }));
     };
     document.addEventListener("randomizemorph", update);
-    const secondDimension = event => {
+    const secondDimension = (event: CustomEvent<CustomDetail>) => {
       if (event.detail?.enabled || morphMode < 2) return;
       setMorphMode(1);
       document.dispatchEvent(new CustomEvent("morphchange", { detail: { id, dimension: 2, active: false, value: targetY } }));
     };
     document.addEventListener("morphseconddimension", secondDimension);
-    const restore = event => {
+    const restore = (event: CustomEvent<CustomDetail>) => {
       if (!morphable) return;
       const targetsX = event.detail?.morphTargetsById || {};
       const targetsY = event.detail?.morphTargets2ById || {};
@@ -255,7 +273,7 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }) {
     };
   }, [id, morphMode, morphable, targetY]);
 
-  const colorTarget = (dimension, value, text, setText) => (
+  const colorTarget = (dimension: number, value: string, text: string, setText: Dispatch<SetStateAction<string>>) => (
     <div className="color-control morph-color-control" data-dimension={dimension}>
       <span className="morph-axis" aria-hidden="true">{dimension === 1 ? "X" : "Y"}</span>
       <span className="swatch" style={{ background: value }}><input type="color" id={`${id}Morph${dimension}`} value={value}
@@ -294,7 +312,7 @@ function BackgroundColorControl() {
   return <ColorControl id="backgroundColor" label="Background colour" defaultValue="#ffffff" swatchId="backgroundSwatch" morphable={false} />;
 }
 
-function FieldGroup({ title, children, className = "" }) {
+function FieldGroup({ title, children, className = "" }: { title: string; children: ReactNode; className?: string }) {
   return (
     <div className={`field-group ${className}`}>
       <div className="field-group-title"><span>{title}</span></div>
@@ -303,7 +321,7 @@ function FieldGroup({ title, children, className = "" }) {
   );
 }
 
-function Checkbox({ id, children, defaultChecked = false, randomizable = false }) {
+function Checkbox({ id, children, defaultChecked = false, randomizable = false }: { id: string; children: ReactNode; defaultChecked?: boolean; randomizable?: boolean }) {
   return (
     <div className="checkbox-control">
       <label className="checkbox-row">

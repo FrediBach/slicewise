@@ -1,4 +1,4 @@
-import { computeContours } from "./contour-engine.js";
+import { computeContours } from "./contour-engine";
 
 let mesh = null;
 

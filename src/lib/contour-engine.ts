@@ -216,10 +216,10 @@ function buildDepth(P, T, W, H, res){
     const area = (x1-x0)*(y2-y0) - (x2-x0)*(y1-y0);
     if (area === 0 || !isFinite(area)) continue;
     const inv = 1/area;
-    let lo = Math.max(0, Math.floor(Math.min(x0,x1,x2)));
-    let hi = Math.min(rw-1, Math.ceil(Math.max(x0,x1,x2)));
-    let to = Math.max(0, Math.floor(Math.min(y0,y1,y2)));
-    let bo = Math.min(rh-1, Math.ceil(Math.max(y0,y1,y2)));
+    const lo = Math.max(0, Math.floor(Math.min(x0,x1,x2)));
+    const hi = Math.min(rw-1, Math.ceil(Math.max(x0,x1,x2)));
+    const to = Math.max(0, Math.floor(Math.min(y0,y1,y2)));
+    const bo = Math.min(rh-1, Math.ceil(Math.max(y0,y1,y2)));
     if (lo>hi || to>bo) continue;
     const d0=sd[a], d1=sd[b], d2=sd[c];
     for (let y=to; y<=bo; y++){
@@ -386,7 +386,15 @@ function deterministicDrawingNumber(settings,geometry){
   return `SW-${(hash>>>0).toString(36).toUpperCase().padStart(7,"0")}`;
 }
 
-function blueprintDocument(settings,W,H,geometry={}){
+type BlueprintGeometry = {
+  direction?: number[];
+  fieldMin?: number;
+  fieldMax?: number;
+  vertices?: number;
+  triangles?: number;
+};
+
+function blueprintDocument(settings,W,H,geometry: BlueprintGeometry={}){
   if (!settings.blueprint) return {backdrop:"",overlay:""};
   const black=settings.blueprintStyle==="black";
   const paper=black ? "#101417" : "#0b3f7a";
@@ -762,7 +770,7 @@ function spiralContours(P, mesh, field, settings){
     return edgeHitsOrigin(x0,y0,x1,y1) || edgeHitsOrigin(x1,y1,x2,y2) || edgeHitsOrigin(x2,y2,x0,y0);
   };
   const pointOnEdge=(a,b,pa,pb,level)=>{
-    let t=clamp((level-pa)/(pb-pa),0,1);
+    const t=clamp((level-pa)/(pb-pa),0,1);
     let key;
     if (t<1e-7) key="v"+a;
     else if (t>1-1e-7) key="v"+b;

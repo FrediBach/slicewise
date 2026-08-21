@@ -1,6 +1,6 @@
 "use strict";
-import { generateGCode } from "./gcode.js";
-import { createColorPair } from "./colorPair.js";
+import { generateGCode } from "./gcode";
+import { createColorPair } from "./colorPair";
 import { GEN_DEFAULTS } from "./generativeMesh";
 import {
   parseOBJ,
@@ -13,9 +13,9 @@ import {
   torusKnot,
   vertexNormals,
   weld,
-} from "./mesh.js";
+} from "./mesh";
 
-const $ = id => document.getElementById(id);
+const $ = (id: string): any => document.getElementById(id);
 const clamp = (v,a,b) => v<a?a:v>b?b:v;
 
 /* =================================================================== app */
@@ -54,7 +54,7 @@ function fitBed(W, H){
 }
 
 /* ------------------------------------------------ worker + smart redraw */
-const renderWorker = new Worker(new URL("./slicer-worker.js", import.meta.url), {type:"module"});
+const renderWorker = new Worker(new URL("./slicer-worker.ts", import.meta.url), {type:"module"});
 let requestId = 0, appliedRequestId = 0, failedRequestId = 0;
 let queuedRender = null, renderInFlight = false;
 let renderWaiters = [];
@@ -222,14 +222,14 @@ function loadFile(file){
     try{
       let raw;
       if (ext === "svg"){
-        const text=new TextDecoder().decode(new Uint8Array(reader.result));
+        const text=new TextDecoder().decode(new Uint8Array(reader.result as ArrayBuffer));
         raw=await globalThis.slicewiseParseSVG(text,state.svgDepth,state.svgRounded,state.svgRoundness);
         state.svgSource=text;
         state.svgSourceName=file.name;
       }
-      else if (ext === "stl") raw = parseSTL(reader.result);
-      else if (ext === "obj") raw = parseOBJ(new TextDecoder().decode(new Uint8Array(reader.result)));
-      else if (ext === "ply") raw = parsePLY(reader.result);
+      else if (ext === "stl") raw = parseSTL(reader.result as ArrayBuffer);
+      else if (ext === "obj") raw = parseOBJ(new TextDecoder().decode(new Uint8Array(reader.result as ArrayBuffer)));
+      else if (ext === "ply") raw = parsePLY(reader.result as ArrayBuffer);
       else throw new Error("Unsupported format: ." + ext + " — use STL, OBJ, PLY or SVG");
       if (!raw.tris.length) throw new Error("No triangles found in " + file.name);
       if (ext!=="svg"){
@@ -317,7 +317,7 @@ generativeWorker.addEventListener("error",()=>{
 
 /* -------------------------------------------------------------- wiring */
 const morphKeyById=new Map();
-function bindPair(id, key, after){
+function bindPair(id, key, after = () => {}){
   morphKeyById.set(id,key);
   const s = $(id), n = $(id + "N");
   const apply = (v, from) => {
@@ -1074,3 +1074,4 @@ commitParameterHistory();
 loadDemo("knot", false);
 window.addEventListener("resize", () => redraw(true));
 }
+

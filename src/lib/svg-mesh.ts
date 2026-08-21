@@ -53,3 +53,4 @@ export function parseSVG(text, depthPercent=12, rounded=false, roundnessPercent=
   }
   return {verts:Float64Array.from(verts),tris:Uint32Array.from(tris)};
 }
+

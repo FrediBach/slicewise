@@ -1,17 +1,35 @@
-const clampPrecision = value => {
+export type ToolpathGroup = {
+  color?: string;
+  label?: string;
+  runs?: number[][];
+};
+
+export type GCodeOptions = {
+  penUp?: number;
+  penDown?: number;
+  drawFeed?: number;
+  travelFeed?: number;
+  zFeed?: number;
+  name?: string;
+  machine?: string;
+  origin?: "rear-left" | "bottom-left";
+  effects?: Partial<Record<"halftone" | "chroma" | "humanizer" | "blueprint", boolean>>;
+};
+
+const clampPrecision = (value: number) => {
   const rounded = Math.round(value * 1000) / 1000;
   return Object.is(rounded, -0) ? "0" : String(rounded);
 };
 
 const cleanComment = value => String(value ?? "").replace(/[()\r\n]/g, " ").trim();
 
-function finiteOption(value, fallback, {positive = false} = {}) {
+function finiteOption(value: unknown, fallback: number, {positive = false}: { positive?: boolean } = {}) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || (positive && parsed <= 0)) return fallback;
   return parsed;
 }
 
-function prepareRun(run, height, origin) {
+function prepareRun(run: number[], height: number, origin: GCodeOptions["origin"]) {
   const points = [];
   for (let i = 0; i + 1 < run.length; i += 2) {
     const x = Number(run[i]);
@@ -24,7 +42,7 @@ function prepareRun(run, height, origin) {
   return points.length > 1 ? points : null;
 }
 
-function orderRuns(runs) {
+function orderRuns(runs: number[][][]) {
   const remaining = runs.slice();
   const ordered = [];
   let cursor = [0, 0];
@@ -57,7 +75,7 @@ function orderRuns(runs) {
 }
 
 /** Convert contour polyline groups into conservative, controller-neutral plotter G-code. */
-export function generateGCode(groups, sheet, options = {}) {
+export function generateGCode(groups: ToolpathGroup[], sheet: { width?: number; height?: number }, options: GCodeOptions = {}) {
   const width = finiteOption(sheet?.width, 210, {positive: true});
   const height = finiteOption(sheet?.height, 210, {positive: true});
   const penUp = finiteOption(options.penUp, 5);
