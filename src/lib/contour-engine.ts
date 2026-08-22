@@ -46,6 +46,9 @@ export interface ContourSettings {
   hide: boolean;
   sil: boolean;
   sw: number;
+  lineWeightMode: string;
+  lineWeightInterval: number;
+  lineWeightAmount: number;
   color: string;
   backgroundColor: string;
   gradientEnabled: boolean;
@@ -1681,14 +1684,28 @@ function computeContourInstance(
 
   const palette = gradientPalette(settings);
   const toneBandCount = settings.halftone ? 12 : 1;
+  const lineWeightMode = settings.lineWeightMode || 'uniform';
+  const weightBandCount = lineWeightMode === 'uniform' ? 1 : lineWeightMode === 'index' ? 2 : 8;
+  const weightValue = (position: number, index: number): number => {
+    const interval = clamp(Math.round(settings.lineWeightInterval || 5), 2, 20);
+    if (lineWeightMode === 'index') return (index + 1) % interval === 0 ? 1 : 0;
+    if (lineWeightMode === 'wave')
+      return 0.5 - 0.5 * Math.cos(((index + 1) / interval) * Math.PI * 2);
+    if (lineWeightMode === 'center') return 1 - Math.abs(position * 2 - 1);
+    return 0;
+  };
+  const weightBand = (position: number, index: number): number =>
+    clamp(Math.round(weightValue(position, index) * (weightBandCount - 1)), 0, weightBandCount - 1);
   const toneValue = (position: number): number => {
     const cycles = clamp(Math.round(settings.halftoneCycles || 1), 1, 8);
     return 0.5 + 0.5 * Math.sin(position * cycles * Math.PI * 2 - Math.PI / 2);
   };
   const toneBand = (position: number): number =>
     clamp(Math.floor(toneValue(position) * toneBandCount), 0, toneBandCount - 1);
-  const out: Polyline[][][] = Array.from({ length: palette.length }, (): Polyline[][] =>
-    Array.from({ length: toneBandCount }, (): Polyline[] => []),
+  const out: Polyline[][][][] = Array.from({ length: palette.length }, (): Polyline[][][] =>
+    Array.from({ length: toneBandCount }, (): Polyline[][] =>
+      Array.from({ length: weightBandCount }, (): Polyline[] => []),
+    ),
   );
   const outlineOut: Polyline[] = [];
   const N = quick ? previewLineCount(settings.lines, settings.previewDetail) : settings.lines;
@@ -1700,7 +1717,7 @@ function computeContourInstance(
     10,
   );
   const curveStrength = (quality - 1) / 9;
-  if (settings.spiral && !settings.divergence) {
+  if (settings.spiral && !settings.divergence && lineWeightMode === 'uniform') {
     const previewSettings = quick && N !== settings.lines ? { ...settings, lines: N } : settings;
     const { pts, values, segs } = spiralContours(P, mesh, field, previewSettings);
     if (segs.length)
@@ -1714,32 +1731,29 @@ function computeContourInstance(
               chunk.pts,
               vis,
               step,
-              out[chunk.band][settings.halftone ? toneBand(position) : 0],
+              out[chunk.band][settings.halftone ? toneBand(position) : 0][0],
             );
           }
         } else if (settings.halftone) {
           const tones = Float32Array.from(values, toneValue);
           for (const chunk of splitPolylineByBands(poly, pts, tones, toneBandCount)) {
             const indexes = Array.from({ length: chunk.pts.length / 3 }, (_, i) => i);
-            emitPath(indexes, chunk.pts, vis, step, out[0][chunk.band]);
+            emitPath(indexes, chunk.pts, vis, step, out[0][chunk.band][0]);
           }
-        } else emitPath(poly, pts, vis, step, out[0][0]);
+        } else emitPath(poly, pts, vis, step, out[0][0][0]);
       }
   } else {
-    for (const { position, worldPoints, polylines } of contourSlices(
-      mesh,
-      settings,
-      field,
-      N,
-      curveStrength,
-    )) {
+    const slices = contourSlices(mesh, settings, field, N, curveStrength);
+    for (let sliceIndex = 0; sliceIndex < slices.length; sliceIndex++) {
+      const { position, worldPoints, polylines } = slices[sliceIndex];
       if (!polylines.length) continue;
       const pts = projectWorldPoints(worldPoints, P);
       const band = settings.gradientEnabled
         ? clamp(Math.floor(position * palette.length), 0, palette.length - 1)
         : 0;
       const tone = settings.halftone ? toneBand(position) : 0;
-      for (const poly of polylines) emitPath(poly, pts, vis, step, out[band][tone]);
+      const weight = weightBand(position, sliceIndex);
+      for (const poly of polylines) emitPath(poly, pts, vis, step, out[band][tone][weight]);
     }
   }
   if (settings.sil) {
@@ -1777,15 +1791,19 @@ function computeContourInstance(
     }
     return { d, runs: plotRuns };
   };
-  const colorPaths: string[][] = [];
+  const colorPaths: string[][][] = [];
   const toolpaths: ContourToolpathGroup[] = [];
   for (let index = 0; index < out.length; index++) {
-    const pathsForColor: string[] = [];
+    const pathsForColor: string[][] = [];
     const runsForColor: Polyline[] = [];
     for (const toneGroup of out[index]) {
-      const group = serialiseGroup(toneGroup);
-      pathsForColor.push(group.d);
-      runsForColor.push(...group.runs);
+      const pathsForTone: string[] = [];
+      for (const weightGroup of toneGroup) {
+        const group = serialiseGroup(weightGroup);
+        pathsForTone.push(group.d);
+        runsForColor.push(...group.runs);
+      }
+      pathsForColor.push(pathsForTone);
     }
     colorPaths.push(pathsForColor);
     if (runsForColor.length) {
@@ -1805,7 +1823,11 @@ function computeContourInstance(
     if (matching) matching.runs.push(...outlineGroup.runs);
     else toolpaths.push({ color: settings.color, label: 'silhouette', runs: outlineGroup.runs });
   }
-  const allPathData = colorPaths.flat().join('') + outlinePath;
+  const strokeWidth = (weight: number): number => {
+    if (weightBandCount === 1) return settings.sw;
+    const amount = clamp((settings.lineWeightAmount || 0) / 100, 0, 3);
+    return settings.sw * (1 + (weight / (weightBandCount - 1)) * amount);
+  };
   const blueprint = blueprintDocument(settings, W, H, blueprintGeometry);
   let artwork: string,
     renderedPaths = paths,
@@ -1815,12 +1837,27 @@ function computeContourInstance(
     const rotation = amount * 0.12,
       cx = W / 2,
       cy = H / 2;
-    const attrs = `fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:screen"`;
+    const chromaPaths = (color: string): string =>
+      colorPaths
+        .flatMap((tonePaths) =>
+          tonePaths.flatMap((weightPaths) =>
+            weightPaths.map((d, weight) =>
+              d
+                ? `<path d="${d}" stroke="${color}" stroke-width="${fmt(strokeWidth(weight))}"/>`
+                : '',
+            ),
+          ),
+        )
+        .join('') +
+      (outlinePath
+        ? `<path d="${outlinePath}" stroke="${color}" stroke-width="${fmt(settings.sw)}"/>`
+        : '');
+    const attrs = `fill="none" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:screen"`;
     artwork = `${settings.suppressBackground ? '' : `<rect width="${W}" height="${H}" fill="#000000"/>`}
 <g style="isolation:isolate">
-<path d="${allPathData}" stroke="#ff2020" transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}/>
-<path d="${allPathData}" stroke="#25ff48" transform="translate(0 ${fmt(amount * 0.08)})" ${attrs}/>
-<path d="${allPathData}" stroke="#2548ff" transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}/>
+<g transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}>${chromaPaths('#ff2020')}</g>
+<g transform="translate(0 ${fmt(amount * 0.08)})" ${attrs}>${chromaPaths('#25ff48')}</g>
+<g transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}>${chromaPaths('#2548ff')}</g>
 </g>`;
     renderedPaths *= 3;
     renderedNodes *= 3;
@@ -1832,29 +1869,36 @@ function computeContourInstance(
         : settings.bg
           ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || '#ffffff'}"/>`
           : '';
-    const attrs = `fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
+    const attrs = `fill="none" stroke-linecap="round" stroke-linejoin="round"`;
     const spacing = clamp(settings.halftoneSize || 2.4, 0.5, 8);
     const contrast = clamp((settings.halftoneContrast || 0) / 100, 0, 1);
-    const halftoneAttrs = (tone: number): string => {
+    const halftoneAttrs = (tone: number, width: number): string => {
       if (!settings.halftone) return '';
       const value = (tone + 0.5) / toneBandCount;
       const ratio = clamp(0.5 + (value - 0.5) * contrast * 1.7, 0.07, 0.93);
-      const dash = Math.max(0.01, spacing * ratio - settings.sw * 0.7);
-      const gap = Math.max(settings.sw * 0.65, spacing - dash);
+      const dash = Math.max(0.01, spacing * ratio - width * 0.7);
+      const gap = Math.max(width * 0.65, spacing - dash);
       const offset = (tone / toneBandCount) * spacing;
       return `stroke-dasharray="${fmt(dash)} ${fmt(gap)}" stroke-dashoffset="${fmt(offset)}"`;
     };
     const groups = colorPaths
       .map((tonePaths, i) =>
         tonePaths
-          .map((d, tone) =>
-            d ? `<path d="${d}" stroke="${palette[i]}" ${halftoneAttrs(tone)} ${attrs}/>` : '',
+          .map((weightPaths, tone) =>
+            weightPaths
+              .map((d, weight) => {
+                const width = strokeWidth(weight);
+                return d
+                  ? `<path d="${d}" stroke="${palette[i]}" stroke-width="${fmt(width)}" ${halftoneAttrs(tone, width)} ${attrs}/>`
+                  : '';
+              })
+              .join('\n'),
           )
           .join('\n'),
       )
       .join('\n');
     const outline = outlinePath
-      ? `<path d="${outlinePath}" stroke="${settings.blueprint ? '#f5f9ff' : settings.color}" ${attrs}/>`
+      ? `<path d="${outlinePath}" stroke="${settings.blueprint ? '#f5f9ff' : settings.color}" stroke-width="${fmt(settings.sw)}" ${attrs}/>`
       : '';
     artwork = `${bg}${groups}${outline}${settings.suppressBackground ? '' : blueprint.overlay}`;
   }

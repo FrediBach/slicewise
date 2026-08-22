@@ -141,3 +141,49 @@ describe('contour projection modes', () => {
     expect(result.toolpaths.some((group) => group.runs.some((run) => run.length > 20))).toBe(true);
   });
 });
+
+describe('contour line-weight variation', () => {
+  it('emphasizes every configured index contour without changing plotter centerlines', () => {
+    const mesh = makeContourMesh();
+    const uniform = computeContours(mesh, { ...contourSettings, hide: false, sil: false }, false);
+    const indexed = computeContours(
+      mesh,
+      {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        lineWeightMode: 'index',
+        lineWeightInterval: 2,
+        lineWeightAmount: 100,
+      },
+      false,
+    );
+
+    expect(indexed.svg).toContain('stroke-width="0.35"');
+    expect(indexed.svg).toContain('stroke-width="0.7"');
+    expect(indexed.toolpaths.flatMap((group) => group.runs)).toHaveLength(
+      uniform.toolpaths.flatMap((group) => group.runs).length,
+    );
+  });
+
+  it.each(['wave', 'center'])('emits multiple finite widths for %s weighting', (mode) => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        lineWeightMode: mode,
+        lineWeightInterval: 4,
+        lineWeightAmount: 150,
+      },
+      true,
+    );
+    const widths = new Set(
+      Array.from(result.svg.matchAll(/stroke-width="([\d.]+)"/g), (match) => match[1]),
+    );
+
+    expect(widths.size).toBeGreaterThan(1);
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+  });
+});

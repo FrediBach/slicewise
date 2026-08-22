@@ -145,6 +145,9 @@ const state: AppState = {
   hide: true,
   sil: true,
   sw: 0.35,
+  lineWeightMode: 'uniform',
+  lineWeightInterval: 5,
+  lineWeightAmount: 100,
   color: '#15181a',
   backgroundColor: '#ffffff',
   pw: 210,
@@ -275,6 +278,9 @@ if (typeof document !== 'undefined') {
       hide,
       sil,
       sw,
+      lineWeightMode,
+      lineWeightInterval,
+      lineWeightAmount,
       color,
       backgroundColor,
       gradientEnabled,
@@ -325,6 +331,9 @@ if (typeof document !== 'undefined') {
       hide,
       sil,
       sw,
+      lineWeightMode,
+      lineWeightInterval,
+      lineWeightAmount,
       color,
       backgroundColor,
       gradientEnabled,
@@ -874,6 +883,8 @@ if (typeof document !== 'undefined') {
   bindPair('easeCenter', 'easeCenter');
   bindPair('quality', 'quality');
   bindPair('sw', 'sw');
+  bindPair('lineWeightInterval', 'lineWeightInterval');
+  bindPair('lineWeightAmount', 'lineWeightAmount');
   bindPair('margin', 'margin');
   bindPair('chromaAmount', 'chromaAmount');
   bindPair('humanizerAmount', 'humanizerAmount');
@@ -1122,19 +1133,36 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   function syncSliceConstruction(): void {
-    const fanEnabled = state.divergence > 0;
-    if (fanEnabled && state.spiral) {
+    const spiralBlocked = state.divergence > 0 || state.lineWeightMode !== 'uniform';
+    if (spiralBlocked && state.spiral) {
       state.spiral = false;
       $('spiral').checked = false;
     }
-    $('spiral').disabled = fanEnabled;
-    $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', fanEnabled);
+    $('spiral').disabled = spiralBlocked;
+    $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', spiralBlocked);
   }
   $('spiral').addEventListener('change', (e) => {
     state.spiral = inputTarget(e).checked;
     redraw(false);
   });
   syncSliceConstruction();
+  function syncLineWeightControls(): void {
+    const enabled = state.lineWeightMode !== 'uniform';
+    const intervalEnabled = state.lineWeightMode === 'index' || state.lineWeightMode === 'wave';
+    for (const id of ['lineWeightInterval', 'lineWeightAmount']) {
+      const controlEnabled = id === 'lineWeightInterval' ? intervalEnabled : enabled;
+      $(id).disabled = !controlEnabled;
+      $(id + 'N').disabled = !controlEnabled;
+      $(id + 'Control').classList.toggle('is-disabled', !controlEnabled);
+    }
+  }
+  $('lineWeightMode').addEventListener('change', (event) => {
+    state.lineWeightMode = inputTarget(event).value;
+    syncLineWeightControls();
+    syncSliceConstruction();
+    redraw(false);
+  });
+  syncLineWeightControls();
   $('hide').addEventListener('change', (e) => {
     state.hide = inputTarget(e).checked;
     redraw(false);
@@ -1505,6 +1533,8 @@ if (typeof document !== 'undefined') {
     ['cutEl', 'cutEl'],
     ['divergence', 'divergence'],
     ['sw', 'sw'],
+    ['lineWeightInterval', 'lineWeightInterval'],
+    ['lineWeightAmount', 'lineWeightAmount'],
     ['gradientColors', 'gradientColors'],
     ['margin', 'margin'],
     ['halftoneSize', 'halftoneSize'],
@@ -1519,6 +1549,7 @@ if (typeof document !== 'undefined') {
     'lens',
     'gapEase',
     'axis',
+    'lineWeightMode',
     'blueprintStyle',
   ];
   const historyChecks: Array<keyof ContourSettings> = [
@@ -1599,6 +1630,7 @@ if (typeof document !== 'undefined') {
     syncLensAmount();
     syncEaseCenter();
     syncSliceConstruction();
+    syncLineWeightControls();
     syncHalftoneControls();
     syncChromaAmount();
     syncHumanizerControls();
@@ -1771,6 +1803,17 @@ if (typeof document !== 'undefined') {
     randomizeCheckbox('sil', 'sil', 0.78);
 
     randomizePair('sw', 'sw', () => randomIn(0.15, 0.7));
+    randomizeSelect('lineWeightMode', 'lineWeightMode', [
+      'uniform',
+      'uniform',
+      'index',
+      'wave',
+      'center',
+    ]);
+    randomizePair('lineWeightInterval', 'lineWeightInterval', () => randomInt(3, 10));
+    randomizePair('lineWeightAmount', 'lineWeightAmount', () => randomInt(50, 200));
+    syncLineWeightControls();
+    syncSliceConstruction();
     randomizePair('margin', 'margin', () => randomInt(8, 24));
     const colorPair = createColorPair();
     const reverseColors = Math.random() < 0.5;

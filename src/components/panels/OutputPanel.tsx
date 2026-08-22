@@ -5,6 +5,7 @@ import {
   Checkbox,
   FieldGroup,
   InkColorControl,
+  RandomLock,
   ValueControl,
 } from '../controls/FormControls';
 import { GradientChooser } from '../controls/GradientChooser';
@@ -22,6 +23,42 @@ export function OutputPanel() {
           value="0.35"
           unit="mm"
         />
+        <div className="control-row select-row">
+          <div className="control-label">
+            <label htmlFor="lineWeightMode">Line-weight variation</label>
+            <RandomLock id="lineWeightMode" label="Line-weight variation" />
+          </div>
+          <div className="select-wrap">
+            <select id="lineWeightMode" defaultValue="uniform">
+              <option value="uniform">Uniform · off</option>
+              <option value="index">Index contours</option>
+              <option value="wave">Thickness wave</option>
+              <option value="center">Centre weighted</option>
+            </select>
+            <ChevronDown size={14} />
+          </div>
+        </div>
+        <div className="effect-controls">
+          <ValueControl
+            id="lineWeightInterval"
+            label="Interval"
+            min="2"
+            max="20"
+            step="1"
+            value="5"
+            disabled
+          />
+          <ValueControl
+            id="lineWeightAmount"
+            label="Variation"
+            min="0"
+            max="300"
+            step="5"
+            value="100"
+            unit="%"
+            disabled
+          />
+        </div>
         <InkColorControl />
         <BackgroundColorControl />
         <GradientChooser />
