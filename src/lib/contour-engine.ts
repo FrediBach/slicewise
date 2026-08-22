@@ -827,8 +827,7 @@ function splitPolylineByBands(
 }
 
 function gradientPalette(settings: ContourSettings): string[] {
-  if (settings.blueprint) return ['#f5f9ff'];
-  if (!settings.gradientEnabled) return [settings.color];
+  if (!settings.gradientEnabled) return [settings.blueprint ? '#f5f9ff' : settings.color];
   const stops = (settings.gradientStops || []).slice().sort((a, b) => a.position - b.position);
   if (stops.length < 2) return [settings.color];
   const count = clamp(Math.round(settings.gradientColors), 2, 24);
@@ -1001,6 +1000,54 @@ function blueprintDocument(
   </g>
 </g>`;
   return { backdrop, overlay };
+}
+
+function effectivePaperColor(settings: ContourSettings): string {
+  if (settings.blueprint) return settings.blueprintStyle === 'black' ? '#101417' : '#0b3f7a';
+  if (settings.chroma) return '#000000';
+  return settings.backgroundColor || '#ffffff';
+}
+
+function effectiveAnnotationColor(settings: ContourSettings): string {
+  return settings.blueprint || settings.chroma ? '#f5f9ff' : settings.color;
+}
+
+function documentBackdrop(
+  settings: ContourSettings,
+  W: number,
+  H: number,
+  blueprint: BlueprintDocument,
+): string {
+  if (settings.suppressBackground) return '';
+  if (settings.blueprint) return blueprint.backdrop;
+  if (settings.chroma) return `<rect width="${W}" height="${H}" fill="#000000"/>`;
+  return settings.bg
+    ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || '#ffffff'}"/>`
+    : '';
+}
+
+function documentOverlay(settings: ContourSettings, blueprint: BlueprintDocument): string {
+  return settings.suppressBackground ? '' : blueprint.overlay;
+}
+
+function chromaticLayers(
+  settings: ContourSettings,
+  W: number,
+  H: number,
+  paths: (color: string) => string,
+  baseArtwork = '',
+): string {
+  const amount = clamp(settings.chromaAmount, 0.1, 6);
+  const rotation = amount * 0.12;
+  const cx = W / 2;
+  const cy = H / 2;
+  const attrs = `fill="none" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:screen"`;
+  const base = baseArtwork ? `<g id="chroma-base">${baseArtwork}</g>` : '';
+  return `${base}<g id="chromatic-aberration" style="isolation:isolate">
+<g transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}>${paths('#ff2020')}</g>
+<g transform="translate(0 ${fmt(amount * 0.08)})" ${attrs}>${paths('#25ff48')}</g>
+<g transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}>${paths('#2548ff')}</g>
+</g>`;
 }
 
 /* ------------------------------------ Ramer–Douglas–Peucker (iterative) */
@@ -1562,6 +1609,9 @@ function computeLineArtInstance(
     ? previewCurveQuality(settings.quality, settings.previewDetail)
     : settings.quality;
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
+  const palette = gradientPalette(settings);
+  const pathDataByColor = palette.map(() => '');
+  const runsByColor = palette.map((): Polyline[] => []);
   const runs: Polyline[] = [];
   let pathData = '',
     paths = 0,
@@ -1576,11 +1626,21 @@ function computeLineArtInstance(
     const styled = settings.humanizer
       ? humanizeRun(simplified.run, settings.humanizerAmount, salt++)
       : simplified.run;
+    const colorIndex = settings.gradientEnabled
+      ? clamp(
+          Math.floor((runIndex / Math.max(1, offsets.length - 2)) * palette.length),
+          0,
+          palette.length - 1,
+        )
+      : 0;
     const clippedRuns = settings.clipToArtboard ? clipRunToRect(styled, W, H) : [styled];
     for (const run of clippedRuns) {
       if (run.length < 4) continue;
-      pathData += serialiseRun(run, quality, sharpVertices(run));
-      if (!quick) runs.push(run);
+      const data = serialiseRun(run, quality, sharpVertices(run));
+      pathData += data;
+      pathDataByColor[colorIndex] += data;
+      if (!quick || settings.topographicMap) runs.push(run);
+      if (!quick) runsByColor[colorIndex].push(run);
       paths++;
       nodes += run.length / 2;
     }
@@ -1593,43 +1653,81 @@ function computeLineArtInstance(
     triangles: 0,
   };
   const blueprint = blueprintDocument(settings, W, H, blueprintGeometry);
+  const mapAnnotations = settings.topographicMap
+    ? createMapAnnotations(runs, {
+        width: W,
+        height: H,
+        margin: settings.margin,
+        lineCount: settings.lines,
+        strokeWidth: settings.sw,
+        color: effectiveAnnotationColor(settings),
+        backgroundColor: effectivePaperColor(settings),
+        title: settings.documentTitle,
+      })
+    : null;
   const attrs = `fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
+  const dash = settings.halftone
+    ? `stroke-dasharray="${fmt(settings.halftoneSize * 0.5)} ${fmt(settings.halftoneSize * 0.5)}"`
+    : '';
+  const baseArtwork = pathDataByColor
+    .map((data, index) =>
+      data ? `<path d="${data}" stroke="${palette[index]}" ${dash} ${attrs}/>` : '',
+    )
+    .join('');
   let artwork: string,
     renderedPaths = paths,
     renderedNodes = nodes;
   if (settings.chroma) {
-    const amount = clamp(settings.chromaAmount, 0.1, 6),
-      rotation = amount * 0.12,
-      cx = W / 2,
-      cy = H / 2;
-    artwork = `${settings.suppressBackground ? '' : `<rect width="${W}" height="${H}" fill="#000000"/>`}
-<g style="isolation:isolate">
-<path d="${pathData}" stroke="#ff2020" transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs} style="mix-blend-mode:screen"/>
-<path d="${pathData}" stroke="#25ff48" transform="translate(0 ${fmt(amount * 0.08)})" ${attrs} style="mix-blend-mode:screen"/>
-<path d="${pathData}" stroke="#2548ff" transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs} style="mix-blend-mode:screen"/>
-</g>`;
-    renderedPaths *= 3;
-    renderedNodes *= 3;
+    artwork = chromaticLayers(
+      settings,
+      W,
+      H,
+      (color) => `<path d="${pathData}" stroke="${color}" ${dash} ${attrs}/>`,
+      settings.gradientEnabled ? baseArtwork : '',
+    );
+    renderedPaths *= settings.gradientEnabled ? 4 : 3;
+    renderedNodes *= settings.gradientEnabled ? 4 : 3;
   } else {
-    const background = settings.suppressBackground
-      ? ''
-      : settings.blueprint
-        ? blueprint.backdrop
-        : settings.bg
-          ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || '#ffffff'}"/>`
-          : '';
-    const dash = settings.halftone
-      ? `stroke-dasharray="${fmt(settings.halftoneSize * 0.5)} ${fmt(settings.halftoneSize * 0.5)}"`
-      : '';
-    artwork = `${background}<path d="${pathData}" stroke="${settings.blueprint ? '#f5f9ff' : settings.color}" ${dash} ${attrs}/>${settings.suppressBackground ? '' : blueprint.overlay}`;
+    artwork = baseArtwork;
   }
+  artwork = `${documentBackdrop(settings, W, H, blueprint)}${artwork}`;
+  if (mapAnnotations) {
+    artwork += mapAnnotations.svg;
+    renderedPaths += mapAnnotations.paths;
+    renderedNodes += mapAnnotations.nodes;
+  }
+  artwork += documentOverlay(settings, blueprint);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;
   return {
     svg,
-    toolpaths:
-      !quick && runs.length ? [{ color: settings.color, label: 'SVG centreline', runs }] : [],
+    toolpaths: !quick
+      ? [
+          ...runsByColor.flatMap((colorRuns, index) =>
+            colorRuns.length
+              ? [
+                  {
+                    color: palette[index],
+                    label: settings.gradientEnabled
+                      ? `gradient colour ${index + 1}`
+                      : 'SVG centreline',
+                    runs: colorRuns,
+                  },
+                ]
+              : [],
+          ),
+          ...(mapAnnotations?.runs.length
+            ? [
+                {
+                  color: effectiveAnnotationColor(settings),
+                  label: 'topographic annotations',
+                  runs: mapAnnotations.runs,
+                },
+              ]
+            : []),
+        ]
+      : [],
     paths: renderedPaths,
     nodes: renderedNodes,
     bytes: new TextEncoder().encode(svg).byteLength,
@@ -1841,8 +1939,8 @@ function computeContourInstance(
         margin: settings.margin,
         lineCount: N,
         strokeWidth: settings.sw,
-        color: settings.blueprint ? '#f5f9ff' : settings.color,
-        backgroundColor: settings.backgroundColor || '#ffffff',
+        color: effectiveAnnotationColor(settings),
+        backgroundColor: effectivePaperColor(settings),
         title: settings.documentTitle,
       })
     : null;
@@ -1861,81 +1959,69 @@ function computeContourInstance(
   let artwork: string,
     renderedPaths = paths,
     renderedNodes = nodes;
-  if (settings.chroma) {
-    const amount = clamp(settings.chromaAmount, 0.1, 6);
-    const rotation = amount * 0.12,
-      cx = W / 2,
-      cy = H / 2;
-    const chromaPaths = (color: string): string =>
-      colorPaths
-        .flatMap((tonePaths) =>
-          tonePaths.flatMap((weightPaths) =>
-            weightPaths.map((d, weight) =>
-              d
-                ? `<path d="${d}" stroke="${color}" stroke-width="${fmt(strokeWidth(weight))}"/>`
-                : '',
-            ),
-          ),
-        )
-        .join('') +
-      (outlinePath
-        ? `<path d="${outlinePath}" stroke="${color}" stroke-width="${fmt(settings.sw)}"/>`
-        : '');
-    const attrs = `fill="none" stroke-linecap="round" stroke-linejoin="round" style="mix-blend-mode:screen"`;
-    artwork = `${settings.suppressBackground ? '' : `<rect width="${W}" height="${H}" fill="#000000"/>`}
-<g style="isolation:isolate">
-<g transform="translate(${-amount} 0) rotate(${-rotation} ${cx} ${cy})" ${attrs}>${chromaPaths('#ff2020')}</g>
-<g transform="translate(0 ${fmt(amount * 0.08)})" ${attrs}>${chromaPaths('#25ff48')}</g>
-<g transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}>${chromaPaths('#2548ff')}</g>
-</g>`;
-    renderedPaths *= 3;
-    renderedNodes *= 3;
-  } else {
-    const bg = settings.suppressBackground
-      ? ''
-      : settings.blueprint
-        ? blueprint.backdrop
-        : settings.bg
-          ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || '#ffffff'}"/>`
-          : '';
-    const attrs = `fill="none" stroke-linecap="round" stroke-linejoin="round"`;
-    const spacing = clamp(settings.halftoneSize || 2.4, 0.5, 8);
-    const contrast = clamp((settings.halftoneContrast || 0) / 100, 0, 1);
-    const halftoneAttrs = (tone: number, width: number): string => {
-      if (!settings.halftone) return '';
-      const value = (tone + 0.5) / toneBandCount;
-      const ratio = clamp(0.5 + (value - 0.5) * contrast * 1.7, 0.07, 0.93);
-      const dash = Math.max(0.01, spacing * ratio - width * 0.7);
-      const gap = Math.max(width * 0.65, spacing - dash);
-      const offset = (tone / toneBandCount) * spacing;
-      return `stroke-dasharray="${fmt(dash)} ${fmt(gap)}" stroke-dashoffset="${fmt(offset)}"`;
-    };
-    const groups = colorPaths
-      .map((tonePaths, i) =>
-        tonePaths
-          .map((weightPaths, tone) =>
-            weightPaths
-              .map((d, weight) => {
-                const width = strokeWidth(weight);
-                return d
-                  ? `<path d="${d}" stroke="${palette[i]}" stroke-width="${fmt(width)}" ${halftoneAttrs(tone, width)} ${attrs}/>`
-                  : '';
-              })
-              .join('\n'),
-          )
-          .join('\n'),
+  const attrs = `fill="none" stroke-linecap="round" stroke-linejoin="round"`;
+  const spacing = clamp(settings.halftoneSize || 2.4, 0.5, 8);
+  const contrast = clamp((settings.halftoneContrast || 0) / 100, 0, 1);
+  const halftoneAttrs = (tone: number, width: number): string => {
+    if (!settings.halftone) return '';
+    const value = (tone + 0.5) / toneBandCount;
+    const ratio = clamp(0.5 + (value - 0.5) * contrast * 1.7, 0.07, 0.93);
+    const dash = Math.max(0.01, spacing * ratio - width * 0.7);
+    const gap = Math.max(width * 0.65, spacing - dash);
+    const offset = (tone / toneBandCount) * spacing;
+    return `stroke-dasharray="${fmt(dash)} ${fmt(gap)}" stroke-dashoffset="${fmt(offset)}"`;
+  };
+  const pathsWithColor = (color: string): string =>
+    colorPaths
+      .flatMap((tonePaths) =>
+        tonePaths.flatMap((weightPaths, tone) =>
+          weightPaths.map((d, weight) => {
+            const width = strokeWidth(weight);
+            return d
+              ? `<path d="${d}" stroke="${color}" stroke-width="${fmt(width)}" ${halftoneAttrs(tone, width)}/>`
+              : '';
+          }),
+        ),
       )
-      .join('\n');
-    const outline = outlinePath
-      ? `<path d="${outlinePath}" stroke="${settings.blueprint ? '#f5f9ff' : settings.color}" stroke-width="${fmt(settings.sw)}" ${attrs}/>`
-      : '';
-    artwork = `${bg}${groups}${outline}${settings.suppressBackground ? '' : blueprint.overlay}`;
+      .join('') +
+    (outlinePath
+      ? `<path d="${outlinePath}" stroke="${color}" stroke-width="${fmt(settings.sw)}"/>`
+      : '');
+  const groups = colorPaths
+    .map((tonePaths, i) =>
+      tonePaths
+        .map((weightPaths, tone) =>
+          weightPaths
+            .map((d, weight) => {
+              const width = strokeWidth(weight);
+              return d
+                ? `<path d="${d}" stroke="${palette[i]}" stroke-width="${fmt(width)}" ${halftoneAttrs(tone, width)} ${attrs}/>`
+                : '';
+            })
+            .join('\n'),
+        )
+        .join('\n'),
+    )
+    .join('\n');
+  const outlineColor = settings.blueprint && !settings.gradientEnabled ? '#f5f9ff' : settings.color;
+  const outline = outlinePath
+    ? `<path d="${outlinePath}" stroke="${outlineColor}" stroke-width="${fmt(settings.sw)}" ${attrs}/>`
+    : '';
+  const baseArtwork = `${groups}${outline}`;
+  const contours = settings.chroma
+    ? chromaticLayers(settings, W, H, pathsWithColor, settings.gradientEnabled ? baseArtwork : '')
+    : baseArtwork;
+  if (settings.chroma) {
+    renderedPaths *= settings.gradientEnabled ? 4 : 3;
+    renderedNodes *= settings.gradientEnabled ? 4 : 3;
   }
+  artwork = `${documentBackdrop(settings, W, H, blueprint)}${contours}`;
   if (mapAnnotations) {
     artwork += mapAnnotations.svg;
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
   }
+  artwork += documentOverlay(settings, blueprint);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;
@@ -2054,13 +2140,7 @@ export function computeContours(
   const W = settings.pw,
     H = settings.ph;
   const blueprint = blueprintDocument(settings, W, H, results[0]?.blueprintGeometry);
-  const background = settings.blueprint
-    ? blueprint.backdrop
-    : settings.chroma
-      ? `<rect width="${W}" height="${H}" fill="#000000"/>`
-      : settings.bg
-        ? `<rect width="${W}" height="${H}" fill="${settings.backgroundColor || '#ffffff'}"/>`
-        : '';
+  const background = documentBackdrop(settings, W, H, blueprint);
   const layers = results
     .map(
       (result) =>
@@ -2068,7 +2148,7 @@ export function computeContours(
     )
     .join('\n');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
-${background}${layers}${settings.blueprint ? blueprint.overlay : ''}
+${background}${layers}${documentOverlay(settings, blueprint)}
 </svg>`;
 
   const groups = new Map<string, ContourToolpathGroup>();

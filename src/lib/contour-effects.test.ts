@@ -80,6 +80,136 @@ describe('contour output effects', () => {
     expect(result.svg).toContain('stroke="#f5f9ff"');
   });
 
+  it('composes humanized halftone chromatic contours with blueprint overlays', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      humanizer: true,
+      humanizerAmount: 64,
+      halftone: true,
+      chroma: true,
+      blueprint: true,
+    };
+
+    const first = computeContours(makeContourMesh(), settings, false);
+    const second = computeContours(makeContourMesh(), settings, false);
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.svg).toContain('fill="#0b3f7a"');
+    expect(first.svg).toContain('stroke-dasharray="');
+    expect(first.svg).toContain('mix-blend-mode:screen');
+    expect(first.svg).toContain('stroke="#ff2020"');
+    expect(first.svg).toContain('id="technical-annotations"');
+    expect(first.svg.indexOf('mix-blend-mode:screen')).toBeLessThan(
+      first.svg.indexOf('id="technical-annotations"'),
+    );
+    expect(first.toolpaths).toEqual(second.toolpaths);
+  });
+
+  it('keeps a gradient base visible beneath chromatic ghost layers', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        gradientEnabled: true,
+        chroma: true,
+      },
+      true,
+    );
+
+    expect(result.svg).toContain('id="chroma-base"');
+    expect(result.svg).toContain('stroke="#ef4444"');
+    expect(result.svg).toContain('stroke="#3b82f6"');
+    expect(result.svg).toContain('stroke="#ff2020"');
+  });
+
+  it('composes effects for imported SVG centreline artwork', () => {
+    const points: number[] = [];
+    const offsets = [0];
+    for (let row = 0; row < 8; row++) {
+      for (let column = 0; column < 6; column++)
+        points.push(-0.9 + column * 0.36, -0.7 + row * 0.2 + Math.sin(column) * 0.03, 0);
+      offsets.push(points.length / 3);
+    }
+    const result = computeContours(
+      {
+        V: Float32Array.from(points),
+        T: new Uint32Array(),
+        lineArt: { offsets: Uint32Array.from(offsets) },
+      },
+      {
+        ...contourSettings,
+        gradientEnabled: true,
+        halftone: true,
+        chroma: true,
+        humanizer: true,
+        blueprint: true,
+        topographicMap: true,
+      },
+      false,
+    );
+
+    expect(result.svg).toContain('id="chroma-base"');
+    expect(result.svg).toContain('stroke-dasharray="');
+    expect(result.svg).toContain('id="topographic-annotations"');
+    expect(result.svg).toContain('id="technical-annotations"');
+    expect(result.toolpaths.some((group) => group.label.startsWith('gradient colour'))).toBe(true);
+    expect(result.toolpaths.some((group) => group.label === 'topographic annotations')).toBe(true);
+  });
+
+  it('renders every post-processing combination without invalid SVG values', () => {
+    const effects = [
+      'gradientEnabled',
+      'halftone',
+      'chroma',
+      'humanizer',
+      'blueprint',
+      'topographicMap',
+    ] as const;
+
+    for (let mask = 0; mask < 1 << effects.length; mask++) {
+      const enabled = Object.fromEntries(
+        effects.map((effect, index) => [effect, Boolean(mask & (1 << index))]),
+      );
+      const result = computeContours(
+        makeContourMesh(),
+        { ...contourSettings, hide: false, sil: false, lines: 6, ...enabled },
+        true,
+      );
+
+      expect(result.svg).toMatch(/^<svg/);
+      expect(result.svg).not.toMatch(/(?:NaN|undefined|Infinity)/);
+      if (enabled.halftone) expect(result.svg).toContain('stroke-dasharray="');
+      if (enabled.chroma) expect(result.svg).toContain('id="chromatic-aberration"');
+      if (enabled.blueprint) expect(result.svg).toContain('id="technical-annotations"');
+      if (enabled.topographicMap) expect(result.svg).toContain('id="topographic-annotations"');
+    }
+  });
+
+  it('keeps combined document effects outside repeated morph layers', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        hide: false,
+        morphEnabled: true,
+        morphSteps: 3,
+        morphTargets: { az: 70 },
+        chroma: true,
+        blueprint: true,
+      },
+      true,
+    );
+
+    expect(result.svg.match(/data-morph-x-step=/g)).toHaveLength(3);
+    expect(result.svg.match(/<rect width="120" height="100" fill="#0b3f7a"\/>/g)).toHaveLength(1);
+    expect(result.svg.match(/id="technical-annotations"/g)).toHaveLength(1);
+    expect(result.svg.match(/id="chromatic-aberration"/g)).toHaveLength(3);
+  });
+
   it('adds deterministic, plotter-safe topographic labels and locations', () => {
     const mesh = makeContourMesh();
     const settings = {

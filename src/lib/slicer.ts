@@ -108,6 +108,16 @@ const inputTarget = (event: Event): HTMLInputElement => event.currentTarget as H
 const clamp = (v: number, a: number, b: number): number => (v < a ? a : v > b ? b : v);
 const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+const previewBackground = (
+  settings: Pick<AppState, 'blueprint' | 'blueprintStyle' | 'chroma' | 'backgroundColor'>,
+): string =>
+  settings.blueprint
+    ? settings.blueprintStyle === 'black'
+      ? '#101417'
+      : '#0b3f7a'
+    : settings.chroma
+      ? '#000000'
+      : settings.backgroundColor;
 
 /* =================================================================== app */
 const state: AppState = {
@@ -410,11 +420,7 @@ if (typeof document !== 'undefined') {
   function applyPreview(result: ContourResult, request: RenderRequest): void {
     fitBed(result.W, result.H);
     $('artboardDimensions').textContent = `${result.W} × ${result.H} MM`;
-    $('bed').style.background = state.blueprint
-      ? state.blueprintStyle === 'black'
-        ? '#101417'
-        : '#0b3f7a'
-      : state.backgroundColor;
+    $('bed').style.background = previewBackground(state);
     $('bed').innerHTML = result.svg;
     installPreviewRoot();
     previewView = {
@@ -1203,43 +1209,13 @@ if (typeof document !== 'undefined') {
     $('blueprintStyle').disabled = !state.blueprint;
     $('blueprintStyleControl').classList.toggle('is-disabled', !state.blueprint);
   }
-  function disableBlueprint(): void {
-    if (!state.blueprint) return;
-    state.blueprint = false;
-    $('blueprint').checked = false;
-    syncBlueprintControls();
-  }
-  function disableTopographicMap(): void {
-    if (!state.topographicMap) return;
-    state.topographicMap = false;
-    $('topographicMap').checked = false;
-  }
   $('halftone').addEventListener('change', (e) => {
     state.halftone = inputTarget(e).checked;
-    if (state.halftone && state.chroma) {
-      state.chroma = false;
-      $('chroma').checked = false;
-    }
-    if (state.halftone) disableBlueprint();
-    if (state.halftone) disableTopographicMap();
     syncHalftoneControls();
-    syncChromaAmount();
     redraw(false);
   });
   $('chroma').addEventListener('change', (e) => {
     state.chroma = inputTarget(e).checked;
-    if (state.chroma && state.halftone) {
-      state.halftone = false;
-      $('halftone').checked = false;
-    }
-    if (state.chroma && state.gradientEnabled) {
-      state.gradientEnabled = false;
-      $('gradientEnabled').checked = false;
-      $('gradientEditor').classList.remove('enabled');
-    }
-    if (state.chroma) disableBlueprint();
-    if (state.chroma) disableTopographicMap();
-    syncHalftoneControls();
     syncChromaAmount();
     redraw(false);
   });
@@ -1251,47 +1227,15 @@ if (typeof document !== 'undefined') {
   $('gradientEnabled').addEventListener('change', (e) => {
     state.gradientEnabled = inputTarget(e).checked;
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
-    if (state.gradientEnabled && state.chroma) {
-      state.chroma = false;
-      $('chroma').checked = false;
-    }
-    if (state.gradientEnabled) disableBlueprint();
-    if (state.gradientEnabled) disableTopographicMap();
-    syncChromaAmount();
     redraw(false);
   });
   $('blueprint').addEventListener('change', (e) => {
     state.blueprint = inputTarget(e).checked;
-    if (state.blueprint) {
-      state.halftone = false;
-      state.chroma = false;
-      state.gradientEnabled = false;
-      state.topographicMap = false;
-      $('halftone').checked = false;
-      $('chroma').checked = false;
-      $('gradientEnabled').checked = false;
-      $('topographicMap').checked = false;
-      $('gradientEditor').classList.remove('enabled');
-    }
-    syncHalftoneControls();
-    syncChromaAmount();
     syncBlueprintControls();
     redraw(false);
   });
   $('topographicMap').addEventListener('change', (e) => {
     state.topographicMap = inputTarget(e).checked;
-    if (state.topographicMap) {
-      state.halftone = false;
-      state.chroma = false;
-      state.gradientEnabled = false;
-      disableBlueprint();
-      $('halftone').checked = false;
-      $('chroma').checked = false;
-      $('gradientEnabled').checked = false;
-      $('gradientEditor').classList.remove('enabled');
-    }
-    syncHalftoneControls();
-    syncChromaAmount();
     redraw(false);
   });
   $('blueprintStyle').addEventListener('change', (e) => {
@@ -1341,7 +1285,7 @@ if (typeof document !== 'undefined') {
   function setBackgroundColor(v: string, quick: boolean): void {
     state.backgroundColor = v;
     $('backgroundSwatch').style.background = v;
-    if (!state.blueprint) $('bed').style.background = v;
+    if (!state.blueprint && !state.chroma) $('bed').style.background = v;
     redraw(quick);
   }
   function activateCustomAxis(): void {
@@ -1647,11 +1591,7 @@ if (typeof document !== 'undefined') {
     $('backgroundColor').value = state.backgroundColor;
     $('backgroundColorHex').value = state.backgroundColor;
     $('backgroundSwatch').style.background = state.backgroundColor;
-    $('bed').style.background = state.blueprint
-      ? state.blueprintStyle === 'black'
-        ? '#101417'
-        : '#0b3f7a'
-      : state.backgroundColor;
+    $('bed').style.background = previewBackground(state);
     $('pw').value = String(state.pw);
     $('ph').value = String(state.ph);
     syncPaperPreset();
@@ -1855,101 +1795,18 @@ if (typeof document !== 'undefined') {
     randomizeColor('color', 'color', inks);
     randomizeColor('backgroundColor', 'backgroundColor', papers);
 
-    type OutputMode = {
-      name: string;
-      gradientEnabled: boolean;
-      halftone: boolean;
-      chroma: boolean;
-      humanizer: boolean;
-      blueprint: boolean;
-      topographicMap: boolean;
-    };
-    const modes: OutputMode[] = [
-      {
-        name: 'ink',
-        gradientEnabled: false,
-        halftone: false,
-        chroma: false,
-        humanizer: false,
-        blueprint: false,
-        topographicMap: false,
-      },
-      {
-        name: 'ink',
-        gradientEnabled: false,
-        halftone: false,
-        chroma: false,
-        humanizer: false,
-        blueprint: false,
-        topographicMap: false,
-      },
-      {
-        name: 'gradient',
-        gradientEnabled: true,
-        halftone: false,
-        chroma: false,
-        humanizer: false,
-        blueprint: false,
-        topographicMap: false,
-      },
-      {
-        name: 'halftone',
-        gradientEnabled: false,
-        halftone: true,
-        chroma: false,
-        humanizer: false,
-        blueprint: false,
-        topographicMap: false,
-      },
-      {
-        name: 'chroma',
-        gradientEnabled: false,
-        halftone: false,
-        chroma: true,
-        humanizer: false,
-        blueprint: false,
-        topographicMap: false,
-      },
-      {
-        name: 'humanizer',
-        gradientEnabled: false,
-        halftone: false,
-        chroma: false,
-        humanizer: true,
-        blueprint: false,
-        topographicMap: false,
-      },
-      {
-        name: 'blueprint',
-        gradientEnabled: false,
-        halftone: false,
-        chroma: false,
-        humanizer: false,
-        blueprint: true,
-        topographicMap: false,
-      },
-      {
-        name: 'topographic map',
-        gradientEnabled: false,
-        halftone: false,
-        chroma: false,
-        humanizer: false,
-        blueprint: false,
-        topographicMap: true,
-      },
-    ];
-    const effectKeys: Array<
-      keyof Pick<
-        OutputMode,
-        'gradientEnabled' | 'halftone' | 'chroma' | 'humanizer' | 'blueprint' | 'topographicMap'
-      >
-    > = ['gradientEnabled', 'halftone', 'chroma', 'humanizer', 'blueprint', 'topographicMap'];
-    const availableModes = modes.filter((mode) =>
-      effectKeys.every((id) => !randomLocks.has(id) || mode[id] === state[id]),
-    );
-    const colourMode = randomItem(availableModes.length ? availableModes : modes);
-    for (const id of effectKeys) {
-      if (!randomLocks.has(id)) state[id] = colourMode[id];
+    const effectChances = {
+      gradientEnabled: 0.24,
+      halftone: 0.22,
+      chroma: 0.18,
+      humanizer: 0.3,
+      blueprint: 0.16,
+      topographicMap: 0.18,
+    } satisfies Partial<Record<keyof AppState, number>>;
+    for (const [id, chance] of Object.entries(effectChances) as Array<
+      [keyof typeof effectChances, number]
+    >) {
+      if (!randomLocks.has(id)) state[id] = Math.random() < chance;
     }
     $('gradientEnabled').checked = state.gradientEnabled;
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
