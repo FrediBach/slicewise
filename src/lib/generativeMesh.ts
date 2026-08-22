@@ -31,7 +31,8 @@
 // Parameters
 // ---------------------------------------------------------------------------
 
-export type GenField = 'gyroid' | 'schwarzP' | 'diamond' | 'neovius' | 'metaballs' | 'supershape';
+export type GenField =
+  'gyroid' | 'schwarzP' | 'diamond' | 'neovius' | 'metaballs' | 'supershape' | 'relief';
 
 export interface GenerativeParams {
   /** 0–9999. Drives every randomized aspect of the field. */
@@ -287,6 +288,62 @@ class Field {
     }
   }
 
+  /**
+   * A closed terrain medallion. Its top is a true height field, so parallel
+   * Z slices read as conventional topographic contours instead of exposing
+   * the tunnels and cavities produced by the volumetric field families.
+   */
+  private relief(x: number, y: number, z: number): number {
+    const r = Math.hypot(x, y);
+
+    // For a height field the domain rotation must not depend on z, otherwise
+    // the surface can fold over itself. Twist instead rotates progressively
+    // from the centre toward the edge to produce gently swept ridgelines.
+    const angle = this.twist * r;
+    const c = Math.cos(angle),
+      s = Math.sin(angle);
+    const tx = x * c - y * s,
+      ty = x * s + y * c;
+
+    // genFreq describes broad landforms while Noise fades in successively
+    // finer detail. A ridged octave prevents the result reading as rounded
+    // blobs and gives nested contours recognizable mountain spines.
+    const frequency = clamp(this.p.genFreq, 0.5, 8) * 0.72;
+    const seed = this.p.genSeed;
+    const broad = fbm(tx * frequency + 13.7, ty * frequency - 8.9, 2.3, seed);
+    const ridge =
+      1 -
+      Math.abs(fbm(tx * frequency * 1.45 - 4.1, ty * frequency * 1.45 + 17.2, 7.1, seed + 3571));
+    const detailAmount = clamp(this.p.genNoise, 0, 100) / 100;
+    const fine = fbm(tx * frequency * 3.1 + 31.4, ty * frequency * 3.1 - 23.8, 11.6, seed + 7919);
+    const terrain = clamp(
+      0.5 +
+        broad * (0.34 - detailAmount * 0.08) +
+        (ridge - 0.5) * 0.34 +
+        fine * detailAmount * 0.18,
+      0,
+      1,
+    );
+
+    // Keep the rim level so the terrain meets a clean circular wall. Carve is
+    // vertical relief and Z anisotropy acts as vertical exaggeration here.
+    const rim = -0.2;
+    const edgeFade = smoothstep(clamp((SPHERE_R - r) / 0.24, 0, 1));
+    const exaggeration = Math.pow(2, clamp(this.p.genAniso, -100, 100) / 100);
+    const unclampedHeight =
+      rim +
+      (0.08 + 0.72 * this.blend) * exaggeration * edgeFade * (0.18 + 0.82 * terrain) +
+      clamp(this.p.genIso, -1.4, 1.4) * 0.12;
+    const bottom = -0.38;
+    // Preserve at least one resolvable layer above the base and keep the top
+    // inside the sampling volume even at maximum vertical exaggeration.
+    const height = clamp(unclampedHeight, bottom + 0.08, 0.92);
+
+    // Intersection of the circular footprint, base half-space, and terrain
+    // half-space. A small smooth maximum rounds only the medallion edges.
+    return smax(smax(r - SPHERE_R, bottom - z, 0.025), z - height, 0.025);
+  }
+
   /** Superformula radius for one angular profile. */
   private superR(theta: number, m: number, n1: number, n2: number, n3: number): number {
     const t = (m * theta) / 4;
@@ -332,6 +389,8 @@ class Field {
    */
   eval(x: number, y: number, z: number): number {
     const p = this.p;
+
+    if (p.genField === 'relief') return this.relief(x, y, z);
 
     // Bounding sphere, evaluated on the untwisted point.
     const dSphere = Math.sqrt(x * x + y * y + z * z) - SPHERE_R;

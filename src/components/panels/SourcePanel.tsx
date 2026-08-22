@@ -42,6 +42,7 @@ export function SourcePanel() {
                 <option value="neovius">Neovius</option>
                 <option value="metaballs">Metaballs</option>
                 <option value="supershape">Supershape</option>
+                <option value="relief">Relief · topographic</option>
               </select>
               <ChevronDown size={14} />
             </div>

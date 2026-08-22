@@ -34,18 +34,67 @@ describe('generateMesh', () => {
     for (const length of sampledLengths) expect(length).toBeCloseTo(1, 4);
   });
 
-  it.each<GenField>(['gyroid', 'schwarzP', 'diamond', 'neovius', 'metaballs', 'supershape'])(
-    'generates finite %s field geometry',
-    (field) => {
-      const mesh = generateMesh({ ...GEN_DEFAULTS, genField: field, genRes: 32 });
+  it.each<GenField>([
+    'gyroid',
+    'schwarzP',
+    'diamond',
+    'neovius',
+    'metaballs',
+    'supershape',
+    'relief',
+  ])('generates finite %s field geometry', (field) => {
+    const mesh = generateMesh({ ...GEN_DEFAULTS, genField: field, genRes: 32 });
 
-      expect(mesh.stats.vertexCount).toBeGreaterThan(0);
-      expect(mesh.stats.triangleCount).toBeGreaterThan(0);
-      expect(Array.from(mesh.positions).every(Number.isFinite)).toBe(true);
-      expect(Array.from(mesh.normals).every(Number.isFinite)).toBe(true);
-      expect(Math.max(...mesh.indices)).toBeLessThan(mesh.stats.vertexCount);
-    },
-  );
+    expect(mesh.stats.vertexCount).toBeGreaterThan(0);
+    expect(mesh.stats.triangleCount).toBeGreaterThan(0);
+    expect(Array.from(mesh.positions).every(Number.isFinite)).toBe(true);
+    expect(Array.from(mesh.normals).every(Number.isFinite)).toBe(true);
+    expect(Math.max(...mesh.indices)).toBeLessThan(mesh.stats.vertexCount);
+  });
+
+  it('creates a closed, shallow terrain relief that changes with the seed', () => {
+    const first = generateMesh(
+      { ...GEN_DEFAULTS, genField: 'relief', genSeed: 23, genBlend: 70, genRes: 40 },
+      { diagnostics: true },
+    );
+    const second = generateMesh({
+      ...GEN_DEFAULTS,
+      genField: 'relief',
+      genSeed: 24,
+      genBlend: 70,
+      genRes: 40,
+    });
+    const xs = first.positions.filter((_, index) => index % 3 === 0);
+    const zs = first.positions.filter((_, index) => index % 3 === 2);
+    const xSpan = Math.max(...xs) - Math.min(...xs);
+    const zSpan = Math.max(...zs) - Math.min(...zs);
+
+    expect(first.stats.openEdges).toBe(0);
+    expect(zSpan).toBeGreaterThan(0.35);
+    expect(zSpan).toBeLessThan(xSpan);
+    expect(Array.from(first.positions)).not.toEqual(Array.from(second.positions));
+  });
+
+  it.each([
+    { genBlend: 0, genAniso: -100, genIso: -1.4 },
+    { genBlend: 100, genAniso: 100, genIso: 1.4 },
+  ])('keeps relief extremes inside the closed sampling volume', (extremes) => {
+    const mesh = generateMesh(
+      {
+        ...GEN_DEFAULTS,
+        ...extremes,
+        genField: 'relief',
+        genNoise: 100,
+        genTwist: 180,
+        genRes: 32,
+      },
+      { diagnostics: true },
+    );
+
+    expect(mesh.stats.vertexCount).toBeGreaterThan(0);
+    expect(mesh.stats.openEdges).toBe(0);
+    expect(Math.max(...mesh.positions)).toBeLessThan(1.12);
+  });
 
   it('serializes generated geometry as a parseable binary STL', () => {
     const generated = generateMesh({ ...GEN_DEFAULTS, genRes: 32, genBlend: 0 });
