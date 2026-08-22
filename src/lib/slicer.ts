@@ -175,6 +175,7 @@ const state: AppState = {
   humanizerAmount: 30,
   blueprint: false,
   blueprintStyle: 'blue',
+  topographicMap: false,
   morphEnabled: false,
   morphSteps: 4,
   morphTargets: {},
@@ -301,6 +302,7 @@ if (typeof document !== 'undefined') {
       humanizerAmount,
       blueprint,
       blueprintStyle,
+      topographicMap,
       morphEnabled,
       morphSteps,
       morphTargets,
@@ -354,6 +356,7 @@ if (typeof document !== 'undefined') {
       humanizerAmount,
       blueprint,
       blueprintStyle,
+      topographicMap,
       documentTitle: state.name,
       morphEnabled,
       morphSteps,
@@ -1206,6 +1209,11 @@ if (typeof document !== 'undefined') {
     $('blueprint').checked = false;
     syncBlueprintControls();
   }
+  function disableTopographicMap(): void {
+    if (!state.topographicMap) return;
+    state.topographicMap = false;
+    $('topographicMap').checked = false;
+  }
   $('halftone').addEventListener('change', (e) => {
     state.halftone = inputTarget(e).checked;
     if (state.halftone && state.chroma) {
@@ -1213,6 +1221,7 @@ if (typeof document !== 'undefined') {
       $('chroma').checked = false;
     }
     if (state.halftone) disableBlueprint();
+    if (state.halftone) disableTopographicMap();
     syncHalftoneControls();
     syncChromaAmount();
     redraw(false);
@@ -1229,6 +1238,7 @@ if (typeof document !== 'undefined') {
       $('gradientEditor').classList.remove('enabled');
     }
     if (state.chroma) disableBlueprint();
+    if (state.chroma) disableTopographicMap();
     syncHalftoneControls();
     syncChromaAmount();
     redraw(false);
@@ -1246,6 +1256,7 @@ if (typeof document !== 'undefined') {
       $('chroma').checked = false;
     }
     if (state.gradientEnabled) disableBlueprint();
+    if (state.gradientEnabled) disableTopographicMap();
     syncChromaAmount();
     redraw(false);
   });
@@ -1255,6 +1266,25 @@ if (typeof document !== 'undefined') {
       state.halftone = false;
       state.chroma = false;
       state.gradientEnabled = false;
+      state.topographicMap = false;
+      $('halftone').checked = false;
+      $('chroma').checked = false;
+      $('gradientEnabled').checked = false;
+      $('topographicMap').checked = false;
+      $('gradientEditor').classList.remove('enabled');
+    }
+    syncHalftoneControls();
+    syncChromaAmount();
+    syncBlueprintControls();
+    redraw(false);
+  });
+  $('topographicMap').addEventListener('change', (e) => {
+    state.topographicMap = inputTarget(e).checked;
+    if (state.topographicMap) {
+      state.halftone = false;
+      state.chroma = false;
+      state.gradientEnabled = false;
+      disableBlueprint();
       $('halftone').checked = false;
       $('chroma').checked = false;
       $('gradientEnabled').checked = false;
@@ -1262,7 +1292,6 @@ if (typeof document !== 'undefined') {
     }
     syncHalftoneControls();
     syncChromaAmount();
-    syncBlueprintControls();
     redraw(false);
   });
   $('blueprintStyle').addEventListener('change', (e) => {
@@ -1563,6 +1592,7 @@ if (typeof document !== 'undefined') {
     'chroma',
     'humanizer',
     'blueprint',
+    'topographicMap',
     'morphEnabled',
     'morphSecondEnabled',
   ];
@@ -1832,6 +1862,7 @@ if (typeof document !== 'undefined') {
       chroma: boolean;
       humanizer: boolean;
       blueprint: boolean;
+      topographicMap: boolean;
     };
     const modes: OutputMode[] = [
       {
@@ -1841,6 +1872,7 @@ if (typeof document !== 'undefined') {
         chroma: false,
         humanizer: false,
         blueprint: false,
+        topographicMap: false,
       },
       {
         name: 'ink',
@@ -1849,6 +1881,7 @@ if (typeof document !== 'undefined') {
         chroma: false,
         humanizer: false,
         blueprint: false,
+        topographicMap: false,
       },
       {
         name: 'gradient',
@@ -1857,6 +1890,7 @@ if (typeof document !== 'undefined') {
         chroma: false,
         humanizer: false,
         blueprint: false,
+        topographicMap: false,
       },
       {
         name: 'halftone',
@@ -1865,6 +1899,7 @@ if (typeof document !== 'undefined') {
         chroma: false,
         humanizer: false,
         blueprint: false,
+        topographicMap: false,
       },
       {
         name: 'chroma',
@@ -1873,6 +1908,7 @@ if (typeof document !== 'undefined') {
         chroma: true,
         humanizer: false,
         blueprint: false,
+        topographicMap: false,
       },
       {
         name: 'humanizer',
@@ -1881,6 +1917,7 @@ if (typeof document !== 'undefined') {
         chroma: false,
         humanizer: true,
         blueprint: false,
+        topographicMap: false,
       },
       {
         name: 'blueprint',
@@ -1889,11 +1926,24 @@ if (typeof document !== 'undefined') {
         chroma: false,
         humanizer: false,
         blueprint: true,
+        topographicMap: false,
+      },
+      {
+        name: 'topographic map',
+        gradientEnabled: false,
+        halftone: false,
+        chroma: false,
+        humanizer: false,
+        blueprint: false,
+        topographicMap: true,
       },
     ];
     const effectKeys: Array<
-      keyof Pick<OutputMode, 'gradientEnabled' | 'halftone' | 'chroma' | 'humanizer' | 'blueprint'>
-    > = ['gradientEnabled', 'halftone', 'chroma', 'humanizer', 'blueprint'];
+      keyof Pick<
+        OutputMode,
+        'gradientEnabled' | 'halftone' | 'chroma' | 'humanizer' | 'blueprint' | 'topographicMap'
+      >
+    > = ['gradientEnabled', 'halftone', 'chroma', 'humanizer', 'blueprint', 'topographicMap'];
     const availableModes = modes.filter((mode) =>
       effectKeys.every((id) => !randomLocks.has(id) || mode[id] === state[id]),
     );
@@ -1931,6 +1981,7 @@ if (typeof document !== 'undefined') {
       $('blueprintStyle').value = state.blueprintStyle;
     }
     syncBlueprintControls();
+    $('topographicMap').checked = state.topographicMap;
 
     redraw(false);
     toast('Parameters randomized');
@@ -1958,6 +2009,7 @@ if (typeof document !== 'undefined') {
           chroma: state.chroma,
           humanizer: state.humanizer,
           blueprint: state.blueprint,
+          topographicMap: state.topographicMap,
         },
       },
     );

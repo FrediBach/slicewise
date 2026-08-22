@@ -89,7 +89,13 @@ describe('generateGCode', () => {
         penDown: -2.5,
         zFeed: 900,
         machine: 'UUNA TEK',
-        effects: { halftone: true, chroma: true, humanizer: true, blueprint: true },
+        effects: {
+          halftone: true,
+          chroma: true,
+          humanizer: true,
+          blueprint: true,
+          topographicMap: true,
+        },
       },
     );
 
@@ -99,6 +105,7 @@ describe('generateGCode', () => {
     expect(output).toContain('chromatic SVG offsets are exported as one base contour set');
     expect(output).toContain('Humanizer: hand-drawn variations are included');
     expect(output).toContain('blueprint border and annotations are SVG-only');
+    expect(output).toContain('Topographic map: elevation labels, locations, and map symbols');
   });
 
   it('always returns controller setup and shutdown for an empty drawing', () => {

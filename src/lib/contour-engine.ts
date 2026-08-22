@@ -1,6 +1,7 @@
 'use strict';
 
 import { clipRunToRect } from './toolpaths';
+import { createMapAnnotations } from './mapAnnotations';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
 
 type NumericArray = ArrayLike<number> & Iterable<number>;
@@ -69,6 +70,7 @@ export interface ContourSettings {
   humanizerAmount: number;
   blueprint: boolean;
   blueprintStyle: string;
+  topographicMap: boolean;
   documentTitle: string;
   morphEnabled: boolean;
   morphSteps: number;
@@ -1784,7 +1786,7 @@ function computeContourInstance(
         const sharp =
           clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
         d += serialiseRun(clipped, quality, sharp);
-        if (!quick) plotRuns.push(clipped);
+        if (!quick || settings.topographicMap) plotRuns.push(clipped);
         nodes += clipped.length / 2;
         paths++;
       }
@@ -1793,6 +1795,7 @@ function computeContourInstance(
   };
   const colorPaths: string[][][] = [];
   const toolpaths: ContourToolpathGroup[] = [];
+  const annotationSourceRuns: Polyline[] = [];
   for (let index = 0; index < out.length; index++) {
     const pathsForColor: string[][] = [];
     const runsForColor: Polyline[] = [];
@@ -1802,11 +1805,12 @@ function computeContourInstance(
         const group = serialiseGroup(weightGroup);
         pathsForTone.push(group.d);
         runsForColor.push(...group.runs);
+        annotationSourceRuns.push(...group.runs);
       }
       pathsForColor.push(pathsForTone);
     }
     colorPaths.push(pathsForColor);
-    if (runsForColor.length) {
+    if (!quick && runsForColor.length) {
       toolpaths.push({
         color: palette[index],
         label: settings.gradientEnabled ? `gradient colour ${index + 1}` : 'contours',
@@ -1816,7 +1820,8 @@ function computeContourInstance(
   }
   const outlineGroup = serialiseGroup(outlineOut);
   const outlinePath = outlineGroup.d;
-  if (outlineGroup.runs.length) {
+  annotationSourceRuns.push(...outlineGroup.runs);
+  if (!quick && outlineGroup.runs.length) {
     const matching = toolpaths.find(
       (group) => group.color.toLowerCase() === settings.color.toLowerCase(),
     );
@@ -1829,6 +1834,30 @@ function computeContourInstance(
     return settings.sw * (1 + (weight / (weightBandCount - 1)) * amount);
   };
   const blueprint = blueprintDocument(settings, W, H, blueprintGeometry);
+  const mapAnnotations = settings.topographicMap
+    ? createMapAnnotations(annotationSourceRuns, {
+        width: W,
+        height: H,
+        margin: settings.margin,
+        lineCount: N,
+        strokeWidth: settings.sw,
+        color: settings.blueprint ? '#f5f9ff' : settings.color,
+        backgroundColor: settings.backgroundColor || '#ffffff',
+        title: settings.documentTitle,
+      })
+    : null;
+  if (!quick && mapAnnotations?.runs.length) {
+    const matching = toolpaths.find(
+      (group) => group.color.toLowerCase() === settings.color.toLowerCase(),
+    );
+    if (matching) matching.runs.push(...mapAnnotations.runs);
+    else
+      toolpaths.push({
+        color: settings.color,
+        label: 'topographic annotations',
+        runs: mapAnnotations.runs,
+      });
+  }
   let artwork: string,
     renderedPaths = paths,
     renderedNodes = nodes;
@@ -1902,6 +1931,11 @@ function computeContourInstance(
       : '';
     artwork = `${bg}${groups}${outline}${settings.suppressBackground ? '' : blueprint.overlay}`;
   }
+  if (mapAnnotations) {
+    artwork += mapAnnotations.svg;
+    renderedPaths += mapAnnotations.paths;
+    renderedNodes += mapAnnotations.nodes;
+  }
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;
@@ -1973,6 +2007,7 @@ export function computeContours(
       const amountX = stepsX === 1 ? 0 : x / (stepsX - 1);
       const amountY = stepsY === 1 ? 0 : y / (stepsY - 1);
       const instance: ContourSettings = { ...settings, suppressBackground: true };
+      if (results.length && instance.topographicMap) instance.topographicMap = false;
       const dynamicInstance = instance as unknown as Record<string, unknown>;
       const dynamicSettings = settings as unknown as Record<string, unknown>;
       for (const key of targetKeys) {

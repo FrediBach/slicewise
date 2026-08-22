@@ -18,7 +18,9 @@ export type GCodeOptions = {
   clipToArtboard?: boolean;
   optimizeTravel?: boolean;
   mergeTolerance?: number;
-  effects?: Partial<Record<'halftone' | 'chroma' | 'humanizer' | 'blueprint', boolean>>;
+  effects?: Partial<
+    Record<'halftone' | 'chroma' | 'humanizer' | 'blueprint' | 'topographicMap', boolean>
+  >;
 };
 
 const clampPrecision = (value: number) => {
@@ -132,6 +134,8 @@ export function generateGCode(
     lines.push(
       '; Note: blueprint border and annotations are SVG-only; G-code contains the base contour set',
     );
+  if (effects.topographicMap)
+    lines.push('; Topographic map: elevation labels, locations, and map symbols are included');
   if (clipToArtboard) lines.push('; Artboard clipping: enabled');
   if (optimizeTravel) lines.push(`; Optimized pen-up travel: ${clampPrecision(penUpDistance)} mm`);
   lines.push(

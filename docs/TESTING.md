@@ -57,6 +57,7 @@ Coverage currently measures the focused core under active test:
 - `demo-meshes/index.ts`
 - `gcode.ts`
 - `generativeMesh.ts`
+- `mapAnnotations.ts`
 - `mesh.ts`
 - `svg-mesh.ts`
 - `toolpaths.ts`

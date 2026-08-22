@@ -10,6 +10,22 @@ import {
 } from '../controls/FormControls';
 import { GradientChooser } from '../controls/GradientChooser';
 
+function TopographicMapControl() {
+  return (
+    <>
+      <Checkbox id="topographicMap" randomizable>
+        Topographic map
+      </Checkbox>
+      <div className="effect-controls">
+        <p className="gradient-note blueprint-note">
+          Adds masked elevation labels, generated place names and location markers. Placements
+          remain stable for the same contour geometry.
+        </p>
+      </div>
+    </>
+  );
+}
+
 export function OutputPanel() {
   return (
     <Section title="Output" badge="03">
@@ -209,6 +225,7 @@ export function OutputPanel() {
             block to the SVG.
           </p>
         </div>
+        <TopographicMapControl />
       </FieldGroup>
       <FieldGroup title="Export format">
         <div className="control-row select-row">

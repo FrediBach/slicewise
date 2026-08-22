@@ -79,6 +79,36 @@ describe('contour output effects', () => {
     expect(result.svg).toContain('DRAWING NO.');
     expect(result.svg).toContain('stroke="#f5f9ff"');
   });
+
+  it('adds deterministic, plotter-safe topographic labels and locations', () => {
+    const mesh = makeContourMesh();
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      lines: 24,
+      topographicMap: true,
+    };
+    const baseline = computeContours(mesh, { ...settings, topographicMap: false }, false);
+    const first = computeContours(mesh, settings, false);
+    const second = computeContours(mesh, settings, false);
+    const preview = computeContours(mesh, settings, true);
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.svg).toContain('id="topographic-annotations"');
+    expect(first.svg).toMatch(/data-locations="[A-Z,]+"/);
+    expect(first.svg).toMatch(/data-altitudes="[0-9,]+"/);
+    expect(first.svg).toContain('<text');
+    expect(first.svg).toContain('font-family="DM Mono,ui-monospace,monospace"');
+    expect(first.svg).toContain('data-label-mask=');
+    expect(first.svg).not.toContain('2KM');
+    expect(first.paths).toBeGreaterThan(baseline.paths);
+    expect(first.toolpaths.flatMap((group) => group.runs).length).toBeGreaterThan(
+      baseline.toolpaths.flatMap((group) => group.runs).length,
+    );
+    expect(preview.svg).toContain('id="topographic-annotations"');
+    expect(preview.toolpaths).toEqual([]);
+  });
 });
 
 describe('contour projection modes', () => {

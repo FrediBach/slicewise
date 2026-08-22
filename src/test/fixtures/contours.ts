@@ -55,6 +55,7 @@ export const contourSettings = {
   humanizerAmount: 30,
   blueprint: false,
   blueprintStyle: 'blue',
+  topographicMap: false,
   documentTitle: 'test sphere',
   morphEnabled: false,
   morphSteps: 3,
