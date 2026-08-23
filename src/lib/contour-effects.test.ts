@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
 import { computeContours } from './contour-engine';
+import { sphereDemo } from './demo-meshes';
+import { vertexNormals, weld } from './mesh';
 
 describe('contour output effects', () => {
   it('splits gradients into plotter-ready colour groups and halftone bands', () => {
@@ -347,6 +349,42 @@ describe('contour projection modes', () => {
     );
 
     expect(zeroAmplitude.svg).toBe(planar.svg);
+  });
+
+  it('adaptively refines near-tangent LFO slices on the rounded cube', () => {
+    const normalized = weld(sphereDemo('cube', 48, 24));
+    const mesh = { ...normalized, N: vertexNormals(normalized.V, normalized.T) };
+    const settings = {
+      ...contourSettings,
+      lines: 18,
+      hide: false,
+      sil: false,
+      clipToArtboard: false,
+      sliceLfo: true,
+      sliceLfoAmplitude: 180,
+      sliceLfoCycles: 3,
+      sliceLfoAngle: 18,
+      sliceLfoPhase: 40,
+    };
+    const low = computeContours(mesh, { ...settings, quality: 1 }, false);
+    const normal = computeContours(mesh, { ...settings, quality: 7 }, false);
+    const high = computeContours(mesh, { ...settings, quality: 10 }, false);
+    const longestSegment = (result: typeof high): number => {
+      let longest = 0;
+      for (const run of result.toolpaths.flatMap((group) => group.runs))
+        for (let index = 2; index < run.length; index += 2)
+          longest = Math.max(
+            longest,
+            Math.hypot(run[index] - run[index - 2], run[index + 1] - run[index - 1]),
+          );
+      return longest;
+    };
+
+    expect(normal.nodes).toBeGreaterThan(low.nodes);
+    expect(high.nodes).toBeGreaterThan(normal.nodes);
+    expect(longestSegment(normal)).toBeLessThan(longestSegment(low));
+    expect(longestSegment(high)).toBeLessThanOrEqual(longestSegment(normal));
+    expect(high.svg).not.toMatch(/NaN|Infinity/);
   });
 
   it('constructs a continuous spiral toolpath', () => {

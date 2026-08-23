@@ -312,6 +312,7 @@ function sliceLevelWorld(
   curveStrength: number,
   scalarAtPoint?: (x: number, y: number, z: number) => number,
   rootIterations = 12,
+  adaptiveDepth = 0,
 ): PointSegments {
   // returns {pts:[x,y,d,...], segs:[i,j,...]} for one cutting plane
   const { T, V, N } = mesh;
@@ -386,6 +387,105 @@ function sliceLevelWorld(
     idx.set(key, id);
     return id;
   };
+
+  if (scalarAtPoint && adaptiveDepth > 0) {
+    type FieldPoint = [x: number, y: number, z: number, value: number];
+    const adaptivePoints = new Map<string, number>();
+    const midpoint = (a: FieldPoint, b: FieldPoint): FieldPoint => {
+      const x = (a[0] + b[0]) * 0.5,
+        y = (a[1] + b[1]) * 0.5,
+        z = (a[2] + b[2]) * 0.5;
+      return [x, y, z, scalarAtPoint(x, y, z) - level];
+    };
+    const centroid = (a: FieldPoint, b: FieldPoint, c: FieldPoint): FieldPoint => {
+      const x = (a[0] + b[0] + c[0]) / 3,
+        y = (a[1] + b[1] + c[1]) / 3,
+        z = (a[2] + b[2] + c[2]) / 3;
+      return [x, y, z, scalarAtPoint(x, y, z) - level];
+    };
+    const addPoint = (point: Vec3): number => {
+      // Adjacent source triangles refine shared edges independently. A stable
+      // coordinate key welds their numerically equivalent roots back together.
+      const scale = 1e7;
+      const key = `${Math.round(point[0] * scale)},${Math.round(point[1] * scale)},${Math.round(point[2] * scale)}`;
+      const existing = adaptivePoints.get(key);
+      if (existing !== undefined) return existing;
+      const id = pts.length / 3;
+      pts.push(point[0], point[1], point[2]);
+      adaptivePoints.set(key, id);
+      return id;
+    };
+    const intersect = (a: FieldPoint, b: FieldPoint): number => {
+      if (Math.abs(a[3]) < 1e-12) return addPoint([a[0], a[1], a[2]]);
+      if (Math.abs(b[3]) < 1e-12) return addPoint([b[0], b[1], b[2]]);
+      let lo = a,
+        hi = b;
+      const loPositive = lo[3] > 0;
+      for (let iteration = 0; iteration < rootIterations; iteration++) {
+        const mid = midpoint(lo, hi);
+        if (mid[3] > 0 === loPositive) lo = mid;
+        else hi = mid;
+      }
+      return addPoint([(lo[0] + hi[0]) * 0.5, (lo[1] + hi[1]) * 0.5, (lo[2] + hi[2]) * 0.5]);
+    };
+    const march = (a: FieldPoint, b: FieldPoint, c: FieldPoint): void => {
+      const pa = a[3] > 0,
+        pb = b[3] > 0,
+        pc = c[3] > 0;
+      if (pa === pb && pb === pc) return;
+      let e1: number, e2: number;
+      if (pa === pb) {
+        e1 = intersect(a, c);
+        e2 = intersect(b, c);
+      } else if (pb === pc) {
+        e1 = intersect(b, a);
+        e2 = intersect(c, a);
+      } else {
+        e1 = intersect(a, b);
+        e2 = intersect(c, b);
+      }
+      if (e1 !== e2) segs.push(e1, e2);
+    };
+    const refine = (a: FieldPoint, b: FieldPoint, c: FieldPoint, depth: number): void => {
+      const ab = midpoint(a, b),
+        bc = midpoint(b, c),
+        ca = midpoint(c, a),
+        center = centroid(a, b, c);
+      const samples = [a[3], b[3], c[3], ab[3], bc[3], ca[3], center[3]];
+      let minimum = Infinity,
+        maximum = -Infinity;
+      for (const value of samples) {
+        minimum = Math.min(minimum, value);
+        maximum = Math.max(maximum, value);
+      }
+      if (minimum > 0 || maximum < 0) return;
+      if (depth >= adaptiveDepth) {
+        // The interior sample catches small loops and near-tangent crossings
+        // that vertex-only marching would otherwise replace with a long chord.
+        march(a, ab, center);
+        march(ab, b, center);
+        march(b, bc, center);
+        march(bc, c, center);
+        march(c, ca, center);
+        march(ca, a, center);
+        return;
+      }
+      refine(a, ab, ca, depth + 1);
+      refine(ab, b, bc, depth + 1);
+      refine(ca, bc, c, depth + 1);
+      refine(ab, bc, ca, depth + 1);
+    };
+
+    for (let index = 0; index < T.length; index += 3) {
+      const fieldPoint = (vertex: number): FieldPoint => {
+        const offset = vertex * 3;
+        return [V[offset], V[offset + 1], V[offset + 2], S[vertex] - level];
+      };
+      refine(fieldPoint(T[index]), fieldPoint(T[index + 1]), fieldPoint(T[index + 2]), 0);
+    }
+    return { pts, segs };
+  }
+
   for (let i = 0; i < T.length; i += 3) {
     const a = T[i],
       b = T[i + 1],
@@ -635,7 +735,8 @@ function contourSlices(
       sliceDirection,
       curveStrength,
       scalarAtPoint,
-      6 + clamp(Math.round(settings.quality), 1, 10) * 2,
+      6 + Math.round(clamp(curveStrength, 0, 1) * 18),
+      scalarAtPoint ? 1 + Math.floor(clamp(curveStrength, 0, 1) * 2.999) : 0,
     );
     slices.push({ position, worldPoints: pts, polylines: segs.length ? chain(pts, segs) : [] });
   }
