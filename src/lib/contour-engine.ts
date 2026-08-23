@@ -68,6 +68,14 @@ export interface ContourSettings {
   chromaAmount: number;
   humanizer: boolean;
   humanizerAmount: number;
+  pathModulation: boolean;
+  pathModulationAmplitude: number;
+  pathModulationWavelength: number;
+  pathModulationPhase: number;
+  pathModulationQuality: number;
+  pathModulationWaveform: string;
+  pathModulationPhaseMode: string;
+  pathModulationDirection: string;
   blueprint: boolean;
   blueprintStyle: string;
   topographicMap: boolean;
@@ -890,7 +898,20 @@ function deterministicDrawingNumber(
       geometry.vertices,
       geometry.triangles,
     ],
-    output: [settings.sw, settings.humanizer, settings.humanizerAmount, settings.blueprintStyle],
+    output: [
+      settings.sw,
+      settings.humanizer,
+      settings.humanizerAmount,
+      settings.pathModulation,
+      settings.pathModulationAmplitude,
+      settings.pathModulationWavelength,
+      settings.pathModulationPhase,
+      settings.pathModulationQuality,
+      settings.pathModulationWaveform,
+      settings.pathModulationPhaseMode,
+      settings.pathModulationDirection,
+      settings.blueprintStyle,
+    ],
     morph: [
       settings.morphEnabled,
       settings.morphSteps,
@@ -1215,6 +1236,149 @@ function humanizeRun(run: Polyline, amount: number, salt = 0): Polyline {
     );
   } else if (points.length >= 2) points.push(points[0], points[1]);
   return points.length >= 4 ? points : run;
+}
+
+/* ---------------------------------------- arc-length path modulation */
+function pathWaveform(kind: string, angle: number): number {
+  const cycle = (((angle / (Math.PI * 2)) % 1) + 1) % 1;
+  if (kind === 'triangle') return 1 - 4 * Math.abs(cycle - 0.5);
+  if (kind === 'square') return cycle < 0.5 ? 1 : -1;
+  return Math.sin(angle);
+}
+
+function pathPhaseOffset(run: Polyline, salt: number): number {
+  let hash = (0x811c9dc5 ^ salt) >>> 0;
+  const count = Math.min(run.length, 12);
+  for (let index = 0; index < count; index++) {
+    hash ^= Math.round(run[index] * 1000);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return ((hash >>> 0) / 4294967296) * Math.PI * 2;
+}
+
+function modulateRun(run: Polyline, settings: ContourSettings, salt = 0): Polyline {
+  const amplitude = clamp(Number(settings.pathModulationAmplitude) || 0, 0, 20);
+  const requestedWavelength = clamp(Number(settings.pathModulationWavelength) || 0, 0.5, 200);
+  const count = run.length / 2;
+  if (!amplitude || count < 2) return run;
+  const closed =
+    count > 3 &&
+    Math.hypot(run[0] - run[(count - 1) * 2], run[1] - run[(count - 1) * 2 + 1]) < 1e-5;
+  const uniqueCount = closed ? count - 1 : count;
+  if (uniqueCount < 2) return run;
+
+  const segmentCount = closed ? uniqueCount : uniqueCount - 1;
+  const lengths = new Float64Array(segmentCount);
+  const segmentTangents = new Float64Array(segmentCount * 2);
+  let totalLength = 0;
+  for (let index = 0; index < segmentCount; index++) {
+    const next = (index + 1) % uniqueCount;
+    const length = Math.hypot(
+      run[next * 2] - run[index * 2],
+      run[next * 2 + 1] - run[index * 2 + 1],
+    );
+    lengths[index] = length;
+    if (length) {
+      segmentTangents[index * 2] = (run[next * 2] - run[index * 2]) / length;
+      segmentTangents[index * 2 + 1] = (run[next * 2 + 1] - run[index * 2 + 1]) / length;
+    }
+    totalLength += length;
+  }
+  if (!totalLength) return run;
+
+  // Averaged vertex tangents rotate the displacement normal smoothly across
+  // the joints retained by simplification.
+  const vertexTangents = new Float64Array(uniqueCount * 2);
+  for (let index = 0; index < uniqueCount; index++) {
+    const previousSegment = closed ? (index - 1 + segmentCount) % segmentCount : index - 1;
+    const nextSegment = index < segmentCount ? index : closed ? 0 : segmentCount - 1;
+    const usePrevious = previousSegment >= 0;
+    let tx = segmentTangents[nextSegment * 2],
+      ty = segmentTangents[nextSegment * 2 + 1];
+    if (usePrevious) {
+      tx += segmentTangents[previousSegment * 2];
+      ty += segmentTangents[previousSegment * 2 + 1];
+    }
+    const magnitude = Math.hypot(tx, ty);
+    if (magnitude) {
+      vertexTangents[index * 2] = tx / magnitude;
+      vertexTangents[index * 2 + 1] = ty / magnitude;
+    } else {
+      vertexTangents[index * 2] = segmentTangents[nextSegment * 2];
+      vertexTangents[index * 2 + 1] = segmentTangents[nextSegment * 2 + 1];
+    }
+  }
+
+  // Closing on a whole number of cycles keeps both displacement and slope
+  // continuous where a contour's duplicated start/end point meets.
+  const cycles = closed ? Math.max(1, Math.round(totalLength / requestedWavelength)) : 0;
+  const wavelength = closed ? totalLength / cycles : requestedWavelength;
+  const quality = clamp(Math.round(Number(settings.pathModulationQuality) || 1), 1, 10);
+  const samplesPerCycle = 8 + quality * 4;
+  const sampleSpacing = wavelength / samplesPerCycle;
+  const phase =
+    ((Number(settings.pathModulationPhase) || 0) * Math.PI) / 180 +
+    (settings.pathModulationPhaseMode === 'per-path' ? pathPhaseOffset(run, salt) : 0);
+  const points: number[] = [];
+  let distance = 0;
+
+  const appendPoint = (x: number, y: number, tx: number, ty: number, travelled: number): void => {
+    const value = pathWaveform(
+      settings.pathModulationWaveform,
+      (travelled / wavelength) * Math.PI * 2 + phase,
+    );
+    const normalAmount = settings.pathModulationDirection === 'tangent' ? 0 : amplitude * value;
+    const tangentAmount =
+      settings.pathModulationDirection === 'normal'
+        ? 0
+        : amplitude * value * (settings.pathModulationDirection === 'both' ? 0.35 : 1);
+    points.push(
+      x - ty * normalAmount + tx * tangentAmount,
+      y + tx * normalAmount + ty * tangentAmount,
+    );
+  };
+
+  for (let index = 0; index < segmentCount; index++) {
+    const next = (index + 1) % uniqueCount;
+    const x0 = run[index * 2],
+      y0 = run[index * 2 + 1],
+      x1 = run[next * 2],
+      y1 = run[next * 2 + 1];
+    const length = lengths[index];
+    if (!length) continue;
+    const divisions = Math.max(1, Math.ceil(length / sampleSpacing));
+    for (let part = 0; part < divisions; part++) {
+      const t = part / divisions;
+      let tx = vertexTangents[index * 2] * (1 - t) + vertexTangents[next * 2] * t,
+        ty = vertexTangents[index * 2 + 1] * (1 - t) + vertexTangents[next * 2 + 1] * t;
+      const tangentLength = Math.hypot(tx, ty) || 1;
+      tx /= tangentLength;
+      ty /= tangentLength;
+      appendPoint(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, tx, ty, distance + length * t);
+    }
+    distance += length;
+  }
+  if (closed && points.length >= 2) points.push(points[0], points[1]);
+  else {
+    const last = uniqueCount - 1;
+    appendPoint(
+      run[last * 2],
+      run[last * 2 + 1],
+      vertexTangents[last * 2],
+      vertexTangents[last * 2 + 1],
+      totalLength,
+    );
+  }
+  return points.length >= 4 ? points : run;
+}
+
+function applyPathGeometryEffects(
+  run: Polyline,
+  settings: ContourSettings,
+  salt: number,
+): Polyline {
+  const modulated = settings.pathModulation ? modulateRun(run, settings, salt) : run;
+  return settings.humanizer ? humanizeRun(modulated, settings.humanizerAmount, salt) : modulated;
 }
 
 /* ------------------------------------------ adaptive SVG curve output */
@@ -1623,9 +1787,7 @@ function computeLineArtInstance(
       raw.push(P.sx[point], P.sy[point]);
     if (raw.length < 4) continue;
     const simplified = simplify(raw, tolerance);
-    const styled = settings.humanizer
-      ? humanizeRun(simplified.run, settings.humanizerAmount, salt++)
-      : simplified.run;
+    const styled = applyPathGeometryEffects(simplified.run, settings, salt++);
     const colorIndex = settings.gradientEnabled
       ? clamp(
           Math.floor((runIndex / Math.max(1, offsets.length - 2)) * palette.length),
@@ -1874,15 +2036,15 @@ function computeContourInstance(
     const plotRuns: Polyline[] = [];
     for (const raw of runs) {
       const simplified = simplify(raw, tolerance);
-      const run = settings.humanizer
-        ? humanizeRun(simplified.run, settings.humanizerAmount, humanizerSalt++)
-        : simplified.run;
+      const run = applyPathGeometryEffects(simplified.run, settings, humanizerSalt++);
       if (run.length < 4) continue;
       const clippedRuns = settings.clipToArtboard ? clipRunToRect(run, W, H) : [run];
       for (const clipped of clippedRuns) {
         if (clipped.length < 4) continue;
         const sharp =
-          clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
+          clipped === run && !settings.humanizer && !settings.pathModulation
+            ? simplified.sharp
+            : sharpVertices(clipped);
         d += serialiseRun(clipped, quality, sharp);
         if (!quick || settings.topographicMap) plotRuns.push(clipped);
         nodes += clipped.length / 2;

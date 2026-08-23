@@ -26,6 +26,93 @@ function TopographicMapControl() {
   );
 }
 
+function PathModulationControl() {
+  return (
+    <>
+      <Checkbox id="pathModulation" randomizable>
+        Path modulation
+      </Checkbox>
+      <div className="effect-controls">
+        <ValueControl
+          id="pathModulationAmplitude"
+          label="Amplitude"
+          min="0"
+          max="20"
+          step="0.1"
+          value="1.2"
+          unit="mm"
+          disabled
+        />
+        <ValueControl
+          id="pathModulationWavelength"
+          label="Wavelength"
+          min="0.5"
+          max="200"
+          step="0.5"
+          value="12"
+          unit="mm"
+          disabled
+        />
+        <ValueControl
+          id="pathModulationPhase"
+          label="Phase"
+          min="0"
+          max="360"
+          step="1"
+          value="0"
+          unit="°"
+          disabled
+        />
+        <ValueControl
+          id="pathModulationQuality"
+          label="Modulation quality"
+          min="1"
+          max="10"
+          step="1"
+          value="6"
+          disabled
+        />
+        <div className="control-row select-row is-disabled" id="pathModulationWaveformControl">
+          <label htmlFor="pathModulationWaveform">Waveform</label>
+          <div className="select-wrap">
+            <select id="pathModulationWaveform" defaultValue="sine" disabled>
+              <option value="sine">Sine</option>
+              <option value="triangle">Triangle</option>
+              <option value="square">Square</option>
+            </select>
+            <ChevronDown size={14} />
+          </div>
+        </div>
+        <div className="control-row select-row is-disabled" id="pathModulationPhaseModeControl">
+          <label htmlFor="pathModulationPhaseMode">Phase mode</label>
+          <div className="select-wrap">
+            <select id="pathModulationPhaseMode" defaultValue="synchronized" disabled>
+              <option value="synchronized">Synchronized</option>
+              <option value="per-path">Offset per path</option>
+            </select>
+            <ChevronDown size={14} />
+          </div>
+        </div>
+        <div className="control-row select-row is-disabled" id="pathModulationDirectionControl">
+          <label htmlFor="pathModulationDirection">Direction</label>
+          <div className="select-wrap">
+            <select id="pathModulationDirection" defaultValue="normal" disabled>
+              <option value="normal">Normal to path</option>
+              <option value="tangent">Along path</option>
+              <option value="both">Normal + along</option>
+            </select>
+            <ChevronDown size={14} />
+          </div>
+        </div>
+        <p className="gradient-note blueprint-note">
+          Displaces plotter geometry along path length. Closed contours use whole cycles to keep
+          their seams smooth.
+        </p>
+      </div>
+    </>
+  );
+}
+
 export function OutputPanel() {
   return (
     <Section title="Output" badge="03">
@@ -204,6 +291,7 @@ export function OutputPanel() {
             Adds stable, small hand-drawn variations to contour lines and plotter paths.
           </p>
         </div>
+        <PathModulationControl />
         <Checkbox id="blueprint" randomizable>
           Technical blueprint
         </Checkbox>

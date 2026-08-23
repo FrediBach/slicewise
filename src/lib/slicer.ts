@@ -183,6 +183,14 @@ const state: AppState = {
   chromaAmount: 1.5,
   humanizer: false,
   humanizerAmount: 30,
+  pathModulation: false,
+  pathModulationAmplitude: 1.2,
+  pathModulationWavelength: 12,
+  pathModulationPhase: 0,
+  pathModulationQuality: 6,
+  pathModulationWaveform: 'sine',
+  pathModulationPhaseMode: 'synchronized',
+  pathModulationDirection: 'normal',
   blueprint: false,
   blueprintStyle: 'blue',
   topographicMap: false,
@@ -310,6 +318,14 @@ if (typeof document !== 'undefined') {
       chromaAmount,
       humanizer,
       humanizerAmount,
+      pathModulation,
+      pathModulationAmplitude,
+      pathModulationWavelength,
+      pathModulationPhase,
+      pathModulationQuality,
+      pathModulationWaveform,
+      pathModulationPhaseMode,
+      pathModulationDirection,
       blueprint,
       blueprintStyle,
       topographicMap,
@@ -364,6 +380,14 @@ if (typeof document !== 'undefined') {
       chromaAmount,
       humanizer,
       humanizerAmount,
+      pathModulation,
+      pathModulationAmplitude,
+      pathModulationWavelength,
+      pathModulationPhase,
+      pathModulationQuality,
+      pathModulationWaveform,
+      pathModulationPhaseMode,
+      pathModulationDirection,
       blueprint,
       blueprintStyle,
       topographicMap,
@@ -897,6 +921,10 @@ if (typeof document !== 'undefined') {
   bindPair('margin', 'margin');
   bindPair('chromaAmount', 'chromaAmount');
   bindPair('humanizerAmount', 'humanizerAmount');
+  bindPair('pathModulationAmplitude', 'pathModulationAmplitude');
+  bindPair('pathModulationWavelength', 'pathModulationWavelength');
+  bindPair('pathModulationPhase', 'pathModulationPhase');
+  bindPair('pathModulationQuality', 'pathModulationQuality');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1205,6 +1233,27 @@ if (typeof document !== 'undefined') {
     $('humanizerAmountN').disabled = !state.humanizer;
     $('humanizerAmountControl').classList.toggle('is-disabled', !state.humanizer);
   }
+  function syncPathModulationControls(): void {
+    const disabled = !state.pathModulation;
+    for (const id of [
+      'pathModulationAmplitude',
+      'pathModulationWavelength',
+      'pathModulationPhase',
+      'pathModulationQuality',
+    ]) {
+      $(id).disabled = disabled;
+      $(id + 'N').disabled = disabled;
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    for (const id of [
+      'pathModulationWaveform',
+      'pathModulationPhaseMode',
+      'pathModulationDirection',
+    ]) {
+      $(id).disabled = disabled;
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+  }
   function syncBlueprintControls(): void {
     $('blueprintStyle').disabled = !state.blueprint;
     $('blueprintStyleControl').classList.toggle('is-disabled', !state.blueprint);
@@ -1224,6 +1273,21 @@ if (typeof document !== 'undefined') {
     syncHumanizerControls();
     redraw(false);
   });
+  $('pathModulation').addEventListener('change', (e) => {
+    state.pathModulation = inputTarget(e).checked;
+    syncPathModulationControls();
+    redraw(false);
+  });
+  for (const id of [
+    'pathModulationWaveform',
+    'pathModulationPhaseMode',
+    'pathModulationDirection',
+  ] as const) {
+    $(id).addEventListener('change', (event) => {
+      dynamicState[id] = inputTarget(event).value;
+      redraw(false);
+    });
+  }
   $('gradientEnabled').addEventListener('change', (e) => {
     state.gradientEnabled = inputTarget(e).checked;
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
@@ -1515,6 +1579,10 @@ if (typeof document !== 'undefined') {
     ['halftoneCycles', 'halftoneCycles'],
     ['chromaAmount', 'chromaAmount'],
     ['humanizerAmount', 'humanizerAmount'],
+    ['pathModulationAmplitude', 'pathModulationAmplitude'],
+    ['pathModulationWavelength', 'pathModulationWavelength'],
+    ['pathModulationPhase', 'pathModulationPhase'],
+    ['pathModulationQuality', 'pathModulationQuality'],
     ['morphSteps', 'morphSteps'],
     ['morphStepsY', 'morphStepsY'],
   ];
@@ -1524,6 +1592,9 @@ if (typeof document !== 'undefined') {
     'axis',
     'lineWeightMode',
     'blueprintStyle',
+    'pathModulationWaveform',
+    'pathModulationPhaseMode',
+    'pathModulationDirection',
   ];
   const historyChecks: Array<keyof ContourSettings> = [
     'spiral',
@@ -1535,6 +1606,7 @@ if (typeof document !== 'undefined') {
     'halftone',
     'chroma',
     'humanizer',
+    'pathModulation',
     'blueprint',
     'topographicMap',
     'morphEnabled',
@@ -1604,6 +1676,7 @@ if (typeof document !== 'undefined') {
     syncHalftoneControls();
     syncChromaAmount();
     syncHumanizerControls();
+    syncPathModulationControls();
     syncBlueprintControls();
     syncMorphControls();
     const morphTargetsById: Record<string, string | number> = {},
@@ -1800,6 +1873,7 @@ if (typeof document !== 'undefined') {
       halftone: 0.22,
       chroma: 0.18,
       humanizer: 0.3,
+      pathModulation: 0.28,
       blueprint: 0.16,
       topographicMap: 0.18,
     } satisfies Partial<Record<keyof AppState, number>>;
@@ -1832,6 +1906,20 @@ if (typeof document !== 'undefined') {
     $('humanizer').checked = state.humanizer;
     randomizePair('humanizerAmount', 'humanizerAmount', () => randomInt(18, 58));
     syncHumanizerControls();
+    $('pathModulation').checked = state.pathModulation;
+    randomizePair('pathModulationAmplitude', 'pathModulationAmplitude', () => randomIn(0.4, 3));
+    randomizePair('pathModulationWavelength', 'pathModulationWavelength', () => randomIn(5, 30));
+    randomizePair('pathModulationPhase', 'pathModulationPhase', () => randomInt(0, 359));
+    randomizePair('pathModulationQuality', 'pathModulationQuality', () => randomInt(4, 9));
+    if (!randomLocks.has('pathModulation')) {
+      state.pathModulationWaveform = randomItem(['sine', 'sine', 'triangle', 'square']);
+      state.pathModulationPhaseMode = randomItem(['synchronized', 'per-path']);
+      state.pathModulationDirection = randomItem(['normal', 'normal', 'both', 'tangent']);
+      $('pathModulationWaveform').value = state.pathModulationWaveform;
+      $('pathModulationPhaseMode').value = state.pathModulationPhaseMode;
+      $('pathModulationDirection').value = state.pathModulationDirection;
+    }
+    syncPathModulationControls();
     $('blueprint').checked = state.blueprint;
     if (!randomLocks.has('blueprint')) {
       state.blueprintStyle = randomItem(['blue', 'blue', 'blue', 'black']);
@@ -1865,6 +1953,7 @@ if (typeof document !== 'undefined') {
           halftone: state.halftone,
           chroma: state.chroma,
           humanizer: state.humanizer,
+          pathModulation: state.pathModulation,
           blueprint: state.blueprint,
           topographicMap: state.topographicMap,
         },

@@ -60,6 +60,85 @@ describe('contour output effects', () => {
     expect(first.toolpaths).toEqual(second.toolpaths);
   });
 
+  it('produces deterministic path modulation in SVG and plotter toolpaths', () => {
+    const effectSettings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      clipToArtboard: false,
+      pathModulation: true,
+      pathModulationAmplitude: 2,
+      pathModulationWavelength: 9,
+      pathModulationPhase: 35,
+      pathModulationPhaseMode: 'per-path',
+    };
+
+    const first = computeContours(makeContourMesh(), effectSettings, false);
+    const second = computeContours(makeContourMesh(), effectSettings, false);
+    const plain = computeContours(
+      makeContourMesh(),
+      { ...effectSettings, pathModulation: false },
+      false,
+    );
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.toolpaths).toEqual(second.toolpaths);
+    expect(first.svg).not.toBe(plain.svg);
+    expect(first.toolpaths).not.toEqual(plain.toolpaths);
+    expect(first.toolpaths.flatMap((group) => group.runs).length).toBeGreaterThan(0);
+  });
+
+  it('uses modulation quality to add samples and keeps closed contours seamless', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      clipToArtboard: false,
+      pathModulation: true,
+      pathModulationAmplitude: 1.5,
+      pathModulationWavelength: 7,
+      pathModulationWaveform: 'sine',
+    };
+    const low = computeContours(
+      makeContourMesh(),
+      { ...settings, pathModulationQuality: 1 },
+      false,
+    );
+    const high = computeContours(
+      makeContourMesh(),
+      { ...settings, pathModulationQuality: 10 },
+      false,
+    );
+    const closedRuns = high.toolpaths
+      .flatMap((group) => group.runs)
+      .filter(
+        (run) => run.length > 6 && Math.hypot(run[0] - run.at(-2)!, run[1] - run.at(-1)!) < 1e-6,
+      );
+
+    expect(high.nodes).toBeGreaterThan(low.nodes);
+    expect(closedRuns.length).toBeGreaterThan(0);
+  });
+
+  it('supports sine, triangle, and square path waveforms', () => {
+    const render = (pathModulationWaveform: string) =>
+      computeContours(
+        makeContourMesh(),
+        {
+          ...contourSettings,
+          hide: false,
+          sil: false,
+          pathModulation: true,
+          pathModulationAmplitude: 1.4,
+          pathModulationWaveform,
+        },
+        true,
+      ).svg;
+
+    const outputs = ['sine', 'triangle', 'square'].map(render);
+    expect(new Set(outputs).size).toBe(3);
+    expect(outputs.every((svg) => !/(?:NaN|undefined|Infinity)/.test(svg))).toBe(true);
+  });
+
   it('adds escaped technical annotations and blueprint stock', () => {
     const result = computeContours(
       makeContourMesh(),
@@ -166,6 +245,7 @@ describe('contour output effects', () => {
       'halftone',
       'chroma',
       'humanizer',
+      'pathModulation',
       'blueprint',
       'topographicMap',
     ] as const;
