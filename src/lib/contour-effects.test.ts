@@ -5,6 +5,46 @@ import { sphereDemo } from './demo-meshes';
 import { vertexNormals, weld } from './mesh';
 
 describe('contour output effects', () => {
+  it('keeps the hidden-line silhouette of a rounded cube closed', () => {
+    const normalized = weld(sphereDemo('cube', 128, 64));
+    const mesh = { ...normalized, N: vertexNormals(normalized.V, normalized.T) };
+    for (const [az, el] of [
+      [0, 0],
+      [15, 10],
+      [30, 20],
+      [45, 30],
+      [60, 40],
+      [75, 50],
+      [90, 0],
+      [105, 10],
+      [120, 20],
+      [135, 30],
+      [150, 40],
+      [165, 50],
+    ]) {
+      const result = computeContours(
+        mesh,
+        {
+          ...contourSettings,
+          az,
+          el,
+          lines: 6,
+          gradientEnabled: true,
+          gradientColors: 2,
+        },
+        false,
+      );
+
+      const silhouette = result.toolpaths.find((group) => group.label === 'silhouette');
+      expect(silhouette?.runs, `az ${az}, el ${el}`).toHaveLength(1);
+      const run = silhouette!.runs[0];
+      expect(
+        Math.hypot(run[0] - run.at(-2)!, run[1] - run.at(-1)!),
+        `az ${az}, el ${el}`,
+      ).toBeLessThan(1e-5);
+    }
+  });
+
   it('splits gradients into plotter-ready colour groups and halftone bands', () => {
     const result = computeContours(
       makeContourMesh(),

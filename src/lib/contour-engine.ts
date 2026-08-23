@@ -925,16 +925,54 @@ function makeVisibleTest(D: DepthBuffer, bias: number, rad: number): VisibilityT
 }
 
 /* ------------------------------------------- polyline → visible paths */
+function healShortPathGaps(
+  out: Polyline[],
+  firstRun: number,
+  tolerance: number,
+  closed: boolean,
+): void {
+  if (tolerance <= 0 || out.length <= firstRun) return;
+  const runs = out.splice(firstRun);
+  const healed: Polyline[] = [];
+  const gap = (a: Polyline, b: Polyline): number =>
+    Math.hypot(a[a.length - 2] - b[0], a[a.length - 1] - b[1]);
+
+  for (const run of runs) {
+    const previous = healed.at(-1);
+    const distance = previous ? gap(previous, run) : Infinity;
+    if (previous && distance <= tolerance) previous.push(...run.slice(distance <= 1e-9 ? 2 : 0));
+    else healed.push(run);
+  }
+
+  if (closed && healed.length) {
+    const first = healed[0],
+      last = healed.at(-1)!;
+    const distance = gap(last, first);
+    if (distance <= tolerance) {
+      if (healed.length === 1) {
+        if (distance > 1e-9) last.push(last[0], last[1]);
+      } else {
+        last.push(...first.slice(distance <= 1e-9 ? 2 : 0));
+        healed[0] = last;
+        healed.pop();
+      }
+    }
+  }
+  out.push(...healed);
+}
+
 function emitPath(
   poly: NumericArray,
   pts: NumericArray,
   visible: VisibilityTest | null,
   step: number,
   out: Polyline[],
+  healGap = 0,
 ): void {
   // Walk a chained polyline and keep only the stretches the camera can see.
   // Visibility is sampled at roughly one sample per depth-buffer pixel, but only
   // the interval breaks become nodes — sampling density never inflates the file.
+  const firstRun = out.length;
   let run: Polyline | null = null,
     openEnd = false; // openEnd: run currently ends at this segment's start
   const flush = (): void => {
@@ -1007,6 +1045,7 @@ function emitPath(
     if (!openEnd) flush();
   }
   flush();
+  healShortPathGaps(out, firstRun, healGap, poly.length > 2 && poly[0] === poly[poly.length - 1]);
 }
 
 function splitPolylineByBands(
@@ -1540,6 +1579,76 @@ function serialiseRun(run: NumericArray, quality: number, sharp: NumericArray): 
 }
 
 /* ------------------------------------------------------- silhouette */
+const convexityCache = new WeakMap<ContourMesh, boolean>();
+
+function isConvexMesh(mesh: ContourMesh): boolean {
+  const cached = convexityCache.get(mesh);
+  if (cached !== undefined) return cached;
+  const { V, T } = mesh;
+  const vertexCount = V.length / 3;
+  const edges = new Map<number, { triangle: number; opposite: number }>();
+  let side = 0,
+    unmatchedEdges = 0,
+    convex = T.length >= 12;
+
+  const classifySide = (triangle: number, point: number): number => {
+    const a = T[triangle] * 3,
+      b = T[triangle + 1] * 3,
+      c = T[triangle + 2] * 3,
+      p = point * 3;
+    const abx = V[b] - V[a],
+      aby = V[b + 1] - V[a + 1],
+      abz = V[b + 2] - V[a + 2];
+    const acx = V[c] - V[a],
+      acy = V[c + 1] - V[a + 1],
+      acz = V[c + 2] - V[a + 2];
+    const nx = aby * acz - abz * acy,
+      ny = abz * acx - abx * acz,
+      nz = abx * acy - aby * acx;
+    const length = Math.hypot(nx, ny, nz);
+    if (!length) return 0;
+    const distance =
+      (nx * (V[p] - V[a]) + ny * (V[p + 1] - V[a + 1]) + nz * (V[p + 2] - V[a + 2])) / length;
+    return Math.abs(distance) <= 1e-5 ? 0 : Math.sign(distance);
+  };
+
+  for (let triangle = 0; convex && triangle < T.length; triangle += 3) {
+    for (let edge = 0; edge < 3; edge++) {
+      const a = T[triangle + edge],
+        b = T[triangle + ((edge + 1) % 3)],
+        opposite = T[triangle + ((edge + 2) % 3)],
+        key = a < b ? a * vertexCount + b : b * vertexCount + a;
+      const previous = edges.get(key);
+      if (!previous) {
+        edges.set(key, { triangle, opposite });
+        unmatchedEdges++;
+        continue;
+      }
+      if (previous.triangle < 0) {
+        convex = false;
+        break;
+      }
+      edges.set(key, { triangle: -1, opposite: -1 });
+      unmatchedEdges--;
+      for (const current of [
+        classifySide(previous.triangle, opposite),
+        classifySide(triangle, previous.opposite),
+      ]) {
+        if (!current) continue;
+        if (side && current !== side) {
+          convex = false;
+          break;
+        }
+        side = current;
+      }
+    }
+  }
+  // Open/non-manifold surfaces cannot use the no-self-occlusion shortcut.
+  convex = convex && unmatchedEdges === 0 && side !== 0;
+  convexityCache.set(mesh, convex);
+  return convex;
+}
+
 function silhouetteEdges(mesh: ContourMesh, P: Projection): PointSegments {
   const { T } = mesh;
   const { sx, sy, sd } = P;
@@ -2100,7 +2209,12 @@ function computeContourInstance(
   if (settings.sil) {
     const { pts, segs } = silhouetteEdges(mesh, P);
     if (segs.length) {
-      for (const poly of chain(pts, segs)) emitPath(poly, pts, visOutline, step, outlineOut);
+      // The outline lies on the rasterized depth cliff. Heal only sub-pixel-scale
+      // visibility misses. Convex meshes cannot self-occlude, so their outline
+      // stays intact even when edge-on triangles collapse onto the depth cliff.
+      const outlineVisibility = visOutline && !isConvexMesh(mesh) ? visOutline : null;
+      for (const poly of chain(pts, segs))
+        emitPath(poly, pts, outlineVisibility, step, outlineOut, step * 2.5);
     }
   }
 
