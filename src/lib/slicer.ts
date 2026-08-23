@@ -176,6 +176,7 @@ const state: AppState = {
   margin: 14,
   clipToArtboard: true,
   maskEnabled: false,
+  maskOutline: false,
   maskRoundness: 100,
   maskScaleX: 100,
   maskScaleY: 100,
@@ -338,6 +339,7 @@ if (typeof document !== 'undefined') {
       margin,
       clipToArtboard,
       maskEnabled,
+      maskOutline,
       maskRoundness,
       maskScaleX,
       maskScaleY,
@@ -417,6 +419,7 @@ if (typeof document !== 'undefined') {
       margin,
       clipToArtboard,
       maskEnabled,
+      maskOutline,
       maskRoundness,
       maskScaleX,
       maskScaleY,
@@ -1344,6 +1347,10 @@ if (typeof document !== 'undefined') {
     'maskLfo2Waveform',
   ] as const;
   function syncMaskControls(): void {
+    $('maskOutline').disabled = !state.maskEnabled;
+    $('maskOutline')
+      .closest('.checkbox-control')
+      ?.classList.toggle('is-disabled', !state.maskEnabled);
     for (const id of maskControlIds) {
       $(id).disabled = !state.maskEnabled;
       $(id + 'N').disabled = !state.maskEnabled;
@@ -1353,6 +1360,10 @@ if (typeof document !== 'undefined') {
   $('maskEnabled').addEventListener('change', (event) => {
     state.maskEnabled = inputTarget(event).checked;
     syncMaskControls();
+    redraw(false);
+  });
+  $('maskOutline').addEventListener('change', (event) => {
+    state.maskOutline = inputTarget(event).checked;
     redraw(false);
   });
   syncMaskControls();
@@ -1724,6 +1735,7 @@ if (typeof document !== 'undefined') {
     'bg',
     'clipToArtboard',
     'maskEnabled',
+    'maskOutline',
     'gradientEnabled',
     'halftone',
     'chroma',
@@ -1999,6 +2011,7 @@ if (typeof document !== 'undefined') {
     syncSliceConstruction();
     randomizePair('margin', 'margin', () => randomInt(8, 24));
     randomizeCheckbox('maskEnabled', 'maskEnabled', 0.32);
+    randomizeCheckbox('maskOutline', 'maskOutline', 0.45);
     randomizePair('maskRoundness', 'maskRoundness', () => randomInt(0, 100));
     randomizePair('maskScaleX', 'maskScaleX', () => randomInt(55, 100));
     randomizePair('maskScaleY', 'maskScaleY', () => randomInt(55, 100));
@@ -2013,6 +2026,7 @@ if (typeof document !== 'undefined') {
     randomizePair('maskLfo2Phase', 'maskLfo2Phase', () => randomInt(0, 359));
     randomizePair('maskLfo2Waveform', 'maskLfo2Waveform', () => randomInt(0, 100));
     $('maskEnabled').checked = state.maskEnabled;
+    $('maskOutline').checked = state.maskOutline;
     syncMaskControls();
     const colorPair = createColorPair();
     const reverseColors = Math.random() < 0.5;

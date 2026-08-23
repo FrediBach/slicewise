@@ -342,6 +342,33 @@ describe('contour output effects', () => {
     expect(result.svg.match(/<clipPath id="generative-mask-/g)).toHaveLength(4);
     expect(new Set(result.svg.match(/generative-mask-[a-z0-9]+/g))).toHaveProperty('size', 4);
   });
+
+  it('optionally draws the mask boundary in SVG and plotter output', () => {
+    const settings = {
+      ...contourSettings,
+      maskEnabled: true,
+      maskOutline: true,
+      maskScaleX: 70,
+      maskScaleY: 75,
+      maskOffsetX: 12,
+      maskOffsetY: -8,
+    };
+    const withoutOutline = computeContours(
+      makeContourMesh(),
+      { ...settings, maskOutline: false },
+      false,
+    );
+    const withOutline = computeContours(makeContourMesh(), settings, false);
+    const runCount = (result: typeof withOutline) =>
+      result.toolpaths.reduce((sum, group) => sum + group.runs.length, 0);
+
+    expect(withOutline.svg).toContain('id="generative-mask-outline"');
+    expect(withoutOutline.svg).not.toContain('id="generative-mask-outline"');
+    expect(runCount(withOutline)).toBe(runCount(withoutOutline) + 1);
+    const outline = withOutline.toolpaths.flatMap((group) => group.runs).at(-1)!;
+    expect(outline[0]).toBeCloseTo(outline.at(-2)!, 5);
+    expect(outline[1]).toBeCloseTo(outline.at(-1)!, 5);
+  });
 });
 
 describe('contour projection modes', () => {

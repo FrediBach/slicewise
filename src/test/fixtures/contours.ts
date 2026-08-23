@@ -56,6 +56,7 @@ export const contourSettings = {
   margin: 10,
   clipToArtboard: true,
   maskEnabled: false,
+  maskOutline: false,
   maskRoundness: 100,
   maskScaleX: 100,
   maskScaleY: 100,

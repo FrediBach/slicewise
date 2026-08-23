@@ -6,6 +6,7 @@ import { previewCurveQuality, previewLineCount, previewMorphSteps } from './prev
 import {
   clipRunToGenerativeMask,
   generativeMaskPath,
+  generativeMaskRun,
   type GenerativeMaskSettings,
 } from './generative-mask';
 
@@ -1181,6 +1182,7 @@ function deterministicDrawingNumber(
       settings.humanizerAmount,
       settings.blueprintStyle,
       settings.maskEnabled,
+      settings.maskOutline,
       settings.maskRoundness,
       settings.maskScaleX,
       settings.maskScaleY,
@@ -1378,6 +1380,30 @@ function maskArtwork(
   const id = `generative-mask-${(hash >>> 0).toString(36)}`;
   const path = generativeMaskPath(settings, width, height, settings.margin);
   return `<defs><clipPath id="${id}"><path d="${path}"/></clipPath></defs><g clip-path="url(#${id})">${artwork}</g>`;
+}
+
+function maskOutlineArtwork(
+  settings: ContourSettings,
+  width: number,
+  height: number,
+  quality: number,
+): { svg: string; runs: Polyline[] } {
+  if (!settings.maskEnabled || !settings.maskOutline) return { svg: '', runs: [] };
+  const boundary = generativeMaskRun(settings, width, height, settings.margin);
+  const candidates = settings.clipToArtboard ? clipRunToRect(boundary, width, height) : [boundary];
+  const runs: Polyline[] = [];
+  let path = '';
+  for (const run of candidates) {
+    if (run.length < 4) continue;
+    runs.push(run);
+    path += serialiseRun(run, quality, sharpVertices(run));
+  }
+  return {
+    svg: path
+      ? `<path id="generative-mask-outline" d="${path}" fill="none" stroke="${effectiveAnnotationColor(settings)}" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round"/>`
+      : '',
+    runs,
+  };
 }
 
 function chromaticLayers(
@@ -2115,38 +2141,48 @@ function computeLineArtInstance(
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
   }
-  artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${documentOverlay(settings, blueprint)}`;
+  const maskOutline = maskOutlineArtwork(settings, W, H, quality);
+  renderedPaths += maskOutline.runs.length;
+  renderedNodes += maskOutline.runs.reduce((sum, run) => sum + run.length / 2, 0);
+  artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${maskOutline.svg}${documentOverlay(settings, blueprint)}`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;
-  return {
-    svg,
-    toolpaths: !quick
-      ? [
-          ...runsByColor.flatMap((colorRuns, index) =>
-            colorRuns.length
-              ? [
-                  {
-                    color: palette[index],
-                    label: settings.gradientEnabled
-                      ? `gradient colour ${index + 1}`
-                      : 'SVG centreline',
-                    runs: colorRuns,
-                  },
-                ]
-              : [],
-          ),
-          ...(mapAnnotations?.runs.length
+  const toolpaths: ContourToolpathGroup[] = !quick
+    ? [
+        ...runsByColor.flatMap((colorRuns, index) =>
+          colorRuns.length
             ? [
                 {
-                  color: effectiveAnnotationColor(settings),
-                  label: 'topographic annotations',
-                  runs: mapAnnotations.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)),
+                  color: palette[index],
+                  label: settings.gradientEnabled
+                    ? `gradient colour ${index + 1}`
+                    : 'SVG centreline',
+                  runs: colorRuns,
                 },
               ]
-            : []),
-        ]
-      : [],
+            : [],
+        ),
+        ...(mapAnnotations?.runs.length
+          ? [
+              {
+                color: effectiveAnnotationColor(settings),
+                label: 'topographic annotations',
+                runs: mapAnnotations.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)),
+              },
+            ]
+          : []),
+      ]
+    : [];
+  if (!quick && maskOutline.runs.length) {
+    const color = effectiveAnnotationColor(settings);
+    const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
+    if (matching) matching.runs.push(...maskOutline.runs);
+    else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
+  }
+  return {
+    svg,
+    toolpaths,
     paths: renderedPaths,
     nodes: renderedNodes,
     bytes: new TextEncoder().encode(svg).byteLength,
@@ -2382,6 +2418,13 @@ function computeContourInstance(
         runs: clippedAnnotationRuns,
       });
   }
+  const maskOutline = maskOutlineArtwork(settings, W, H, quality);
+  if (!quick && maskOutline.runs.length) {
+    const color = effectiveAnnotationColor(settings);
+    const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
+    if (matching) matching.runs.push(...maskOutline.runs);
+    else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
+  }
   let artwork: string,
     renderedPaths = paths,
     renderedNodes = nodes;
@@ -2447,7 +2490,9 @@ function computeContourInstance(
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
   }
-  artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${documentOverlay(settings, blueprint)}`;
+  renderedPaths += maskOutline.runs.length;
+  renderedNodes += maskOutline.runs.reduce((sum, run) => sum + run.length / 2, 0);
+  artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${maskOutline.svg}${documentOverlay(settings, blueprint)}`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;

@@ -6,6 +6,9 @@ export function GenerativeMaskControls() {
       <Checkbox id="maskEnabled" randomizable>
         Clip to generative shape
       </Checkbox>
+      <Checkbox id="maskOutline" randomizable>
+        Draw mask outline
+      </Checkbox>
       <div className="effect-controls">
         <ValueControl
           id="maskRoundness"

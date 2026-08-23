@@ -4,6 +4,7 @@ export type MaskRun = number[];
 
 export interface GenerativeMaskSettings {
   maskEnabled: boolean;
+  maskOutline: boolean;
   maskRoundness: number;
   maskScaleX: number;
   maskScaleY: number;
@@ -188,18 +189,32 @@ export function generativeMaskPath(
   height: number,
   margin: number,
 ): string {
+  const run = generativeMaskRun(settings, width, height, margin);
+  let path = '';
+  for (let index = 0; index < run.length - 2; index += 2)
+    path += `${index ? 'L' : 'M'}${run[index].toFixed(3)} ${run[index + 1].toFixed(3)}`;
+  return path + 'Z';
+}
+
+export function generativeMaskRun(
+  settings: GenerativeMaskSettings,
+  width: number,
+  height: number,
+  margin: number,
+): MaskRun {
   const { cx, cy, rx, ry, exponent } = maskMetrics(settings, width, height, margin);
   const samples = Math.max(
     192,
     Math.ceil(Math.max(settings.maskLfo1Cycles, settings.maskLfo2Cycles, 1) * 32),
   );
-  let path = '';
+  const run: MaskRun = [];
   for (let index = 0; index < samples; index++) {
     const angle = (index / samples) * Math.PI * 2,
       radius = boundaryRadius(settings, angle, exponent),
       x = cx + Math.cos(angle) * rx * radius,
       y = cy + Math.sin(angle) * ry * radius;
-    path += `${index ? 'L' : 'M'}${x.toFixed(3)} ${y.toFixed(3)}`;
+    run.push(x, y);
   }
-  return path + 'Z';
+  run.push(run[0], run[1]);
+  return run;
 }

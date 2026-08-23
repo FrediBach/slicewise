@@ -8,6 +8,7 @@ import {
 
 const settings: GenerativeMaskSettings = {
   maskEnabled: true,
+  maskOutline: false,
   maskRoundness: 100,
   maskScaleX: 100,
   maskScaleY: 100,
