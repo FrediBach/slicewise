@@ -175,6 +175,20 @@ const state: AppState = {
   ph: 210,
   margin: 14,
   clipToArtboard: true,
+  maskEnabled: false,
+  maskRoundness: 100,
+  maskScaleX: 100,
+  maskScaleY: 100,
+  maskOffsetX: 0,
+  maskOffsetY: 0,
+  maskLfo1Amplitude: 0,
+  maskLfo1Cycles: 3,
+  maskLfo1Phase: 0,
+  maskLfo1Waveform: 0,
+  maskLfo2Amplitude: 0,
+  maskLfo2Cycles: 5,
+  maskLfo2Phase: 90,
+  maskLfo2Waveform: 0,
   bg: true,
   gradientEnabled: false,
   gradientColors: 6,
@@ -323,6 +337,20 @@ if (typeof document !== 'undefined') {
       ph,
       margin,
       clipToArtboard,
+      maskEnabled,
+      maskRoundness,
+      maskScaleX,
+      maskScaleY,
+      maskOffsetX,
+      maskOffsetY,
+      maskLfo1Amplitude,
+      maskLfo1Cycles,
+      maskLfo1Phase,
+      maskLfo1Waveform,
+      maskLfo2Amplitude,
+      maskLfo2Cycles,
+      maskLfo2Phase,
+      maskLfo2Waveform,
       bg,
       halftone,
       halftoneSize,
@@ -388,6 +416,20 @@ if (typeof document !== 'undefined') {
       ph,
       margin,
       clipToArtboard,
+      maskEnabled,
+      maskRoundness,
+      maskScaleX,
+      maskScaleY,
+      maskOffsetX,
+      maskOffsetY,
+      maskLfo1Amplitude,
+      maskLfo1Cycles,
+      maskLfo1Phase,
+      maskLfo1Waveform,
+      maskLfo2Amplitude,
+      maskLfo2Cycles,
+      maskLfo2Phase,
+      maskLfo2Waveform,
       bg,
       halftone,
       halftoneSize,
@@ -928,6 +970,19 @@ if (typeof document !== 'undefined') {
   bindPair('lineWeightInterval', 'lineWeightInterval');
   bindPair('lineWeightAmount', 'lineWeightAmount');
   bindPair('margin', 'margin');
+  bindPair('maskRoundness', 'maskRoundness');
+  bindPair('maskScaleX', 'maskScaleX');
+  bindPair('maskScaleY', 'maskScaleY');
+  bindPair('maskOffsetX', 'maskOffsetX');
+  bindPair('maskOffsetY', 'maskOffsetY');
+  bindPair('maskLfo1Amplitude', 'maskLfo1Amplitude');
+  bindPair('maskLfo1Cycles', 'maskLfo1Cycles');
+  bindPair('maskLfo1Phase', 'maskLfo1Phase');
+  bindPair('maskLfo1Waveform', 'maskLfo1Waveform');
+  bindPair('maskLfo2Amplitude', 'maskLfo2Amplitude');
+  bindPair('maskLfo2Cycles', 'maskLfo2Cycles');
+  bindPair('maskLfo2Phase', 'maskLfo2Phase');
+  bindPair('maskLfo2Waveform', 'maskLfo2Waveform');
   bindPair('chromaAmount', 'chromaAmount');
   bindPair('humanizerAmount', 'humanizerAmount');
   bindPair('halftoneSize', 'halftoneSize');
@@ -1273,6 +1328,34 @@ if (typeof document !== 'undefined') {
     state.clipToArtboard = inputTarget(e).checked;
     redraw(false);
   });
+  const maskControlIds = [
+    'maskRoundness',
+    'maskScaleX',
+    'maskScaleY',
+    'maskOffsetX',
+    'maskOffsetY',
+    'maskLfo1Amplitude',
+    'maskLfo1Cycles',
+    'maskLfo1Phase',
+    'maskLfo1Waveform',
+    'maskLfo2Amplitude',
+    'maskLfo2Cycles',
+    'maskLfo2Phase',
+    'maskLfo2Waveform',
+  ] as const;
+  function syncMaskControls(): void {
+    for (const id of maskControlIds) {
+      $(id).disabled = !state.maskEnabled;
+      $(id + 'N').disabled = !state.maskEnabled;
+      $(id + 'Control').classList.toggle('is-disabled', !state.maskEnabled);
+    }
+  }
+  $('maskEnabled').addEventListener('change', (event) => {
+    state.maskEnabled = inputTarget(event).checked;
+    syncMaskControls();
+    redraw(false);
+  });
+  syncMaskControls();
   function syncHalftoneControls(): void {
     for (const id of ['halftoneSize', 'halftoneContrast', 'halftoneCycles']) {
       $(id).disabled = !state.halftone;
@@ -1602,6 +1685,19 @@ if (typeof document !== 'undefined') {
     ['lineWeightAmount', 'lineWeightAmount'],
     ['gradientColors', 'gradientColors'],
     ['margin', 'margin'],
+    ['maskRoundness', 'maskRoundness'],
+    ['maskScaleX', 'maskScaleX'],
+    ['maskScaleY', 'maskScaleY'],
+    ['maskOffsetX', 'maskOffsetX'],
+    ['maskOffsetY', 'maskOffsetY'],
+    ['maskLfo1Amplitude', 'maskLfo1Amplitude'],
+    ['maskLfo1Cycles', 'maskLfo1Cycles'],
+    ['maskLfo1Phase', 'maskLfo1Phase'],
+    ['maskLfo1Waveform', 'maskLfo1Waveform'],
+    ['maskLfo2Amplitude', 'maskLfo2Amplitude'],
+    ['maskLfo2Cycles', 'maskLfo2Cycles'],
+    ['maskLfo2Phase', 'maskLfo2Phase'],
+    ['maskLfo2Waveform', 'maskLfo2Waveform'],
     ['halftoneSize', 'halftoneSize'],
     ['halftoneContrast', 'halftoneContrast'],
     ['halftoneCycles', 'halftoneCycles'],
@@ -1627,6 +1723,7 @@ if (typeof document !== 'undefined') {
     'sil',
     'bg',
     'clipToArtboard',
+    'maskEnabled',
     'gradientEnabled',
     'halftone',
     'chroma',
@@ -1698,6 +1795,7 @@ if (typeof document !== 'undefined') {
     syncSliceConstruction();
     syncSliceLfoControls();
     syncLineWeightControls();
+    syncMaskControls();
     syncHalftoneControls();
     syncChromaAmount();
     syncHumanizerControls();
@@ -1900,6 +1998,22 @@ if (typeof document !== 'undefined') {
     syncLineWeightControls();
     syncSliceConstruction();
     randomizePair('margin', 'margin', () => randomInt(8, 24));
+    randomizeCheckbox('maskEnabled', 'maskEnabled', 0.32);
+    randomizePair('maskRoundness', 'maskRoundness', () => randomInt(0, 100));
+    randomizePair('maskScaleX', 'maskScaleX', () => randomInt(55, 100));
+    randomizePair('maskScaleY', 'maskScaleY', () => randomInt(55, 100));
+    randomizePair('maskOffsetX', 'maskOffsetX', () => randomInt(-35, 35));
+    randomizePair('maskOffsetY', 'maskOffsetY', () => randomInt(-35, 35));
+    randomizePair('maskLfo1Amplitude', 'maskLfo1Amplitude', () => randomInt(0, 28));
+    randomizePair('maskLfo1Cycles', 'maskLfo1Cycles', () => randomIn(1, 8));
+    randomizePair('maskLfo1Phase', 'maskLfo1Phase', () => randomInt(0, 359));
+    randomizePair('maskLfo1Waveform', 'maskLfo1Waveform', () => randomInt(0, 100));
+    randomizePair('maskLfo2Amplitude', 'maskLfo2Amplitude', () => randomInt(0, 22));
+    randomizePair('maskLfo2Cycles', 'maskLfo2Cycles', () => randomIn(1, 10));
+    randomizePair('maskLfo2Phase', 'maskLfo2Phase', () => randomInt(0, 359));
+    randomizePair('maskLfo2Waveform', 'maskLfo2Waveform', () => randomInt(0, 100));
+    $('maskEnabled').checked = state.maskEnabled;
+    syncMaskControls();
     const colorPair = createColorPair();
     const reverseColors = Math.random() < 0.5;
     const useBlackAndWhite = Math.random() < 0.1;

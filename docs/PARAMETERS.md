@@ -36,7 +36,7 @@ Imported meshes are welded, centred on their bounding-box midpoint, and uniforml
 | Y steps (`morphStepsY`)                 | Integer; **4**; 2–24 | Number of evenly spaced instances along the Y morph dimension, including endpoints. Used only when a Y target exists. Total instances are X steps × Y steps when both dimensions have targets.                                                                                    |
 | Per-parameter morph target              | Number or colour     | The arrow beside a morphable control cycles through no target, X target, and—when Y is enabled—X + Y targets. Numeric values interpolate linearly; ink colour interpolates per RGB channel. Each generated instance is placed on the same artboard rather than in a tiled layout. |
 
-Morphable parameters are: Azimuth, Elevation, Roll, Scale, Offset X/Y, Distortion, Line count, Curve quality, Ease strength/cycles/centre, custom slice Azimuth/Elevation, slice LFO amplitude/cycles/direction/phase and modulation depth/cycles/phase, Stroke, line-weight Interval/Variation, Ink colour, Pen colours, Margin, Dot spacing, Contrast, Depth cycles, and RGB split. Source-extrusion, artboard-dimension, morph-step, categorical line-weight mode, and G-code parameters are not morphable.
+Morphable parameters are: Azimuth, Elevation, Roll, Scale, Offset X/Y, Distortion, Line count, Curve quality, Ease strength/cycles/centre, custom slice Azimuth/Elevation, slice LFO amplitude/cycles/direction/phase and modulation depth/cycles/phase, Stroke, line-weight Interval/Variation, Ink colour, Pen colours, Margin, every numeric generative-mask parameter, Dot spacing, Contrast, Depth cycles, and RGB split. Source-extrusion, artboard-dimension, morph-step, categorical line-weight mode, and G-code parameters are not morphable.
 
 ## View
 
@@ -134,6 +134,21 @@ The default Rainbow stops are red at 0%, amber at 20%, lime at 40%, cyan at 60%,
 
 Paper presets are A6 105×148, A5 148×210, A4 210×297, A3 297×420, A2 420×594, A1 594×841, A0 841×1189, Letter 216×279, Legal 216×356, and Tabloid 279×432 mm.
 
+### Generative mask
+
+| Parameter (ID)                                               | Type and default                    | What it does                                                                                                                                                                                     |
+| ------------------------------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Clip to generative shape (`maskEnabled`)                     | Boolean; **off**                    | Clips contour, centreline, annotation, SVG, and G-code geometry to a generated closed boundary. The sheet background and blueprint document furniture remain unmasked.                           |
+| Roundness (`maskRoundness`)                                  | Number; **100%**; 0–100, step 1     | Morphs the base superellipse from an almost rectangular boundary at 0% to an ellipse at 100%. On a square mask this produces the requested rectangle-to-circle range.                            |
+| Width / Height (`maskScaleX` / `maskScaleY`)                 | Number; **100%**; 10–100, step 1    | Scales the mask inside the margin-adjusted artboard independently on each axis.                                                                                                                  |
+| Offset X / Y (`maskOffsetX` / `maskOffsetY`)                 | Number; **0%**; −100–100, step 1    | Moves the mask centre horizontally or vertically by a percentage of the available half-width or half-height. The mask may extend beyond the sheet; artboard clipping still applies when enabled. |
+| LFO 1/2 amplitude (`maskLfo1Amplitude`, `maskLfo2Amplitude`) | Number; **0%**; 0–45, step 1        | Adds or removes radial boundary distance as each oscillator travels around the mask. Combining different cycle counts produces irregular, repeatable blobs.                                      |
+| LFO 1/2 cycles (`maskLfo1Cycles`, `maskLfo2Cycles`)          | Number; **3 / 5**; 1–12, step 0.25  | Controls angular lobes. Fractional values continuously crossfade adjacent integer harmonics, keeping the generated boundary closed during a morph.                                               |
+| LFO 1/2 phase (`maskLfo1Phase`, `maskLfo2Phase`)             | Number; **0° / 90°**; 0–360, step 1 | Rotates each oscillator independently around the boundary.                                                                                                                                       |
+| LFO 1/2 wave morph (`maskLfo1Waveform`, `maskLfo2Waveform`)  | Number; **0%**; 0–100, step 1       | Continuously morphs each oscillator from sine at 0%, through triangle at 50%, to a rounded square wave at 100%.                                                                                  |
+
+All numeric mask parameters support X and Y morph targets. This allows one morph dimension to change the base silhouette—for example rectangle to circle—while the other independently introduces or transforms boundary irregularity.
+
 ### Post-processing
 
 | Parameter (ID)                     | Type and default                    | What it does                                                                                                                                                                                                                                                                                                                  |
@@ -150,7 +165,7 @@ Paper presets are A6 105×148, A5 148×210, A4 210×297, A3 297×420, A2 420×59
 | Document stock (`blueprintStyle`)  | Choice; **Blueprint blue**          | Chooses blueprint blue or technical black stock. Both use white drafting annotations; ordinary contour ink is white unless a gradient is active.                                                                                                                                                                              |
 | Topographic map (`topographicMap`) | Boolean; **off**                    | Adds synthetic metre elevations plus generated place names and markers after contour effects. Labels use the effective paper colour for their masks; G-code uses single-line plotter lettering for the same annotations. Placement is deterministically derived from the finished contour geometry.                           |
 
-Effects use a fixed composition order: contour generation, Humanizer geometry, artboard clipping, gradient and line-weight styling, halftone dashes, chromatic copies, topographic annotations, then the technical blueprint overlay. All effect toggles can be enabled together. Randomization samples them independently while preserving individual locks.
+Effects use a fixed composition order: contour generation, Humanizer geometry, artboard and generative-mask clipping, gradient and line-weight styling, halftone dashes, chromatic copies, topographic annotations, then the technical blueprint overlay. All effect toggles can be enabled together. Randomization samples them independently while preserving individual locks.
 
 ## Export
 

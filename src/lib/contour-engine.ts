@@ -3,6 +3,11 @@
 import { clipRunToRect } from './toolpaths';
 import { createMapAnnotations } from './mapAnnotations';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
+import {
+  clipRunToGenerativeMask,
+  generativeMaskPath,
+  type GenerativeMaskSettings,
+} from './generative-mask';
 
 type NumericArray = ArrayLike<number> & Iterable<number>;
 type Vec2 = [x: number, y: number];
@@ -24,7 +29,7 @@ export interface GradientStop {
   color: string;
 }
 
-export interface ContourSettings {
+export interface ContourSettings extends GenerativeMaskSettings {
   az: number;
   el: number;
   roll: number;
@@ -1170,7 +1175,26 @@ function deterministicDrawingNumber(
       geometry.vertices,
       geometry.triangles,
     ],
-    output: [settings.sw, settings.humanizer, settings.humanizerAmount, settings.blueprintStyle],
+    output: [
+      settings.sw,
+      settings.humanizer,
+      settings.humanizerAmount,
+      settings.blueprintStyle,
+      settings.maskEnabled,
+      settings.maskRoundness,
+      settings.maskScaleX,
+      settings.maskScaleY,
+      settings.maskOffsetX,
+      settings.maskOffsetY,
+      settings.maskLfo1Amplitude,
+      settings.maskLfo1Cycles,
+      settings.maskLfo1Phase,
+      settings.maskLfo1Waveform,
+      settings.maskLfo2Amplitude,
+      settings.maskLfo2Cycles,
+      settings.maskLfo2Phase,
+      settings.maskLfo2Waveform,
+    ],
     morph: [
       settings.morphEnabled,
       settings.morphSteps,
@@ -1308,6 +1332,52 @@ function documentBackdrop(
 
 function documentOverlay(settings: ContourSettings, blueprint: BlueprintDocument): string {
   return settings.suppressBackground ? '' : blueprint.overlay;
+}
+
+function clipArtworkRun(
+  run: Polyline,
+  settings: ContourSettings,
+  width: number,
+  height: number,
+): Polyline[] {
+  const artboardRuns = settings.clipToArtboard ? clipRunToRect(run, width, height) : [run];
+  return settings.maskEnabled
+    ? artboardRuns.flatMap((candidate) =>
+        clipRunToGenerativeMask(candidate, settings, width, height, settings.margin),
+      )
+    : artboardRuns;
+}
+
+function maskArtwork(
+  settings: ContourSettings,
+  width: number,
+  height: number,
+  artwork: string,
+): string {
+  if (!settings.maskEnabled) return artwork;
+  const signature = [
+    settings.maskRoundness,
+    settings.maskScaleX,
+    settings.maskScaleY,
+    settings.maskOffsetX,
+    settings.maskOffsetY,
+    settings.maskLfo1Amplitude,
+    settings.maskLfo1Cycles,
+    settings.maskLfo1Phase,
+    settings.maskLfo1Waveform,
+    settings.maskLfo2Amplitude,
+    settings.maskLfo2Cycles,
+    settings.maskLfo2Phase,
+    settings.maskLfo2Waveform,
+  ].join('-');
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < signature.length; index++) {
+    hash ^= signature.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  const id = `generative-mask-${(hash >>> 0).toString(36)}`;
+  const path = generativeMaskPath(settings, width, height, settings.margin);
+  return `<defs><clipPath id="${id}"><path d="${path}"/></clipPath></defs><g clip-path="url(#${id})">${artwork}</g>`;
 }
 
 function chromaticLayers(
@@ -1983,7 +2053,7 @@ function computeLineArtInstance(
           palette.length - 1,
         )
       : 0;
-    const clippedRuns = settings.clipToArtboard ? clipRunToRect(styled, W, H) : [styled];
+    const clippedRuns = clipArtworkRun(styled, settings, W, H);
     for (const run of clippedRuns) {
       if (run.length < 4) continue;
       const data = serialiseRun(run, quality, sharpVertices(run));
@@ -2040,13 +2110,12 @@ function computeLineArtInstance(
   } else {
     artwork = baseArtwork;
   }
-  artwork = `${documentBackdrop(settings, W, H, blueprint)}${artwork}`;
   if (mapAnnotations) {
     artwork += mapAnnotations.svg;
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
   }
-  artwork += documentOverlay(settings, blueprint);
+  artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${documentOverlay(settings, blueprint)}`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;
@@ -2072,7 +2141,7 @@ ${artwork}
                 {
                   color: effectiveAnnotationColor(settings),
                   label: 'topographic annotations',
-                  runs: mapAnnotations.runs,
+                  runs: mapAnnotations.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)),
                 },
               ]
             : []),
@@ -2233,7 +2302,7 @@ function computeContourInstance(
         ? humanizeRun(simplified.run, settings.humanizerAmount, humanizerSalt++)
         : simplified.run;
       if (run.length < 4) continue;
-      const clippedRuns = settings.clipToArtboard ? clipRunToRect(run, W, H) : [run];
+      const clippedRuns = clipArtworkRun(run, settings, W, H);
       for (const clipped of clippedRuns) {
         if (clipped.length < 4) continue;
         const sharp =
@@ -2299,16 +2368,18 @@ function computeContourInstance(
         title: settings.documentTitle,
       })
     : null;
-  if (!quick && mapAnnotations?.runs.length) {
+  const clippedAnnotationRuns =
+    mapAnnotations?.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)) ?? [];
+  if (!quick && clippedAnnotationRuns.length) {
     const matching = toolpaths.find(
       (group) => group.color.toLowerCase() === settings.color.toLowerCase(),
     );
-    if (matching) matching.runs.push(...mapAnnotations.runs);
+    if (matching) matching.runs.push(...clippedAnnotationRuns);
     else
       toolpaths.push({
         color: settings.color,
         label: 'topographic annotations',
-        runs: mapAnnotations.runs,
+        runs: clippedAnnotationRuns,
       });
   }
   let artwork: string,
@@ -2370,13 +2441,13 @@ function computeContourInstance(
     renderedPaths *= settings.gradientEnabled ? 4 : 3;
     renderedNodes *= settings.gradientEnabled ? 4 : 3;
   }
-  artwork = `${documentBackdrop(settings, W, H, blueprint)}${contours}`;
+  artwork = contours;
   if (mapAnnotations) {
     artwork += mapAnnotations.svg;
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
   }
-  artwork += documentOverlay(settings, blueprint);
+  artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${documentOverlay(settings, blueprint)}`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;

@@ -9,6 +9,7 @@ import {
   ValueControl,
 } from '../controls/FormControls';
 import { GradientChooser } from '../controls/GradientChooser';
+import { GenerativeMaskControls } from './GenerativeMaskControls';
 
 function TopographicMapControl() {
   return (
@@ -132,6 +133,7 @@ export function OutputPanel() {
           Include sheet background
         </Checkbox>
       </FieldGroup>
+      <GenerativeMaskControls />
       <FieldGroup title="Post-processing">
         <Checkbox id="halftone" randomizable>
           Halftone stroke

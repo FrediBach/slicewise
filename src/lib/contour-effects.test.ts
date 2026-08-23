@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
 import { computeContours } from './contour-engine';
 import { sphereDemo } from './demo-meshes';
+import { pointInGenerativeMask } from './generative-mask';
 import { vertexNormals, weld } from './mesh';
 
 describe('contour output effects', () => {
@@ -280,6 +281,66 @@ describe('contour output effects', () => {
     );
     expect(preview.svg).toContain('id="topographic-annotations"');
     expect(preview.toolpaths).toEqual([]);
+  });
+
+  it('clips SVG and plotter paths to a morphable two-LFO mask', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      lines: 18,
+      maskEnabled: true,
+      maskRoundness: 35,
+      maskScaleX: 72,
+      maskScaleY: 80,
+      maskLfo1Amplitude: 24,
+      maskLfo1Cycles: 3.5,
+      maskLfo1Phase: 30,
+      maskLfo1Waveform: 40,
+      maskLfo2Amplitude: 13,
+      maskLfo2Cycles: 6.25,
+      maskLfo2Phase: 120,
+      maskLfo2Waveform: 80,
+    };
+    const result = computeContours(makeContourMesh(), settings, false);
+
+    expect(result.svg).toContain('<clipPath id="generative-mask-');
+    expect(result.toolpaths.flatMap((group) => group.runs).length).toBeGreaterThan(0);
+    for (const run of result.toolpaths.flatMap((group) => group.runs))
+      for (let index = 0; index < run.length; index += 2)
+        expect(
+          pointInGenerativeMask(
+            settings,
+            settings.pw,
+            settings.ph,
+            settings.margin,
+            run[index],
+            run[index + 1],
+          ),
+        ).toBe(true);
+  });
+
+  it('applies independent mask targets across a two-dimensional morph grid', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        maskEnabled: true,
+        morphEnabled: true,
+        morphSteps: 2,
+        morphTargets: { maskRoundness: 0, maskLfo1Amplitude: 25 },
+        morphSecondEnabled: true,
+        morphStepsY: 2,
+        morphTargets2: { maskScaleX: 60, maskOffsetX: 35, maskLfo2Waveform: 100 },
+      },
+      false,
+    );
+
+    expect(result.svg.match(/data-morph-x-step=/g)).toHaveLength(4);
+    expect(result.svg.match(/<clipPath id="generative-mask-/g)).toHaveLength(4);
+    expect(new Set(result.svg.match(/generative-mask-[a-z0-9]+/g))).toHaveProperty('size', 4);
   });
 });
 
