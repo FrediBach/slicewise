@@ -43,6 +43,12 @@ export interface ContourSettings {
   cutAz: number;
   cutEl: number;
   divergence: number;
+  sliceLfo: boolean;
+  sliceLfoAmplitude: number;
+  sliceLfoCycles: number;
+  sliceLfoAngle: number;
+  sliceLfoPhase: number;
+  sliceLfoWaveform: string;
   spiral: boolean;
   hide: boolean;
   sil: boolean;
@@ -304,6 +310,8 @@ function sliceLevelWorld(
   NV: number,
   scalarDir: Vec3,
   curveStrength: number,
+  scalarAtPoint?: (x: number, y: number, z: number) => number,
+  rootIterations = 12,
 ): PointSegments {
   // returns {pts:[x,y,d,...], segs:[i,j,...]} for one cutting plane
   const { T, V, N } = mesh;
@@ -316,17 +324,6 @@ function sliceLevelWorld(
     if (id !== undefined) return id;
     let t = (level - S[a]) / (S[b] - S[a]);
     id = pts.length / 3;
-    if (!curveStrength || !N) {
-      const ai = a * 3,
-        bi = b * 3;
-      const x = V[ai] + (V[bi] - V[ai]) * t;
-      const y = V[ai + 1] + (V[bi + 1] - V[ai + 1]) * t;
-      const z = V[ai + 2] + (V[bi + 2] - V[ai + 2]) * t;
-      pts.push(x, y, z);
-      idx.set(key, id);
-      return id;
-    }
-
     const ai = a * 3,
       bi = b * 3;
     const ax = V[ai],
@@ -338,15 +335,22 @@ function sliceLevelWorld(
     const ex = bx - ax,
       ey = by - ay,
       ez = bz - az;
-    const da = ex * N[ai] + ey * N[ai + 1] + ez * N[ai + 2];
-    const db = ex * N[bi] + ey * N[bi + 1] + ez * N[bi + 2];
-    const tax = ex - N[ai] * da,
-      tay = ey - N[ai + 1] * da,
-      taz = ez - N[ai + 2] * da;
-    const tbx = ex - N[bi] * db,
-      tby = ey - N[bi + 1] * db,
-      tbz = ez - N[bi + 2] * db;
+    if (!scalarAtPoint && (!curveStrength || !N)) {
+      pts.push(ax + ex * t, ay + ey * t, az + ez * t);
+      idx.set(key, id);
+      return id;
+    }
+
+    const da = N ? ex * N[ai] + ey * N[ai + 1] + ez * N[ai + 2] : 0;
+    const db = N ? ex * N[bi] + ey * N[bi + 1] + ez * N[bi + 2] : 0;
+    const tax = N ? ex - N[ai] * da : ex,
+      tay = N ? ey - N[ai + 1] * da : ey,
+      taz = N ? ez - N[ai + 2] * da : ez;
+    const tbx = N ? ex - N[bi] * db : ex,
+      tby = N ? ey - N[bi + 1] * db : ey,
+      tbz = N ? ez - N[bi + 2] * db : ez;
     const sample = (q: number): Vec3 => {
+      if (!curveStrength || !N) return [ax + ex * q, ay + ey * q, az + ez * q];
       const q2 = q * q,
         q3 = q2 * q;
       const h00 = 2 * q3 - 3 * q2 + 1,
@@ -368,10 +372,12 @@ function sliceLevelWorld(
     let lo = 0,
       hi = 1;
     const startAbove = S[a] > level;
-    for (let k = 0; k < 12; k++) {
+    for (let k = 0; k < rootIterations; k++) {
       t = (lo + hi) * 0.5;
       const p = sample(t);
-      const value = p[0] * scalarDir[0] + p[1] * scalarDir[1] + p[2] * scalarDir[2];
+      const value = scalarAtPoint
+        ? scalarAtPoint(p[0], p[1], p[2])
+        : p[0] * scalarDir[0] + p[1] * scalarDir[1] + p[2] * scalarDir[2];
       if (value > level === startAbove) lo = t;
       else hi = t;
     }
@@ -472,6 +478,72 @@ function chain(pts: NumericArray, segs: NumericArray): number[][] {
 
 const contourTopologyCache = new WeakMap<ContourMesh, Map<string, CachedSlice[]>>();
 
+interface SliceLfoField {
+  values: Float32Array;
+  evaluate: (x: number, y: number, z: number) => number;
+}
+
+function sliceLfoWaveform(kind: string, angle: number): number {
+  if (kind !== 'triangle') return Math.sin(angle);
+  const cycle = (((angle / (Math.PI * 2)) % 1) + 1) % 1;
+  return 1 - 4 * Math.abs(cycle - 0.5);
+}
+
+function createSliceLfoField(
+  mesh: ContourMesh,
+  normal: Vec3,
+  amplitude: number,
+  settings: ContourSettings,
+): SliceLfoField {
+  // Construct a stable orthonormal frame within the current slice plane, then
+  // rotate its modulation direction without changing the cutting normal.
+  const reference: Vec3 = Math.abs(normal[2]) < 0.9 ? [0, 0, 1] : [0, 1, 0];
+  let ux = reference[1] * normal[2] - reference[2] * normal[1],
+    uy = reference[2] * normal[0] - reference[0] * normal[2],
+    uz = reference[0] * normal[1] - reference[1] * normal[0];
+  const uLength = Math.hypot(ux, uy, uz) || 1;
+  ux /= uLength;
+  uy /= uLength;
+  uz /= uLength;
+  const vx = normal[1] * uz - normal[2] * uy,
+    vy = normal[2] * ux - normal[0] * uz,
+    vz = normal[0] * uy - normal[1] * ux;
+  const directionAngle = ((Number(settings.sliceLfoAngle) || 0) * Math.PI) / 180;
+  const directionCos = Math.cos(directionAngle),
+    directionSin = Math.sin(directionAngle);
+  const tangent: Vec3 = [
+    ux * directionCos + vx * directionSin,
+    uy * directionCos + vy * directionSin,
+    uz * directionCos + vz * directionSin,
+  ];
+
+  const { V } = mesh;
+  let tangentMin = Infinity,
+    tangentMax = -Infinity;
+  for (let offset = 0; offset < V.length; offset += 3) {
+    const coordinate =
+      V[offset] * tangent[0] + V[offset + 1] * tangent[1] + V[offset + 2] * tangent[2];
+    tangentMin = Math.min(tangentMin, coordinate);
+    tangentMax = Math.max(tangentMax, coordinate);
+  }
+  const tangentSpan = tangentMax - tangentMin || 1;
+  const angularFrequency =
+    (Math.PI * 2 * clamp(Number(settings.sliceLfoCycles) || 0, 0.25, 12)) / tangentSpan;
+  const phase = ((Number(settings.sliceLfoPhase) || 0) * Math.PI) / 180;
+  const evaluate = (x: number, y: number, z: number): number => {
+    const along = x * tangent[0] + y * tangent[1] + z * tangent[2];
+    const wave = sliceLfoWaveform(
+      settings.sliceLfoWaveform,
+      (along - tangentMin) * angularFrequency + phase,
+    );
+    return x * normal[0] + y * normal[1] + z * normal[2] - amplitude * wave;
+  };
+  const values = new Float32Array(V.length / 3);
+  for (let vertex = 0, offset = 0; vertex < values.length; vertex++, offset += 3)
+    values[vertex] = evaluate(V[offset], V[offset + 1], V[offset + 2]);
+  return { values, evaluate };
+}
+
 function contourSlices(
   mesh: ContourMesh,
   settings: ContourSettings,
@@ -486,6 +558,12 @@ function contourSlices(
         settings.cutAz,
         settings.cutEl,
         settings.divergence,
+        settings.sliceLfo,
+        settings.sliceLfoAmplitude,
+        settings.sliceLfoCycles,
+        settings.sliceLfoAngle,
+        settings.sliceLfoPhase,
+        settings.sliceLfoWaveform,
         count,
         settings.gapEase,
         settings.easeStrength,
@@ -502,6 +580,14 @@ function contourSlices(
   const span = field.max - field.min;
   const vertexCount = mesh.V.length / 3;
   const divergence = clamp(settings.divergence || 0, 0, 160);
+  const lfoAmplitude =
+    settings.sliceLfo && span > 0
+      ? (span / Math.max(1, count)) * clamp(Number(settings.sliceLfoAmplitude) || 0, 0, 400) * 0.01
+      : 0;
+  const parallelLfo =
+    lfoAmplitude && !divergence
+      ? createSliceLfoField(mesh, field.dir, lfoAmplitude, settings)
+      : null;
   const fanTangent = divergence ? sliceFanTangent(field.dir) : null;
   const fan = fanTangent ? sliceFanGeometry(mesh, field, fanTangent, divergence) : null;
   for (let i = 0; i < count; i++) {
@@ -515,6 +601,8 @@ function contourSlices(
     let level = field.min + span * position;
     let sliceField = field.S;
     let sliceDirection = field.dir;
+    let scalarAtPoint: SliceLfoField['evaluate'] | undefined = parallelLfo?.evaluate;
+    if (parallelLfo) sliceField = parallelLfo.values;
     if (fanTangent && fan) {
       const angle = fan.minAngle + (fan.maxAngle - fan.minAngle) * position;
       const cos = Math.cos(angle);
@@ -525,13 +613,19 @@ function contourSlices(
         field.dir[2] * cos - fanTangent[2] * sin,
       ];
       level = fan.normalCenter * cos - fan.sourceTangent * sin;
-      const values = new Float32Array(vertexCount);
-      for (let vertex = 0, offset = 0; vertex < vertexCount; vertex++, offset += 3)
-        values[vertex] =
-          mesh.V[offset] * sliceDirection[0] +
-          mesh.V[offset + 1] * sliceDirection[1] +
-          mesh.V[offset + 2] * sliceDirection[2];
-      sliceField = values;
+      if (lfoAmplitude) {
+        const divergentLfo = createSliceLfoField(mesh, sliceDirection, lfoAmplitude, settings);
+        sliceField = divergentLfo.values;
+        scalarAtPoint = divergentLfo.evaluate;
+      } else {
+        const values = new Float32Array(vertexCount);
+        for (let vertex = 0, offset = 0; vertex < vertexCount; vertex++, offset += 3)
+          values[vertex] =
+            mesh.V[offset] * sliceDirection[0] +
+            mesh.V[offset + 1] * sliceDirection[1] +
+            mesh.V[offset + 2] * sliceDirection[2];
+        sliceField = values;
+      }
     }
     const { pts, segs } = sliceLevelWorld(
       mesh,
@@ -540,6 +634,8 @@ function contourSlices(
       vertexCount,
       sliceDirection,
       curveStrength,
+      scalarAtPoint,
+      6 + clamp(Math.round(settings.quality), 1, 10) * 2,
     );
     slices.push({ position, worldPoints: pts, polylines: segs.length ? chain(pts, segs) : [] });
   }
@@ -879,6 +975,12 @@ function deterministicDrawingNumber(
       settings.axis,
       settings.cutAz,
       settings.cutEl,
+      settings.sliceLfo,
+      settings.sliceLfoAmplitude,
+      settings.sliceLfoCycles,
+      settings.sliceLfoAngle,
+      settings.sliceLfoPhase,
+      settings.sliceLfoWaveform,
       settings.spiral,
       settings.hide,
       settings.sil,

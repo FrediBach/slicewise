@@ -109,6 +109,64 @@ export function ContoursPanel() {
           morphable={false}
           randomizable
         />
+        <Checkbox id="sliceLfo" randomizable>
+          Modulate slice planes
+        </Checkbox>
+        <div className="effect-controls">
+          <ValueControl
+            id="sliceLfoAmplitude"
+            label="LFO amplitude"
+            min="0"
+            max="400"
+            step="1"
+            value="75"
+            unit="% gap"
+            disabled
+          />
+          <ValueControl
+            id="sliceLfoCycles"
+            label="LFO cycles"
+            min="0.25"
+            max="12"
+            step="0.25"
+            value="2"
+            disabled
+          />
+          <ValueControl
+            id="sliceLfoAngle"
+            label="LFO direction"
+            min="0"
+            max="180"
+            step="1"
+            value="0"
+            unit="°"
+            disabled
+          />
+          <ValueControl
+            id="sliceLfoPhase"
+            label="LFO phase"
+            min="0"
+            max="360"
+            step="1"
+            value="0"
+            unit="°"
+            disabled
+          />
+          <div className="control-row select-row is-disabled" id="sliceLfoWaveformControl">
+            <label htmlFor="sliceLfoWaveform">Waveform</label>
+            <div className="select-wrap">
+              <select id="sliceLfoWaveform" defaultValue="sine" disabled>
+                <option value="sine">Sine</option>
+                <option value="triangle">Triangle</option>
+              </select>
+              <ChevronDown size={14} />
+            </div>
+          </div>
+          <p className="gradient-note blueprint-note">
+            Warps the cutting surface itself. Curve quality controls intersection precision and
+            smoothness.
+          </p>
+        </div>
       </FieldGroup>
       <FieldGroup title="Path construction" className="field-group--checks">
         <div className="check-grid">

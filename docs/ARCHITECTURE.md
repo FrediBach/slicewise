@@ -53,7 +53,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 
 - `mesh.ts` parses supported mesh formats, welds and normalizes geometry, and calculates vertex normals.
 - `demo-meshes/index.ts` contains the deterministic procedural generators for the built-in demo sources.
-- `contour-engine.ts` is the pure rendering core. It projects geometry, calculates scalar fields, slices triangles, chains line segments, performs visibility and silhouette work, and returns SVG plus grouped centreline toolpaths. Output effects compose in a fixed order: geometry effects and clipping, path colour/weight styling, halftone styling, chromatic copies, map annotations, then document overlays. Mesh contours and imported SVG centrelines share those composition rules. It must not read the DOM.
+- `contour-engine.ts` is the pure rendering core. It projects geometry, calculates scalar fields, optionally warps slice fields with in-plane LFOs, slices triangles, chains line segments, performs visibility and silhouette work, and returns SVG plus grouped centreline toolpaths. Output effects compose in a fixed order: geometry effects and clipping, path colour/weight styling, halftone styling, chromatic copies, map annotations, then document overlays. Mesh contours and imported SVG centrelines share those composition rules. It must not read the DOM.
 - `slicer-worker.ts` is deliberately small: it stores the current transferable mesh, invokes `computeContours`, and reports results or errors.
 - `generativeMesh.ts` generates indexed meshes from implicit fields. Its worker transfers array buffers rather than cloning large arrays.
 - `svg-mesh.ts` converts filled SVG artwork into extruded mesh geometry or pruned medial/scale-axis centreline polylines.

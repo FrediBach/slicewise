@@ -151,6 +151,12 @@ const state: AppState = {
   cutAz: 0,
   cutEl: 90,
   divergence: 0,
+  sliceLfo: false,
+  sliceLfoAmplitude: 75,
+  sliceLfoCycles: 2,
+  sliceLfoAngle: 0,
+  sliceLfoPhase: 0,
+  sliceLfoWaveform: 'sine',
   spiral: false,
   hide: true,
   sil: true,
@@ -285,6 +291,12 @@ if (typeof document !== 'undefined') {
       cutAz,
       cutEl,
       divergence,
+      sliceLfo,
+      sliceLfoAmplitude,
+      sliceLfoCycles,
+      sliceLfoAngle,
+      sliceLfoPhase,
+      sliceLfoWaveform,
       spiral,
       hide,
       sil,
@@ -339,6 +351,12 @@ if (typeof document !== 'undefined') {
       cutAz,
       cutEl,
       divergence,
+      sliceLfo,
+      sliceLfoAmplitude,
+      sliceLfoCycles,
+      sliceLfoAngle,
+      sliceLfoPhase,
+      sliceLfoWaveform,
       spiral,
       hide,
       sil,
@@ -904,6 +922,10 @@ if (typeof document !== 'undefined') {
   bindPair('cutAz', 'cutAz', activateCustomAxis);
   bindPair('cutEl', 'cutEl', activateCustomAxis);
   bindPair('divergence', 'divergence', syncSliceConstruction);
+  bindPair('sliceLfoAmplitude', 'sliceLfoAmplitude');
+  bindPair('sliceLfoCycles', 'sliceLfoCycles');
+  bindPair('sliceLfoAngle', 'sliceLfoAngle');
+  bindPair('sliceLfoPhase', 'sliceLfoPhase');
   bindPair('morphSteps', 'morphSteps');
   bindPair('morphStepsY', 'morphStepsY');
   bindExportPair('drawFeed', 'drawFeed');
@@ -1142,7 +1164,8 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   function syncSliceConstruction(): void {
-    const spiralBlocked = state.divergence > 0 || state.lineWeightMode !== 'uniform';
+    const spiralBlocked =
+      state.divergence > 0 || state.sliceLfo || state.lineWeightMode !== 'uniform';
     if (spiralBlocked && state.spiral) {
       state.spiral = false;
       $('spiral').checked = false;
@@ -1150,10 +1173,31 @@ if (typeof document !== 'undefined') {
     $('spiral').disabled = spiralBlocked;
     $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', spiralBlocked);
   }
+  function syncSliceLfoControls(): void {
+    const disabled = !state.sliceLfo;
+    for (const id of ['sliceLfoAmplitude', 'sliceLfoCycles', 'sliceLfoAngle', 'sliceLfoPhase']) {
+      $(id).disabled = disabled;
+      $(id + 'N').disabled = disabled;
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    $('sliceLfoWaveform').disabled = disabled;
+    $('sliceLfoWaveformControl').classList.toggle('is-disabled', disabled);
+  }
+  $('sliceLfo').addEventListener('change', (event) => {
+    state.sliceLfo = inputTarget(event).checked;
+    syncSliceLfoControls();
+    syncSliceConstruction();
+    redraw(false);
+  });
+  $('sliceLfoWaveform').addEventListener('change', (event) => {
+    state.sliceLfoWaveform = inputTarget(event).value;
+    redraw(false);
+  });
   $('spiral').addEventListener('change', (e) => {
     state.spiral = inputTarget(e).checked;
     redraw(false);
   });
+  syncSliceLfoControls();
   syncSliceConstruction();
   function syncLineWeightControls(): void {
     const enabled = state.lineWeightMode !== 'uniform';
@@ -1505,6 +1549,10 @@ if (typeof document !== 'undefined') {
     ['cutAz', 'cutAz'],
     ['cutEl', 'cutEl'],
     ['divergence', 'divergence'],
+    ['sliceLfoAmplitude', 'sliceLfoAmplitude'],
+    ['sliceLfoCycles', 'sliceLfoCycles'],
+    ['sliceLfoAngle', 'sliceLfoAngle'],
+    ['sliceLfoPhase', 'sliceLfoPhase'],
     ['sw', 'sw'],
     ['lineWeightInterval', 'lineWeightInterval'],
     ['lineWeightAmount', 'lineWeightAmount'],
@@ -1522,11 +1570,13 @@ if (typeof document !== 'undefined') {
     'lens',
     'gapEase',
     'axis',
+    'sliceLfoWaveform',
     'lineWeightMode',
     'blueprintStyle',
   ];
   const historyChecks: Array<keyof ContourSettings> = [
     'spiral',
+    'sliceLfo',
     'hide',
     'sil',
     'bg',
@@ -1600,6 +1650,7 @@ if (typeof document !== 'undefined') {
     syncLensAmount();
     syncEaseCenter();
     syncSliceConstruction();
+    syncSliceLfoControls();
     syncLineWeightControls();
     syncHalftoneControls();
     syncChromaAmount();
@@ -1763,9 +1814,17 @@ if (typeof document !== 'undefined') {
     randomizePair('cutAz', 'cutAz', () => randomInt(-180, 180));
     randomizePair('cutEl', 'cutEl', () => randomInt(-80, 80));
     randomizePair('divergence', 'divergence', () => (Math.random() < 0.6 ? 0 : randomInt(15, 110)));
+    randomizePair('sliceLfoAmplitude', 'sliceLfoAmplitude', () => randomInt(35, 180));
+    randomizePair('sliceLfoCycles', 'sliceLfoCycles', () => randomIn(0.75, 5));
+    randomizePair('sliceLfoAngle', 'sliceLfoAngle', () => randomInt(0, 180));
+    randomizePair('sliceLfoPhase', 'sliceLfoPhase', () => randomInt(0, 359));
+    randomizeCheckbox('sliceLfo', 'sliceLfo', 0.28);
+    randomizeSelect('sliceLfoWaveform', 'sliceLfoWaveform', ['sine', 'sine', 'triangle']);
+    $('sliceLfo').checked = state.sliceLfo;
+    syncSliceLfoControls();
     syncSliceConstruction();
     randomizeCheckbox('spiral', 'spiral', 0.22);
-    if (state.divergence > 0) {
+    if (state.divergence > 0 || state.sliceLfo) {
       state.spiral = false;
       $('spiral').checked = false;
     }

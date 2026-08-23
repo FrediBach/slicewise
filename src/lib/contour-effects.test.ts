@@ -284,6 +284,71 @@ describe('contour projection modes', () => {
     expect(divergent.svg).not.toBe(parallel.svg);
   });
 
+  it('warps the slicing field with a deterministic LFO before projection', () => {
+    const mesh = makeContourMesh();
+    const planar = computeContours(mesh, { ...contourSettings, hide: false, sil: false }, false);
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      sliceLfo: true,
+      sliceLfoAmplitude: 140,
+      sliceLfoCycles: 2.5,
+      sliceLfoAngle: 32,
+      sliceLfoPhase: 45,
+    };
+    const first = computeContours(mesh, settings, false);
+    const second = computeContours(mesh, settings, false);
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.toolpaths).toEqual(second.toolpaths);
+    expect(first.svg).not.toBe(planar.svg);
+    expect(first.toolpaths).not.toEqual(planar.toolpaths);
+    expect(first.paths).toBeGreaterThan(0);
+    expect(first.svg).not.toMatch(/NaN|Infinity/);
+  });
+
+  it.each(['sine', 'triangle'])('supports %s slice-plane modulation', (sliceLfoWaveform) => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        axis: 'custom',
+        cutAz: 28,
+        cutEl: 51,
+        divergence: 55,
+        sliceLfo: true,
+        sliceLfoAmplitude: 95,
+        sliceLfoCycles: 3,
+        sliceLfoWaveform,
+        hide: false,
+        sil: false,
+      },
+      true,
+    );
+
+    expect(result.paths).toBeGreaterThan(0);
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('leaves planar slices unchanged at zero LFO amplitude', () => {
+    const mesh = makeContourMesh();
+    const planar = computeContours(mesh, { ...contourSettings, hide: false, sil: false }, true);
+    const zeroAmplitude = computeContours(
+      mesh,
+      {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        sliceLfo: true,
+        sliceLfoAmplitude: 0,
+      },
+      true,
+    );
+
+    expect(zeroAmplitude.svg).toBe(planar.svg);
+  });
+
   it('constructs a continuous spiral toolpath', () => {
     const result = computeContours(
       makeContourMesh(),
