@@ -49,6 +49,11 @@ export interface ContourSettings {
   sliceLfoAngle: number;
   sliceLfoPhase: number;
   sliceLfoWaveform: string;
+  sliceLfoModulation: boolean;
+  sliceLfoModulationMode: string;
+  sliceLfoModulationDepth: number;
+  sliceLfoModulationCycles: number;
+  sliceLfoModulationPhase: number;
   spiral: boolean;
   hide: boolean;
   sil: boolean;
@@ -630,13 +635,25 @@ function createSliceLfoField(
   const angularFrequency =
     (Math.PI * 2 * clamp(Number(settings.sliceLfoCycles) || 0, 0.25, 12)) / tangentSpan;
   const phase = ((Number(settings.sliceLfoPhase) || 0) * Math.PI) / 180;
+  const modulationEnabled = Boolean(settings.sliceLfoModulation);
+  const modulationDepth = clamp(Number(settings.sliceLfoModulationDepth) || 0, 0, 100) / 100;
+  const modulationAngularFrequency =
+    (Math.PI * 2 * clamp(Number(settings.sliceLfoModulationCycles) || 0, 0.25, 8)) / tangentSpan;
+  const modulationPhase = ((Number(settings.sliceLfoModulationPhase) || 0) * Math.PI) / 180;
+  const frequencyModulation = settings.sliceLfoModulationMode === 'frequency';
   const evaluate = (x: number, y: number, z: number): number => {
     const along = x * tangent[0] + y * tangent[1] + z * tangent[2];
-    const wave = sliceLfoWaveform(
-      settings.sliceLfoWaveform,
-      (along - tangentMin) * angularFrequency + phase,
-    );
-    return x * normal[0] + y * normal[1] + z * normal[2] - amplitude * wave;
+    let carrierPhase = (along - tangentMin) * angularFrequency + phase;
+    let effectiveAmplitude = amplitude;
+    if (modulationEnabled && modulationDepth) {
+      const modulator = Math.sin(
+        (along - tangentMin) * modulationAngularFrequency + modulationPhase,
+      );
+      if (frequencyModulation) carrierPhase += modulationDepth * Math.PI * modulator;
+      else effectiveAmplitude *= 1 + modulationDepth * modulator;
+    }
+    const wave = sliceLfoWaveform(settings.sliceLfoWaveform, carrierPhase);
+    return x * normal[0] + y * normal[1] + z * normal[2] - effectiveAmplitude * wave;
   };
   const values = new Float32Array(V.length / 3);
   for (let vertex = 0, offset = 0; vertex < values.length; vertex++, offset += 3)
@@ -664,6 +681,11 @@ function contourSlices(
         settings.sliceLfoAngle,
         settings.sliceLfoPhase,
         settings.sliceLfoWaveform,
+        settings.sliceLfoModulation,
+        settings.sliceLfoModulationMode,
+        settings.sliceLfoModulationDepth,
+        settings.sliceLfoModulationCycles,
+        settings.sliceLfoModulationPhase,
         count,
         settings.gapEase,
         settings.easeStrength,
@@ -727,6 +749,17 @@ function contourSlices(
         sliceField = values;
       }
     }
+    const baseAdaptiveDepth = 1 + Math.floor(clamp(curveStrength, 0, 1) * 2.999);
+    const carrierCycles = clamp(Number(settings.sliceLfoCycles) || 0, 0.25, 12);
+    const fmAdditionalCycles =
+      settings.sliceLfoModulation && settings.sliceLfoModulationMode === 'frequency'
+        ? (clamp(Number(settings.sliceLfoModulationDepth) || 0, 0, 100) / 200) *
+          clamp(Number(settings.sliceLfoModulationCycles) || 0, 0.25, 8)
+        : 0;
+    const adaptiveDepth = Math.min(
+      3,
+      baseAdaptiveDepth + (fmAdditionalCycles > carrierCycles * 0.75 ? 1 : 0),
+    );
     const { pts, segs } = sliceLevelWorld(
       mesh,
       sliceField,
@@ -736,7 +769,7 @@ function contourSlices(
       curveStrength,
       scalarAtPoint,
       6 + Math.round(clamp(curveStrength, 0, 1) * 18),
-      scalarAtPoint ? 1 + Math.floor(clamp(curveStrength, 0, 1) * 2.999) : 0,
+      scalarAtPoint ? adaptiveDepth : 0,
     );
     slices.push({ position, worldPoints: pts, polylines: segs.length ? chain(pts, segs) : [] });
   }
@@ -1082,6 +1115,11 @@ function deterministicDrawingNumber(
       settings.sliceLfoAngle,
       settings.sliceLfoPhase,
       settings.sliceLfoWaveform,
+      settings.sliceLfoModulation,
+      settings.sliceLfoModulationMode,
+      settings.sliceLfoModulationDepth,
+      settings.sliceLfoModulationCycles,
+      settings.sliceLfoModulationPhase,
       settings.spiral,
       settings.hide,
       settings.sil,

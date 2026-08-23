@@ -162,6 +162,50 @@ export function ContoursPanel() {
               <ChevronDown size={14} />
             </div>
           </div>
+          <Checkbox id="sliceLfoModulation" randomizable>
+            Modulate LFO
+          </Checkbox>
+          <div className="effect-controls">
+            <div className="control-row select-row is-disabled" id="sliceLfoModulationModeControl">
+              <label htmlFor="sliceLfoModulationMode">Mode</label>
+              <div className="select-wrap">
+                <select id="sliceLfoModulationMode" defaultValue="amplitude" disabled>
+                  <option value="amplitude">Amplitude</option>
+                  <option value="frequency">Frequency</option>
+                </select>
+                <ChevronDown size={14} />
+              </div>
+            </div>
+            <ValueControl
+              id="sliceLfoModulationDepth"
+              label="Mod depth"
+              min="0"
+              max="100"
+              step="1"
+              value="50"
+              unit="%"
+              disabled
+            />
+            <ValueControl
+              id="sliceLfoModulationCycles"
+              label="Mod cycles"
+              min="0.25"
+              max="8"
+              step="0.25"
+              value="1"
+              disabled
+            />
+            <ValueControl
+              id="sliceLfoModulationPhase"
+              label="Mod phase"
+              min="0"
+              max="360"
+              step="1"
+              value="0"
+              unit="°"
+              disabled
+            />
+          </div>
           <p className="gradient-note blueprint-note">
             Warps the cutting surface itself. Curve quality controls intersection precision and
             smoothness.

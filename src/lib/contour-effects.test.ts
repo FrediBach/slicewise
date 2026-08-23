@@ -351,6 +351,65 @@ describe('contour projection modes', () => {
     expect(zeroAmplitude.svg).toBe(planar.svg);
   });
 
+  it.each(['amplitude', 'frequency'])(
+    'modulates the slice LFO with deterministic %s modulation',
+    (sliceLfoModulationMode) => {
+      const mesh = makeContourMesh();
+      const carrierSettings = {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        sliceLfo: true,
+        sliceLfoAmplitude: 120,
+        sliceLfoCycles: 2.5,
+        sliceLfoPhase: 25,
+      };
+      const carrier = computeContours(mesh, carrierSettings, false);
+      const settings = {
+        ...carrierSettings,
+        sliceLfoModulation: true,
+        sliceLfoModulationMode,
+        sliceLfoModulationDepth: 70,
+        sliceLfoModulationCycles: 1.5,
+        sliceLfoModulationPhase: 65,
+      };
+      const first = computeContours(mesh, settings, false);
+      const second = computeContours(mesh, settings, false);
+
+      expect(first.svg).toBe(second.svg);
+      expect(first.toolpaths).toEqual(second.toolpaths);
+      expect(first.svg).not.toBe(carrier.svg);
+      expect(first.toolpaths).not.toEqual(carrier.toolpaths);
+      expect(first.svg).not.toMatch(/NaN|Infinity/);
+    },
+  );
+
+  it('keeps enabled LFO modulation neutral at zero depth', () => {
+    const mesh = makeContourMesh();
+    const carrierSettings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      sliceLfo: true,
+      sliceLfoAmplitude: 110,
+      sliceLfoCycles: 2,
+    };
+    const carrier = computeContours(mesh, carrierSettings, true);
+    const neutral = computeContours(
+      mesh,
+      {
+        ...carrierSettings,
+        sliceLfoModulation: true,
+        sliceLfoModulationMode: 'frequency',
+        sliceLfoModulationDepth: 0,
+        sliceLfoModulationCycles: 8,
+      },
+      true,
+    );
+
+    expect(neutral.svg).toBe(carrier.svg);
+  });
+
   it('adaptively refines near-tangent LFO slices on the rounded cube', () => {
     const normalized = weld(sphereDemo('cube', 48, 24));
     const mesh = { ...normalized, N: vertexNormals(normalized.V, normalized.T) };

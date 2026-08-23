@@ -157,6 +157,11 @@ const state: AppState = {
   sliceLfoAngle: 0,
   sliceLfoPhase: 0,
   sliceLfoWaveform: 'sine',
+  sliceLfoModulation: false,
+  sliceLfoModulationMode: 'amplitude',
+  sliceLfoModulationDepth: 50,
+  sliceLfoModulationCycles: 1,
+  sliceLfoModulationPhase: 0,
   spiral: false,
   hide: true,
   sil: true,
@@ -297,6 +302,11 @@ if (typeof document !== 'undefined') {
       sliceLfoAngle,
       sliceLfoPhase,
       sliceLfoWaveform,
+      sliceLfoModulation,
+      sliceLfoModulationMode,
+      sliceLfoModulationDepth,
+      sliceLfoModulationCycles,
+      sliceLfoModulationPhase,
       spiral,
       hide,
       sil,
@@ -357,6 +367,11 @@ if (typeof document !== 'undefined') {
       sliceLfoAngle,
       sliceLfoPhase,
       sliceLfoWaveform,
+      sliceLfoModulation,
+      sliceLfoModulationMode,
+      sliceLfoModulationDepth,
+      sliceLfoModulationCycles,
+      sliceLfoModulationPhase,
       spiral,
       hide,
       sil,
@@ -926,6 +941,9 @@ if (typeof document !== 'undefined') {
   bindPair('sliceLfoCycles', 'sliceLfoCycles');
   bindPair('sliceLfoAngle', 'sliceLfoAngle');
   bindPair('sliceLfoPhase', 'sliceLfoPhase');
+  bindPair('sliceLfoModulationDepth', 'sliceLfoModulationDepth');
+  bindPair('sliceLfoModulationCycles', 'sliceLfoModulationCycles');
+  bindPair('sliceLfoModulationPhase', 'sliceLfoModulationPhase');
   bindPair('morphSteps', 'morphSteps');
   bindPair('morphStepsY', 'morphStepsY');
   bindExportPair('drawFeed', 'drawFeed');
@@ -1182,6 +1200,20 @@ if (typeof document !== 'undefined') {
     }
     $('sliceLfoWaveform').disabled = disabled;
     $('sliceLfoWaveformControl').classList.toggle('is-disabled', disabled);
+    $('sliceLfoModulation').disabled = disabled;
+    $('sliceLfoModulation').closest('.checkbox-control')?.classList.toggle('is-disabled', disabled);
+    const modulationDisabled = disabled || !state.sliceLfoModulation;
+    for (const id of [
+      'sliceLfoModulationDepth',
+      'sliceLfoModulationCycles',
+      'sliceLfoModulationPhase',
+    ]) {
+      $(id).disabled = modulationDisabled;
+      $(id + 'N').disabled = modulationDisabled;
+      $(id + 'Control').classList.toggle('is-disabled', modulationDisabled);
+    }
+    $('sliceLfoModulationMode').disabled = modulationDisabled;
+    $('sliceLfoModulationModeControl').classList.toggle('is-disabled', modulationDisabled);
   }
   $('sliceLfo').addEventListener('change', (event) => {
     state.sliceLfo = inputTarget(event).checked;
@@ -1191,6 +1223,15 @@ if (typeof document !== 'undefined') {
   });
   $('sliceLfoWaveform').addEventListener('change', (event) => {
     state.sliceLfoWaveform = inputTarget(event).value;
+    redraw(false);
+  });
+  $('sliceLfoModulation').addEventListener('change', (event) => {
+    state.sliceLfoModulation = inputTarget(event).checked;
+    syncSliceLfoControls();
+    redraw(false);
+  });
+  $('sliceLfoModulationMode').addEventListener('change', (event) => {
+    state.sliceLfoModulationMode = inputTarget(event).value;
     redraw(false);
   });
   $('spiral').addEventListener('change', (e) => {
@@ -1553,6 +1594,9 @@ if (typeof document !== 'undefined') {
     ['sliceLfoCycles', 'sliceLfoCycles'],
     ['sliceLfoAngle', 'sliceLfoAngle'],
     ['sliceLfoPhase', 'sliceLfoPhase'],
+    ['sliceLfoModulationDepth', 'sliceLfoModulationDepth'],
+    ['sliceLfoModulationCycles', 'sliceLfoModulationCycles'],
+    ['sliceLfoModulationPhase', 'sliceLfoModulationPhase'],
     ['sw', 'sw'],
     ['lineWeightInterval', 'lineWeightInterval'],
     ['lineWeightAmount', 'lineWeightAmount'],
@@ -1571,12 +1615,14 @@ if (typeof document !== 'undefined') {
     'gapEase',
     'axis',
     'sliceLfoWaveform',
+    'sliceLfoModulationMode',
     'lineWeightMode',
     'blueprintStyle',
   ];
   const historyChecks: Array<keyof ContourSettings> = [
     'spiral',
     'sliceLfo',
+    'sliceLfoModulation',
     'hide',
     'sil',
     'bg',
@@ -1818,9 +1864,19 @@ if (typeof document !== 'undefined') {
     randomizePair('sliceLfoCycles', 'sliceLfoCycles', () => randomIn(0.75, 5));
     randomizePair('sliceLfoAngle', 'sliceLfoAngle', () => randomInt(0, 180));
     randomizePair('sliceLfoPhase', 'sliceLfoPhase', () => randomInt(0, 359));
+    randomizePair('sliceLfoModulationDepth', 'sliceLfoModulationDepth', () => randomInt(20, 85));
+    randomizePair('sliceLfoModulationCycles', 'sliceLfoModulationCycles', () => randomIn(0.5, 4));
+    randomizePair('sliceLfoModulationPhase', 'sliceLfoModulationPhase', () => randomInt(0, 359));
     randomizeCheckbox('sliceLfo', 'sliceLfo', 0.28);
+    randomizeCheckbox('sliceLfoModulation', 'sliceLfoModulation', 0.45);
     randomizeSelect('sliceLfoWaveform', 'sliceLfoWaveform', ['sine', 'sine', 'triangle']);
+    randomizeSelect('sliceLfoModulationMode', 'sliceLfoModulationMode', [
+      'amplitude',
+      'amplitude',
+      'frequency',
+    ]);
     $('sliceLfo').checked = state.sliceLfo;
+    $('sliceLfoModulation').checked = state.sliceLfoModulation;
     syncSliceLfoControls();
     syncSliceConstruction();
     randomizeCheckbox('spiral', 'spiral', 0.22);
