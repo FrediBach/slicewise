@@ -3,7 +3,36 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { InkColorControl, RandomLock, RandomLockActions, ValueControl } from './FormControls';
+import {
+  ControlLabel,
+  InkColorControl,
+  RandomLock,
+  RandomLockActions,
+  SelectControl,
+  ValueControl,
+} from './FormControls';
+
+describe('shared control labels', () => {
+  it('uses the same label structure for selects and custom control rows', () => {
+    const { container } = render(
+      <>
+        <SelectControl id="waveform" label="Waveform" defaultValue="sine" disabled>
+          <option value="sine">Sine</option>
+        </SelectControl>
+        <div className="control-row">
+          <ControlLabel htmlFor="dimensions">Dimensions</ControlLabel>
+          <input id="dimensions" />
+        </div>
+      </>,
+    );
+
+    const labels = screen.getAllByText(/Waveform|Dimensions/);
+    expect(labels).toHaveLength(2);
+    labels.forEach((label) => expect(label.parentElement).toHaveClass('control-label'));
+    expect(screen.getByRole('combobox', { name: 'Waveform' })).toBeDisabled();
+    expect(container.querySelector('.control-row.is-disabled')).toBeInTheDocument();
+  });
+});
 
 describe('randomization locks', () => {
   it('toggles individually and restores lock state after a bulk override', async () => {

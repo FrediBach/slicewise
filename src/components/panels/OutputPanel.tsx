@@ -1,11 +1,11 @@
-import { ChevronDown } from 'lucide-react';
 import { Section } from '../ui/section';
 import {
   BackgroundColorControl,
   Checkbox,
+  ControlLabel,
   FieldGroup,
   InkColorControl,
-  RandomLock,
+  SelectControl,
   ValueControl,
 } from '../controls/FormControls';
 import { GradientChooser } from '../controls/GradientChooser';
@@ -39,21 +39,18 @@ export function OutputPanel() {
           value="0.35"
           unit="mm"
         />
-        <div className="control-row select-row">
-          <div className="control-label">
-            <label htmlFor="lineWeightMode">Line-weight variation</label>
-            <RandomLock id="lineWeightMode" label="Line-weight variation" />
-          </div>
-          <div className="select-wrap">
-            <select id="lineWeightMode" defaultValue="uniform">
-              <option value="uniform">Uniform · off</option>
-              <option value="index">Index contours</option>
-              <option value="wave">Thickness wave</option>
-              <option value="center">Centre weighted</option>
-            </select>
-            <ChevronDown size={14} />
-          </div>
-        </div>
+        <SelectControl
+          id="lineWeightMode"
+          label="Line-weight variation"
+          defaultValue="uniform"
+          randomizable
+          rowClassName="select-row"
+        >
+          <option value="uniform">Uniform · off</option>
+          <option value="index">Index contours</option>
+          <option value="wave">Thickness wave</option>
+          <option value="center">Centre weighted</option>
+        </SelectControl>
         <div className="effect-controls">
           <ValueControl
             id="lineWeightInterval"
@@ -80,31 +77,30 @@ export function OutputPanel() {
         <GradientChooser />
       </FieldGroup>
       <FieldGroup title="Artboard">
-        <div className="control-row select-row">
-          <label htmlFor="paperPreset">Paper size</label>
-          <div className="select-wrap">
-            <select id="paperPreset" defaultValue="custom">
-              <option value="custom">Custom</option>
-              <optgroup label="ISO A series">
-                <option value="a6">A6 · 105 × 148 mm</option>
-                <option value="a5">A5 · 148 × 210 mm</option>
-                <option value="a4">A4 · 210 × 297 mm</option>
-                <option value="a3">A3 · 297 × 420 mm</option>
-                <option value="a2">A2 · 420 × 594 mm</option>
-                <option value="a1">A1 · 594 × 841 mm</option>
-                <option value="a0">A0 · 841 × 1189 mm</option>
-              </optgroup>
-              <optgroup label="US sizes">
-                <option value="letter">Letter · 216 × 279 mm</option>
-                <option value="legal">Legal · 216 × 356 mm</option>
-                <option value="tabloid">Tabloid · 279 × 432 mm</option>
-              </optgroup>
-            </select>
-            <ChevronDown size={14} />
-          </div>
-        </div>
+        <SelectControl
+          id="paperPreset"
+          label="Paper size"
+          defaultValue="custom"
+          rowClassName="select-row"
+        >
+          <option value="custom">Custom</option>
+          <optgroup label="ISO A series">
+            <option value="a6">A6 · 105 × 148 mm</option>
+            <option value="a5">A5 · 148 × 210 mm</option>
+            <option value="a4">A4 · 210 × 297 mm</option>
+            <option value="a3">A3 · 297 × 420 mm</option>
+            <option value="a2">A2 · 420 × 594 mm</option>
+            <option value="a1">A1 · 594 × 841 mm</option>
+            <option value="a0">A0 · 841 × 1189 mm</option>
+          </optgroup>
+          <optgroup label="US sizes">
+            <option value="letter">Letter · 216 × 279 mm</option>
+            <option value="legal">Legal · 216 × 356 mm</option>
+            <option value="tabloid">Tabloid · 279 × 432 mm</option>
+          </optgroup>
+        </SelectControl>
         <div className="control-row">
-          <label htmlFor="pw">Dimensions</label>
+          <ControlLabel htmlFor="pw">Dimensions</ControlLabel>
           <div className="sheet-control">
             <input
               type="number"
@@ -208,18 +204,17 @@ export function OutputPanel() {
           Technical blueprint
         </Checkbox>
         <div className="effect-controls">
-          <div className="control-row select-row is-disabled" id="blueprintStyleControl">
-            <label className="blueprint-stock-label" htmlFor="blueprintStyle">
-              Document stock
-            </label>
-            <div className="select-wrap">
-              <select id="blueprintStyle" defaultValue="blue" disabled>
-                <option value="blue">Blueprint blue · white ink</option>
-                <option value="black">Technical black · white ink</option>
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </div>
+          <SelectControl
+            id="blueprintStyle"
+            label="Document stock"
+            defaultValue="blue"
+            disabled
+            rowClassName="select-row"
+            controlId="blueprintStyleControl"
+          >
+            <option value="blue">Blueprint blue · white ink</option>
+            <option value="black">Technical black · white ink</option>
+          </SelectControl>
           <p className="gradient-note blueprint-note">
             Adds a drafting grid, measured border, callouts, formula notes and a technical title
             block to the SVG.
@@ -228,27 +223,25 @@ export function OutputPanel() {
         <TopographicMapControl />
       </FieldGroup>
       <FieldGroup title="Export format">
-        <div className="control-row select-row">
-          <label htmlFor="exportFormat">File type</label>
-          <div className="select-wrap">
-            <select id="exportFormat" defaultValue="svg">
-              <option value="svg">SVG · vector</option>
-              <option value="gcode">G-code · plotter</option>
-            </select>
-            <ChevronDown size={14} />
-          </div>
-        </div>
+        <SelectControl
+          id="exportFormat"
+          label="File type"
+          defaultValue="svg"
+          rowClassName="select-row"
+        >
+          <option value="svg">SVG · vector</option>
+          <option value="gcode">G-code · plotter</option>
+        </SelectControl>
         <div className="gcode-controls" id="gcodeControls" hidden>
-          <div className="control-row select-row">
-            <label htmlFor="gcodeProfile">Machine</label>
-            <div className="select-wrap">
-              <select id="gcodeProfile" defaultValue="uunatek3">
-                <option value="uunatek3">UUNA TEK 3.0 · A3</option>
-                <option value="generic">Generic Z-axis plotter</option>
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </div>
+          <SelectControl
+            id="gcodeProfile"
+            label="Machine"
+            defaultValue="uunatek3"
+            rowClassName="select-row"
+          >
+            <option value="uunatek3">UUNA TEK 3.0 · A3</option>
+            <option value="generic">Generic Z-axis plotter</option>
+          </SelectControl>
           <ValueControl
             id="drawFeed"
             label="Draw speed"

@@ -1,52 +1,45 @@
-import { Box, ChevronDown, FileUp } from 'lucide-react';
+import { Box, FileUp } from 'lucide-react';
 import { Section } from '../ui/section';
-import { Checkbox, FieldGroup, ValueControl } from '../controls/FormControls';
+import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
 import { GEN_DEFAULTS } from '../../lib/generativeMesh';
 
 export function SourcePanel() {
   return (
     <Section title="Source model" badge="01">
-      <div className="control-row demo-row">
-        <label htmlFor="demo">Source</label>
-        <div className="select-wrap">
-          <select id="demo" defaultValue="knot">
-            <optgroup label="Generate">
-              <option value="generative">Generative mesh</option>
-            </optgroup>
-            <optgroup label="Demo meshes">
-              <option value="knot">Torus knot</option>
-              <option value="ripple">Ripple sphere</option>
-              <option value="cube">Rounded cube</option>
-              <option value="diamond">Soft diamond</option>
-              <option value="torus">Ring torus</option>
-              <option value="twist">Twisted bloom</option>
-              <option value="hourglass">Hourglass</option>
-              <option value="tetrapod">Tetrapod</option>
-            </optgroup>
-            <option value="upload" hidden>
-              Uploaded model
-            </option>
-          </select>
-          <ChevronDown size={14} />
-        </div>
-      </div>
+      <SelectControl id="demo" label="Source" defaultValue="knot" rowClassName="demo-row">
+        <optgroup label="Generate">
+          <option value="generative">Generative mesh</option>
+        </optgroup>
+        <optgroup label="Demo meshes">
+          <option value="knot">Torus knot</option>
+          <option value="ripple">Ripple sphere</option>
+          <option value="cube">Rounded cube</option>
+          <option value="diamond">Soft diamond</option>
+          <option value="torus">Ring torus</option>
+          <option value="twist">Twisted bloom</option>
+          <option value="hourglass">Hourglass</option>
+          <option value="tetrapod">Tetrapod</option>
+        </optgroup>
+        <option value="upload" hidden>
+          Uploaded model
+        </option>
+      </SelectControl>
       <FieldGroup title="Generative field" className="generative-controls">
         <div id="generativeControls" hidden>
-          <div className="control-row select-row">
-            <label htmlFor="genField">Field</label>
-            <div className="select-wrap">
-              <select id="genField" defaultValue={GEN_DEFAULTS.genField}>
-                <option value="gyroid">Gyroid</option>
-                <option value="schwarzP">Schwarz P</option>
-                <option value="diamond">Diamond</option>
-                <option value="neovius">Neovius</option>
-                <option value="metaballs">Metaballs</option>
-                <option value="supershape">Supershape</option>
-                <option value="relief">Relief · topographic</option>
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </div>
+          <SelectControl
+            id="genField"
+            label="Field"
+            defaultValue={GEN_DEFAULTS.genField}
+            rowClassName="select-row"
+          >
+            <option value="gyroid">Gyroid</option>
+            <option value="schwarzP">Schwarz P</option>
+            <option value="diamond">Diamond</option>
+            <option value="neovius">Neovius</option>
+            <option value="metaballs">Metaballs</option>
+            <option value="supershape">Supershape</option>
+            <option value="relief">Relief · topographic</option>
+          </SelectControl>
           <ValueControl
             id="genSeed"
             label="Seed"
@@ -138,16 +131,15 @@ export function SourcePanel() {
       </label>
       <FieldGroup title="SVG artwork" className="svg-extrusion">
         <div id="svgExtrusion" hidden>
-          <div className="control-row select-row">
-            <label htmlFor="svgMode">Interpretation</label>
-            <div className="select-wrap">
-              <select id="svgMode" defaultValue="extrude">
-                <option value="extrude">Extruded shape</option>
-                <option value="centerline">Single-line centreline</option>
-              </select>
-              <ChevronDown size={14} />
-            </div>
-          </div>
+          <SelectControl
+            id="svgMode"
+            label="Interpretation"
+            defaultValue="extrude"
+            rowClassName="select-row"
+          >
+            <option value="extrude">Extruded shape</option>
+            <option value="centerline">Single-line centreline</option>
+          </SelectControl>
           <div id="svgExtrusionControls">
             <ValueControl
               id="svgDepth"

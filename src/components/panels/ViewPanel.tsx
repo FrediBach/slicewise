@@ -1,6 +1,6 @@
-import { ChevronDown, Rotate3d } from 'lucide-react';
+import { Rotate3d } from 'lucide-react';
 import { Section } from '../ui/section';
-import { FieldGroup, RandomLock, ValueControl } from '../controls/FormControls';
+import { FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
 
 export function ViewPanel() {
   return (
@@ -37,21 +37,18 @@ export function ViewPanel() {
           value="0"
           unit="mm"
         />
-        <div className="control-row select-row">
-          <div className="control-label">
-            <label htmlFor="lens">Camera lens</label>
-            <RandomLock id="lens" label="Camera lens" />
-          </div>
-          <div className="select-wrap">
-            <select id="lens" defaultValue="clean">
-              <option value="clean">50 mm · clean</option>
-              <option value="wide">24 mm · wide barrel</option>
-              <option value="fisheye">12 mm · fisheye</option>
-              <option value="tele">85 mm · pincushion</option>
-            </select>
-            <ChevronDown size={14} />
-          </div>
-        </div>
+        <SelectControl
+          id="lens"
+          label="Camera lens"
+          defaultValue="clean"
+          randomizable
+          rowClassName="select-row"
+        >
+          <option value="clean">50 mm · clean</option>
+          <option value="wide">24 mm · wide barrel</option>
+          <option value="fisheye">12 mm · fisheye</option>
+          <option value="tele">85 mm · pincushion</option>
+        </SelectControl>
         <ValueControl
           id="lensAmount"
           label="Distortion"

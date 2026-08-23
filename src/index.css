@@ -226,10 +226,6 @@ button {
   margin: 5px 5px 2px 0;
   line-height: 1.45;
 }
-.blueprint-stock-label {
-  color: #6f746e;
-  font-size: 10.5px;
-}
 .dropzone {
   min-height: 92px;
   display: grid;

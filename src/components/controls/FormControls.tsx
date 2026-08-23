@@ -4,14 +4,28 @@ import {
   useState,
   type Dispatch,
   type ReactNode,
+  type SelectHTMLAttributes,
   type SetStateAction,
 } from 'react';
-import { Check, Lock, LockOpen } from 'lucide-react';
+import { Check, ChevronDown, Lock, LockOpen } from 'lucide-react';
 import { Button } from '../ui/button';
 
 type CustomDetail = Record<string, any>;
 
 type RandomLockProps = { id: string; label: string };
+type ControlLabelProps = {
+  htmlFor: string;
+  children: ReactNode;
+  randomizable?: boolean;
+};
+type SelectControlProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & {
+  id: string;
+  label: string;
+  children: ReactNode;
+  randomizable?: boolean;
+  rowClassName?: string;
+  controlId?: string;
+};
 type ValueControlProps = {
   id: string;
   label: string;
@@ -72,6 +86,43 @@ function RandomLock({ id, label }: RandomLockProps) {
     >
       {locked ? <Lock size={11} /> : <LockOpen size={11} />}
     </button>
+  );
+}
+
+function ControlLabel({ htmlFor, children, randomizable = false }: ControlLabelProps) {
+  return (
+    <div className="control-label">
+      <label htmlFor={htmlFor}>{children}</label>
+      {randomizable && <RandomLock id={htmlFor} label={String(children)} />}
+    </div>
+  );
+}
+
+function SelectControl({
+  id,
+  label,
+  children,
+  randomizable = false,
+  rowClassName = '',
+  controlId,
+  disabled = false,
+  ...selectProps
+}: SelectControlProps) {
+  return (
+    <div
+      className={`control-row${rowClassName ? ` ${rowClassName}` : ''}${disabled ? ' is-disabled' : ''}`}
+      id={controlId}
+    >
+      <ControlLabel htmlFor={id} randomizable={randomizable}>
+        {label}
+      </ControlLabel>
+      <div className="select-wrap">
+        <select id={id} disabled={disabled} {...selectProps}>
+          {children}
+        </select>
+        <ChevronDown size={14} />
+      </div>
+    </div>
   );
 }
 
@@ -554,9 +605,11 @@ function Checkbox({
 export {
   BackgroundColorControl,
   Checkbox,
+  ControlLabel,
   FieldGroup,
   InkColorControl,
   RandomLock,
   RandomLockActions,
+  SelectControl,
   ValueControl,
 };
