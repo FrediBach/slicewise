@@ -1,4 +1,3 @@
-import { Rotate3d } from 'lucide-react';
 import { Section } from '../ui/section';
 import { FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
 
@@ -7,11 +6,7 @@ export function ViewPanel() {
     <Section
       title="View"
       description="Frame the model and set its projection on the page."
-      badge={
-        <>
-          02 <Rotate3d size={12} /> drag
-        </>
-      }
+      badge="02"
     >
       <FieldGroup title="Orientation">
         <ValueControl id="az" label="Azimuth" min="-180" max="180" step="1" value="35" unit="°" />
