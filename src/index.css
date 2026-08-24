@@ -35,6 +35,15 @@ select {
 button {
   -webkit-tap-highlight-color: transparent;
 }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 
 .app-shell {
   display: grid;
@@ -365,9 +374,25 @@ button {
 .live-dot {
   width: 6px;
   height: 6px;
+  flex: 0 0 auto;
   border-radius: 50%;
   background: #4a9d63;
   box-shadow: 0 0 0 3px rgba(74, 157, 99, 0.12);
+}
+.live-dot.is-rendering {
+  background: var(--blue);
+  animation: preview-pulse 1.15s ease-in-out infinite;
+}
+@keyframes preview-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(39, 52, 215, 0.12);
+    opacity: 1;
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(39, 52, 215, 0.03);
+    opacity: 0.62;
+  }
 }
 .axis-row {
   display: flex;
@@ -1181,6 +1206,9 @@ button:focus-visible,
     scroll-behavior: auto !important;
     transition: none !important;
   }
+  .live-dot.is-rendering {
+    animation: none;
+  }
 }
 
 @media (min-width: 901px) {
@@ -1234,8 +1262,8 @@ button:focus-visible,
     padding: 0 14px;
   }
   .workspace-title span:last-child,
-  .readout span:nth-child(2),
-  .readout span:nth-child(4),
+  .nodes-readout,
+  .render-readout,
   .canvas-label {
     display: none;
   }

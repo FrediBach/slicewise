@@ -19,7 +19,7 @@ import {
   previewLineCount,
   previewMorphSteps,
 } from './preview-detail';
-import { previewViewTransform, renderDisposition } from './render-scheduling';
+import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -544,7 +544,7 @@ if (typeof document !== 'undefined') {
     lastDispatch = performance.now();
     request.dispatchedAt = lastDispatch;
     recordMeasure('slicewise:render:queue', request.queuedAt, lastDispatch);
-    $('bedwrap').classList.add('busy');
+    syncPreviewBusy();
     renderWorker.postMessage({
       type: 'render',
       id: request.id,
@@ -577,6 +577,7 @@ if (typeof document !== 'undefined') {
       settings,
       queuedAt: performance.now(),
     };
+    syncPreviewBusy();
     scheduleRender();
   }
   function invalidateRenderState(): void {
@@ -620,15 +621,17 @@ if (typeof document !== 'undefined') {
       showError(data.message);
     }
     notifyRenderWaiters();
-    if (!queuedRender && !generationInFlight) $('bedwrap').classList.remove('busy');
+    syncPreviewBusy();
     scheduleRender();
   });
   renderWorker.addEventListener('error', () => {
+    clearTimeout(renderTimer);
+    queuedRender = null;
     activeRender = null;
     renderInFlight = false;
     failedRequestId = requestId;
     notifyRenderWaiters();
-    if (!generationInFlight) $('bedwrap').classList.remove('busy');
+    syncPreviewBusy();
     showError('The contour worker stopped unexpectedly — reload the page to restart it');
   });
 
@@ -855,6 +858,20 @@ if (typeof document !== 'undefined') {
     generationInFlight = false,
     queuedGeneration: GenerationRequest | null = null,
     generationTimer = 0;
+  function syncPreviewBusy(): void {
+    const busy = isPreviewBusy({
+      renderInFlight,
+      renderQueued: Boolean(queuedRender),
+      generationInFlight,
+      generationQueued: Boolean(queuedGeneration),
+    });
+    const wrap = $('bedwrap');
+    wrap.classList.toggle('busy', busy);
+    wrap.setAttribute('aria-busy', String(busy));
+    const statusDot = $('previewStatusDot');
+    statusDot.classList.toggle('is-rendering', busy);
+    $('previewStatusText').textContent = busy ? 'Rendering preview' : 'Preview ready';
+  }
   function cancelGeneration(): void {
     clearTimeout(generationTimer);
     queuedGeneration = null;
@@ -868,7 +885,7 @@ if (typeof document !== 'undefined') {
   }
   function setGenerativeBusy(busy: boolean): void {
     $('generativeControls').closest('.generative-controls')?.classList.toggle('is-building', busy);
-    $('bedwrap').classList.toggle('busy', busy || renderInFlight);
+    syncPreviewBusy();
     $('mName').textContent =
       busy && state.source === 'generative'
         ? `generative · ${state.genField} · building…`
@@ -885,6 +902,7 @@ if (typeof document !== 'undefined') {
   function queueGeneration(delay = 100): void {
     if (state.source !== 'generative') return;
     queuedGeneration = { id: ++generationId, params: generativeParams() };
+    syncPreviewBusy();
     clearTimeout(generationTimer);
     if (generationInFlight) return;
     generationTimer = setTimeout(dispatchGeneration, delay);

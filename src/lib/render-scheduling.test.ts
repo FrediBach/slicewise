@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { previewViewTransform, renderDisposition } from './render-scheduling';
+import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
 
 describe('renderDisposition', () => {
   it('commits the result for the latest request', () => {
@@ -51,5 +51,21 @@ describe('previewViewTransform', () => {
         297,
       ),
     ).toEqual([1, 0, 0]);
+  });
+});
+
+describe('isPreviewBusy', () => {
+  it('stays busy for queued and in-flight contour or mesh work', () => {
+    const idle = {
+      renderInFlight: false,
+      renderQueued: false,
+      generationInFlight: false,
+      generationQueued: false,
+    };
+
+    expect(isPreviewBusy(idle)).toBe(false);
+    for (const key of Object.keys(idle) as Array<keyof typeof idle>) {
+      expect(isPreviewBusy({ ...idle, [key]: true })).toBe(true);
+    }
   });
 });

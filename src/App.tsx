@@ -114,25 +114,29 @@ export default function App() {
       <main className="workspace">
         <header className="topbar">
           <div className="workspace-title">
-            <span className="live-dot" />
+            <span className="live-dot" id="previewStatusDot" role="status" aria-live="polite">
+              <span className="visually-hidden" id="previewStatusText">
+                Preview ready
+              </span>
+            </span>
             Preview <span>/ contour study</span>
           </div>
           <div className="readout">
-            <span>
+            <span className="paths-readout">
               Paths <b id="rPaths">0</b>
             </span>
-            <span>
+            <span className="nodes-readout">
               Nodes <b id="rPts">0</b>
             </span>
-            <span>
+            <span className="file-readout">
               File <b id="rSize">0 kB</b>
             </span>
-            <span>
+            <span className="render-readout">
               Render <b id="rMs">0 ms</b>
             </span>
           </div>
         </header>
-        <div className="bedwrap" id="bedwrap">
+        <div className="bedwrap" id="bedwrap" aria-busy="false">
           <div className="canvas-grid" />
           <div className="canvas-label canvas-label--top" id="artboardDimensions">
             210 × 210 MM

@@ -196,9 +196,10 @@ G-code uses millimetres, absolute positioning, and feed-per-minute mode (`G21`, 
 
 These are outputs rather than parameters:
 
-| Readout | Meaning                                                                                          |
-| ------- | ------------------------------------------------------------------------------------------------ |
-| Paths   | Number of emitted SVG paths after effects; chromatic aberration triples the displayed count.     |
-| Nodes   | Number of simplified path nodes after effects; chromatic aberration triples the displayed count. |
-| File    | Estimated size of the currently selected SVG or generated G-code.                                |
-| Render  | Time spent computing the most recently applied contour result.                                   |
+| Readout        | Meaning                                                                                                                                                                                                 |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Paths          | Number of emitted SVG paths after effects; chromatic aberration triples the displayed count.                                                                                                            |
+| Nodes          | Number of simplified path nodes after effects; chromatic aberration triples the displayed count.                                                                                                        |
+| File           | Estimated size of the currently selected SVG or generated G-code.                                                                                                                                       |
+| Render         | Time spent computing the most recently applied contour result.                                                                                                                                          |
+| Preview status | The green preview indicator turns blue and pulses while contour or generative-mesh work is queued or in progress. The previous preview and its timing remain visible until the updated result is ready. |

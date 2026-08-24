@@ -2,6 +2,13 @@ export type RenderDisposition = 'commit' | 'preview' | 'discard';
 
 export type PreviewView = { zoom: number; panX: number; panY: number };
 
+type PreviewBusyInput = {
+  renderInFlight: boolean;
+  renderQueued: boolean;
+  generationInFlight: boolean;
+  generationQueued: boolean;
+};
+
 type RenderDispositionInput = {
   responseId: number;
   latestRequestId: number;
@@ -23,6 +30,15 @@ export function renderDisposition({
   if (!sameMesh || responseId > latestRequestId) return 'discard';
   if (quick) return 'preview';
   return responseId === latestRequestId ? 'commit' : 'discard';
+}
+
+export function isPreviewBusy({
+  renderInFlight,
+  renderQueued,
+  generationInFlight,
+  generationQueued,
+}: PreviewBusyInput): boolean {
+  return renderInFlight || renderQueued || generationInFlight || generationQueued;
 }
 
 export function previewViewTransform(
