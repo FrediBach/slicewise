@@ -1702,10 +1702,16 @@ function hashPolyline(run: NumericArray, salt = 0): number {
   return hash >>> 0;
 }
 
-function yarnCutRun(run: Polyline, seed: number, sizePercent: number): Polyline[] {
+function yarnCutRun(
+  run: Polyline,
+  seed: number,
+  sizePercent: number,
+  requestedCuts: number,
+): Polyline[] {
   const distances = polylineDistances(run);
   const total = distances.at(-1) || 0;
-  if (total < 12) return [run];
+  const cutCount = Math.min(Math.max(1, Math.round(requestedCuts)), Math.floor(total / 6));
+  if (total < 12 || cutCount < 1) return [run];
   let hash = seed || 1;
   const random = (): number => {
     hash ^= hash << 13;
@@ -1723,37 +1729,89 @@ function yarnCutRun(run: Polyline, seed: number, sizePercent: number): Polyline[
     phase: random() * Math.PI * 2,
   });
   const closed = run.length >= 8 && Math.hypot(run[0] - run.at(-2)!, run[1] - run.at(-1)!) < 1e-5;
-  const centre = total * (0.18 + random() * 0.64);
-  const gap = Math.min(total * 0.065, 0.8 + random() * 3.7);
-  const leftDistance = centre - gap / 2;
-  const rightDistance = centre + gap / 2;
-  const leftStyle = randomCurlStyle();
-  const rightStyle = randomCurlStyle();
+  type YarnCut = {
+    leftDistance: number;
+    rightDistance: number;
+    leftStyle: YarnCurlStyle;
+    rightStyle: YarnCurlStyle;
+  };
   if (!closed) {
-    const left = slicePolyline(run, distances, 0, leftDistance);
-    const right = slicePolyline(run, distances, rightDistance, total);
-    return [curlRunEnd(left, false, leftStyle), curlRunEnd(right, true, rightStyle)];
+    const cuts: YarnCut[] = [];
+    const start = total * 0.1;
+    const span = total * 0.8;
+    for (let index = 0; index < cutCount; index++) {
+      const centre = start + ((index + 0.2 + random() * 0.6) / cutCount) * span;
+      const gap = Math.min(total / (cutCount * 5), 0.8 + random() * 3.7);
+      cuts.push({
+        leftDistance: centre - gap / 2,
+        rightDistance: centre + gap / 2,
+        leftStyle: randomCurlStyle(),
+        rightStyle: randomCurlStyle(),
+      });
+    }
+    cuts.sort((a, b) => a.leftDistance - b.leftDistance);
+    const pieces: Polyline[] = [];
+    const first = slicePolyline(run, distances, 0, cuts[0].leftDistance);
+    pieces.push(curlRunEnd(first, false, cuts[0].leftStyle));
+    for (let index = 0; index + 1 < cuts.length; index++) {
+      const current = cuts[index];
+      const next = cuts[index + 1];
+      const middle = slicePolyline(run, distances, current.rightDistance, next.leftDistance);
+      pieces.push(curlRunEnd(curlRunEnd(middle, true, current.rightStyle), false, next.leftStyle));
+    }
+    const lastCut = cuts.at(-1)!;
+    const last = slicePolyline(run, distances, lastCut.rightDistance, total);
+    pieces.push(curlRunEnd(last, true, lastCut.rightStyle));
+    return pieces;
   }
-  const after = slicePolyline(run, distances, rightDistance, total);
-  const before = slicePolyline(run, distances, 0, leftDistance);
-  const opened = [...after, ...before.slice(2)];
-  return [curlRunEnd(curlRunEnd(opened, true, rightStyle), false, leftStyle)];
+  const offset = random() / cutCount;
+  const cuts: YarnCut[] = [];
+  for (let index = 0; index < cutCount; index++) {
+    const centre = (((index + 0.2 + random() * 0.6) / cutCount + offset) % 1) * total;
+    const gap = Math.min(total / (cutCount * 5), 0.8 + random() * 3.7);
+    cuts.push({
+      leftDistance: Math.max(0, centre - gap / 2),
+      rightDistance: Math.min(total, centre + gap / 2),
+      leftStyle: randomCurlStyle(),
+      rightStyle: randomCurlStyle(),
+    });
+  }
+  cuts.sort((a, b) => a.leftDistance - b.leftDistance);
+  const pieces: Polyline[] = [];
+  for (let index = 0; index < cuts.length; index++) {
+    const current = cuts[index];
+    const next = cuts[(index + 1) % cuts.length];
+    const middle =
+      index + 1 < cuts.length
+        ? slicePolyline(run, distances, current.rightDistance, next.leftDistance)
+        : [
+            ...slicePolyline(run, distances, current.rightDistance, total),
+            ...slicePolyline(run, distances, 0, next.leftDistance).slice(2),
+          ];
+    pieces.push(curlRunEnd(curlRunEnd(middle, true, current.rightStyle), false, next.leftStyle));
+  }
+  return pieces;
 }
 
-function selectYarnRuns(runs: readonly Polyline[], percent: number): Set<Polyline> {
-  const eligible: Array<{ run: Polyline; score: number }> = [];
+function selectYarnRuns(runs: readonly Polyline[], percent: number): Map<Polyline, number> {
+  const eligible: Array<{ run: Polyline; score: number; length: number }> = [];
   for (let index = 0; index < runs.length; index++) {
     const run = runs[index];
-    if ((polylineDistances(run).at(-1) || 0) >= 12)
-      eligible.push({ run, score: hashPolyline(run, index * 0x9e3779b9) });
+    const length = polylineDistances(run).at(-1) || 0;
+    if (length >= 12) eligible.push({ run, length, score: hashPolyline(run, index * 0x9e3779b9) });
   }
   eligible.sort((a, b) => a.score - b.score);
-  const selected = new Set<Polyline>();
-  const normalizedPercent = clamp(Number(percent) || 0, 0, 100);
-  const selectedCount = normalizedPercent
-    ? Math.max(1, Math.round((eligible.length * normalizedPercent) / 100))
-    : 0;
-  for (let index = 0; index < selectedCount; index++) selected.add(eligible[index].run);
+  const selected = new Map<Polyline, number>();
+  const normalizedPercent = clamp(Number(percent) || 0, 0, 500);
+  const cutsPerLine = Math.floor(normalizedPercent / 100);
+  const remainder = normalizedPercent % 100;
+  const extraCuts = remainder ? Math.max(1, Math.round((eligible.length * remainder) / 100)) : 0;
+  for (let index = 0; index < eligible.length; index++) {
+    const candidate = eligible[index];
+    const requested = cutsPerLine + (index < extraCuts ? 1 : 0);
+    const feasible = Math.min(requested, Math.floor(candidate.length / 6));
+    if (feasible > 0) selected.set(candidate.run, feasible);
+  }
   return selected;
 }
 
@@ -2248,8 +2306,9 @@ function computeLineArtInstance(
           palette.length - 1,
         )
       : 0;
-    const processedRuns = yarnRuns?.has(raw)
-      ? yarnCutRun(styled, hashPolyline(raw), settings.yarnCurlSize)
+    const cutCount = yarnRuns?.get(raw) || 0;
+    const processedRuns = cutCount
+      ? yarnCutRun(styled, hashPolyline(raw), settings.yarnCurlSize, cutCount)
       : [styled];
     const clippedRuns = processedRuns.flatMap((run) => clipArtworkRun(run, settings, W, H));
     for (const run of clippedRuns) {
@@ -2516,8 +2575,9 @@ function computeContourInstance(
         ? humanizeRun(simplified.run, settings.humanizerAmount, humanizerSalt++)
         : simplified.run;
       if (run.length < 4) continue;
-      const processedRuns = yarnRuns?.has(raw)
-        ? yarnCutRun(run, hashPolyline(raw), settings.yarnCurlSize)
+      const cutCount = yarnRuns?.get(raw) || 0;
+      const processedRuns = cutCount
+        ? yarnCutRun(run, hashPolyline(raw), settings.yarnCurlSize, cutCount)
         : [run];
       const clippedRuns = processedRuns.flatMap((candidate) =>
         clipArtworkRun(candidate, settings, W, H),

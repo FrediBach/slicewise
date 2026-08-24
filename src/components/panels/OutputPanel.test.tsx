@@ -27,7 +27,7 @@ describe('OutputPanel yarn controls', () => {
     expect(screen.getByRole('checkbox', { name: 'Yarn cut & curl' })).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'Lines to cut in %' })).toHaveAttribute(
       'max',
-      '100',
+      '500',
     );
     expect(screen.getByRole('spinbutton', { name: 'Curl size in %' })).toHaveValue(100);
     expect(

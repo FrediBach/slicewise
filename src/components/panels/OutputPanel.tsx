@@ -236,7 +236,7 @@ export function EffectsPanel() {
             id="yarnCutPercent"
             label="Lines to cut"
             min="1"
-            max="100"
+            max="500"
             step="1"
             value="15"
             unit="%"

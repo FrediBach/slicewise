@@ -298,6 +298,25 @@ describe('contour output effects', () => {
           return sum;
         }, 0);
     expect(totalLength(largeCurls)).toBeGreaterThan(totalLength(smallCurls));
+
+    const oneCutPerLine = computeContours(
+      makeContourMesh(),
+      { ...settings, yarnCutPercent: 100 },
+      false,
+    );
+    const threeCutsPerLine = computeContours(
+      makeContourMesh(),
+      { ...settings, yarnCutPercent: 300 },
+      false,
+    );
+    const repeatedThreeCuts = computeContours(
+      makeContourMesh(),
+      { ...settings, yarnCutPercent: 300 },
+      false,
+    );
+    expect(threeCutsPerLine.paths).toBeGreaterThan(oneCutPerLine.paths * 2);
+    expect(threeCutsPerLine.svg).not.toBe(oneCutPerLine.svg);
+    expect(repeatedThreeCuts.toolpaths).toEqual(threeCutsPerLine.toolpaths);
   });
 
   it('keeps combined document effects outside repeated morph layers', () => {

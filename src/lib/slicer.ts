@@ -2158,7 +2158,7 @@ if (typeof document !== 'undefined') {
     randomizePair('humanizerAmount', 'humanizerAmount', () => randomInt(18, 58));
     syncHumanizerControls();
     $('yarnCurl').checked = state.yarnCurl;
-    randomizePair('yarnCutPercent', 'yarnCutPercent', () => randomInt(5, 45));
+    randomizePair('yarnCutPercent', 'yarnCutPercent', () => randomInt(5, 300));
     randomizePair('yarnCurlSize', 'yarnCurlSize', () => randomInt(65, 175));
     syncYarnCurlControls();
     $('blueprint').checked = state.blueprint;
