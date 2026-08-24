@@ -228,6 +228,34 @@ export function EffectsPanel() {
             Adds stable, small hand-drawn variations to contour lines and plotter paths.
           </p>
         </div>
+        <Checkbox id="yarnCurl" randomizable>
+          Yarn cut &amp; curl
+        </Checkbox>
+        <div className="effect-controls">
+          <ValueControl
+            id="yarnCutPercent"
+            label="Lines to cut"
+            min="1"
+            max="100"
+            step="1"
+            value="15"
+            unit="%"
+            disabled
+          />
+          <ValueControl
+            id="yarnCurlSize"
+            label="Curl size"
+            min="25"
+            max="250"
+            step="5"
+            value="100"
+            unit="%"
+            disabled
+          />
+          <p className="gradient-note blueprint-note">
+            Opens random contour lines and curls their new ends in stable, organic directions.
+          </p>
+        </div>
         <Checkbox id="blueprint" randomizable>
           Technical blueprint
         </Checkbox>

@@ -209,6 +209,7 @@ describe('contour output effects', () => {
       'halftone',
       'chroma',
       'humanizer',
+      'yarnCurl',
       'blueprint',
       'topographicMap',
     ] as const;
@@ -230,6 +231,73 @@ describe('contour output effects', () => {
       if (enabled.blueprint) expect(result.svg).toContain('id="technical-annotations"');
       if (enabled.topographicMap) expect(result.svg).toContain('id="topographic-annotations"');
     }
+  });
+
+  it('cuts a stable percentage of lines with independently adjustable curl sizing', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      lines: 12,
+      quality: 5,
+      yarnCurl: true,
+    };
+    const lowPercent = computeContours(
+      makeContourMesh(),
+      { ...settings, yarnCutPercent: 10 },
+      false,
+    );
+    const highPercent = computeContours(
+      makeContourMesh(),
+      { ...settings, yarnCutPercent: 40 },
+      false,
+    );
+    const repeated = computeContours(makeContourMesh(), { ...settings, yarnCutPercent: 40 }, false);
+
+    expect(lowPercent.svg).not.toBe(highPercent.svg);
+    expect(highPercent.nodes).toBeGreaterThan(lowPercent.nodes);
+    expect(repeated.svg).toBe(highPercent.svg);
+    expect(repeated.toolpaths).toEqual(highPercent.toolpaths);
+
+    const openedRuns = highPercent.toolpaths
+      .flatMap((group) => group.runs)
+      .filter(
+        (run) => Math.hypot(run[0] - run.at(-2)!, run[1] - run.at(-1)!) > 0.1 && run.length >= 28,
+      );
+    const terminalLengths = openedRuns.flatMap((run) => {
+      const endLength = (start: number, direction: number): number => {
+        let length = 0;
+        for (let index = start, count = 0; count < 10; index += direction * 2, count++)
+          length += Math.hypot(
+            run[index + direction * 2] - run[index],
+            run[index + direction * 2 + 1] - run[index + 1],
+          );
+        return Math.round(length * 10) / 10;
+      };
+      return [endLength(0, 1), endLength(run.length - 2, -1)];
+    });
+    expect(openedRuns.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(terminalLengths).size).toBeGreaterThanOrEqual(4);
+
+    const smallCurls = computeContours(
+      makeContourMesh(),
+      { ...settings, yarnCutPercent: 40, yarnCurlSize: 50 },
+      false,
+    );
+    const largeCurls = computeContours(
+      makeContourMesh(),
+      { ...settings, yarnCutPercent: 40, yarnCurlSize: 180 },
+      false,
+    );
+    const totalLength = (result: typeof smallCurls): number =>
+      result.toolpaths
+        .flatMap((group) => group.runs)
+        .reduce((sum, run) => {
+          for (let index = 2; index < run.length; index += 2)
+            sum += Math.hypot(run[index] - run[index - 2], run[index + 1] - run[index - 1]);
+          return sum;
+        }, 0);
+    expect(totalLength(largeCurls)).toBeGreaterThan(totalLength(smallCurls));
   });
 
   it('keeps combined document effects outside repeated morph layers', () => {

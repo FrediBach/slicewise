@@ -85,6 +85,9 @@ export interface ContourSettings extends GenerativeMaskSettings {
   chromaAmount: number;
   humanizer: boolean;
   humanizerAmount: number;
+  yarnCurl: boolean;
+  yarnCutPercent: number;
+  yarnCurlSize: number;
   blueprint: boolean;
   blueprintStyle: string;
   topographicMap: boolean;
@@ -1180,6 +1183,9 @@ function deterministicDrawingNumber(
       settings.sw,
       settings.humanizer,
       settings.humanizerAmount,
+      settings.yarnCurl,
+      settings.yarnCutPercent,
+      settings.yarnCurlSize,
       settings.blueprintStyle,
       settings.maskEnabled,
       settings.maskOutline,
@@ -1591,6 +1597,164 @@ function humanizeRun(run: Polyline, amount: number, salt = 0): Polyline {
     );
   } else if (points.length >= 2) points.push(points[0], points[1]);
   return points.length >= 4 ? points : run;
+}
+
+/* ------------------------------------- cut contours into curled yarn ends */
+function polylineDistances(run: NumericArray): number[] {
+  const distances = [0];
+  for (let i = 2; i < run.length; i += 2)
+    distances.push(distances.at(-1)! + Math.hypot(run[i] - run[i - 2], run[i + 1] - run[i - 1]));
+  return distances;
+}
+
+function pointAlong(run: NumericArray, distances: readonly number[], distance: number): Vec2 {
+  const total = distances.at(-1) || 0;
+  const target = clamp(distance, 0, total);
+  let index = 1;
+  while (index < distances.length && distances[index] < target) index++;
+  if (index >= distances.length) return [run[run.length - 2], run[run.length - 1]];
+  const start = distances[index - 1],
+    span = distances[index] - start,
+    t = span ? (target - start) / span : 0;
+  return [
+    run[(index - 1) * 2] + (run[index * 2] - run[(index - 1) * 2]) * t,
+    run[(index - 1) * 2 + 1] + (run[index * 2 + 1] - run[(index - 1) * 2 + 1]) * t,
+  ];
+}
+
+function slicePolyline(
+  run: Polyline,
+  distances: readonly number[],
+  startDistance: number,
+  endDistance: number,
+): Polyline {
+  const start = pointAlong(run, distances, startDistance);
+  const end = pointAlong(run, distances, endDistance);
+  const sliced: Polyline = [...start];
+  for (let i = 1; i + 1 < distances.length; i++)
+    if (distances[i] > startDistance && distances[i] < endDistance)
+      sliced.push(run[i * 2], run[i * 2 + 1]);
+  sliced.push(...end);
+  return sliced;
+}
+
+interface YarnCurlStyle {
+  replacementLength: number;
+  drawnLength: number;
+  turn: number;
+  direction: number;
+  irregularity: number;
+  phase: number;
+}
+
+function curlRunEnd(run: Polyline, atStart: boolean, style: YarnCurlStyle): Polyline {
+  const distances = polylineDistances(run);
+  const total = distances.at(-1) || 0;
+  if (total < 2) return run;
+  const replacementLength = Math.min(total * 0.48, style.replacementLength);
+  const drawnLength = Math.min(total * 0.9, style.drawnLength);
+  const anchorDistance = atStart ? replacementLength : total - replacementLength;
+  const anchor = pointAlong(run, distances, anchorDistance);
+  const epsilon = Math.min(0.3, replacementLength * 0.12);
+  const before = pointAlong(run, distances, Math.max(0, anchorDistance - epsilon));
+  const after = pointAlong(run, distances, Math.min(total, anchorDistance + epsilon));
+  const dx = after[0] - before[0],
+    dy = after[1] - before[1],
+    length = Math.hypot(dx, dy) || 1,
+    outward = Math.atan2(dy / length, dx / length) + (atStart ? Math.PI : 0);
+  const samples = clamp(Math.ceil(drawnLength / 0.65), 14, 42);
+  const stepLength = drawnLength / samples;
+  const curl: Polyline = [...anchor];
+  let x = anchor[0],
+    y = anchor[1];
+  for (let part = 1; part <= samples; part++) {
+    const u = (part - 0.5) / samples;
+    // Integrating a changing heading produces a true sweeping curl. Each end
+    // gets an independent length, radius, total turn, handedness and wobble.
+    const turnProgress = Math.pow(u, 0.72);
+    const wobble =
+      style.irregularity * Math.sin(style.phase + u * Math.PI * 2.3) * Math.sin(u * Math.PI);
+    const angle = outward + style.direction * style.turn * turnProgress + wobble;
+    const spacingVariation = 1 + 0.13 * Math.sin(style.phase * 0.7 + u * Math.PI * 3.1);
+    x += Math.cos(angle) * stepLength * spacingVariation;
+    y += Math.sin(angle) * stepLength * spacingVariation;
+    curl.push(x, y);
+  }
+  if (atStart) {
+    const reversedCurl: Polyline = [];
+    for (let i = curl.length - 2; i >= 0; i -= 2) reversedCurl.push(curl[i], curl[i + 1]);
+    const remainder = slicePolyline(run, distances, anchorDistance, total);
+    return [...reversedCurl, ...remainder.slice(2)];
+  }
+  const remainder = slicePolyline(run, distances, 0, anchorDistance);
+  return [...remainder.slice(0, -2), ...curl];
+}
+
+function hashPolyline(run: NumericArray, salt = 0): number {
+  let hash = (0x811c9dc5 ^ salt) >>> 0;
+  const stride = Math.max(2, Math.floor(run.length / 12 / 2) * 2);
+  for (let i = 0; i < run.length; i += stride) {
+    hash ^= Math.round(run[i] * 100);
+    hash = Math.imul(hash, 0x01000193);
+    hash ^= Math.round(run[i + 1] * 100);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function yarnCutRun(run: Polyline, seed: number, sizePercent: number): Polyline[] {
+  const distances = polylineDistances(run);
+  const total = distances.at(-1) || 0;
+  if (total < 12) return [run];
+  let hash = seed || 1;
+  const random = (): number => {
+    hash ^= hash << 13;
+    hash ^= hash >>> 17;
+    hash ^= hash << 5;
+    return (hash >>> 0) / 4294967296;
+  };
+  const size = clamp(Number(sizePercent) || 100, 25, 250) / 100;
+  const randomCurlStyle = (): YarnCurlStyle => ({
+    replacementLength: (5 + random() * 11) * size,
+    drawnLength: (9 + random() * 19) * size,
+    turn: ((100 + random() * 240) * Math.PI) / 180,
+    direction: random() < 0.5 ? -1 : 1,
+    irregularity: ((5 + random() * 24) * Math.PI) / 180,
+    phase: random() * Math.PI * 2,
+  });
+  const closed = run.length >= 8 && Math.hypot(run[0] - run.at(-2)!, run[1] - run.at(-1)!) < 1e-5;
+  const centre = total * (0.18 + random() * 0.64);
+  const gap = Math.min(total * 0.065, 0.8 + random() * 3.7);
+  const leftDistance = centre - gap / 2;
+  const rightDistance = centre + gap / 2;
+  const leftStyle = randomCurlStyle();
+  const rightStyle = randomCurlStyle();
+  if (!closed) {
+    const left = slicePolyline(run, distances, 0, leftDistance);
+    const right = slicePolyline(run, distances, rightDistance, total);
+    return [curlRunEnd(left, false, leftStyle), curlRunEnd(right, true, rightStyle)];
+  }
+  const after = slicePolyline(run, distances, rightDistance, total);
+  const before = slicePolyline(run, distances, 0, leftDistance);
+  const opened = [...after, ...before.slice(2)];
+  return [curlRunEnd(curlRunEnd(opened, true, rightStyle), false, leftStyle)];
+}
+
+function selectYarnRuns(runs: readonly Polyline[], percent: number): Set<Polyline> {
+  const eligible: Array<{ run: Polyline; score: number }> = [];
+  for (let index = 0; index < runs.length; index++) {
+    const run = runs[index];
+    if ((polylineDistances(run).at(-1) || 0) >= 12)
+      eligible.push({ run, score: hashPolyline(run, index * 0x9e3779b9) });
+  }
+  eligible.sort((a, b) => a.score - b.score);
+  const selected = new Set<Polyline>();
+  const normalizedPercent = clamp(Number(percent) || 0, 0, 100);
+  const selectedCount = normalizedPercent
+    ? Math.max(1, Math.round((eligible.length * normalizedPercent) / 100))
+    : 0;
+  for (let index = 0; index < selectedCount; index++) selected.add(eligible[index].run);
+  return selected;
 }
 
 /* ------------------------------------------ adaptive SVG curve output */
@@ -2059,15 +2223,20 @@ function computeLineArtInstance(
   const pathDataByColor = palette.map(() => '');
   const runsByColor = palette.map((): Polyline[] => []);
   const runs: Polyline[] = [];
-  let pathData = '',
-    paths = 0,
-    nodes = 0,
-    salt = 0;
+  const sourceRuns: Polyline[] = [];
   for (let runIndex = 0; runIndex + 1 < offsets.length; runIndex++) {
     const raw: Polyline = [];
     for (let point = offsets[runIndex]; point < offsets[runIndex + 1]; point++)
       raw.push(P.sx[point], P.sy[point]);
-    if (raw.length < 4) continue;
+    if (raw.length >= 4) sourceRuns.push(raw);
+  }
+  const yarnRuns = settings.yarnCurl ? selectYarnRuns(sourceRuns, settings.yarnCutPercent) : null;
+  let pathData = '',
+    paths = 0,
+    nodes = 0,
+    salt = 0;
+  for (let runIndex = 0; runIndex < sourceRuns.length; runIndex++) {
+    const raw = sourceRuns[runIndex];
     const simplified = simplify(raw, tolerance);
     const styled = settings.humanizer
       ? humanizeRun(simplified.run, settings.humanizerAmount, salt++)
@@ -2079,7 +2248,10 @@ function computeLineArtInstance(
           palette.length - 1,
         )
       : 0;
-    const clippedRuns = clipArtworkRun(styled, settings, W, H);
+    const processedRuns = yarnRuns?.has(raw)
+      ? yarnCutRun(styled, hashPolyline(raw), settings.yarnCurlSize)
+      : [styled];
+    const clippedRuns = processedRuns.flatMap((run) => clipArtworkRun(run, settings, W, H));
     for (const run of clippedRuns) {
       if (run.length < 4) continue;
       const data = serialiseRun(run, quality, sharpVertices(run));
@@ -2325,6 +2497,12 @@ function computeContourInstance(
   // ---- serialise: RDP concentrates anchors where deviation is greatest;
   // curved spans use Béziers while flat spans remain compact straight lines.
   const tolerance = 0.06 * Math.pow(0.72, quality - 1);
+  const sourceContourRuns = out.flatMap((toneGroups) =>
+    toneGroups.flatMap((weightGroups) => weightGroups.flat()),
+  );
+  const yarnRuns = settings.yarnCurl
+    ? selectYarnRuns(sourceContourRuns, settings.yarnCutPercent)
+    : null;
   let nodes = 0,
     paths = 0;
   let humanizerSalt = 0;
@@ -2337,7 +2515,12 @@ function computeContourInstance(
         ? humanizeRun(simplified.run, settings.humanizerAmount, humanizerSalt++)
         : simplified.run;
       if (run.length < 4) continue;
-      const clippedRuns = clipArtworkRun(run, settings, W, H);
+      const processedRuns = yarnRuns?.has(raw)
+        ? yarnCutRun(run, hashPolyline(raw), settings.yarnCurlSize)
+        : [run];
+      const clippedRuns = processedRuns.flatMap((candidate) =>
+        clipArtworkRun(candidate, settings, W, H),
+      );
       for (const clipped of clippedRuns) {
         if (clipped.length < 4) continue;
         const sharp =

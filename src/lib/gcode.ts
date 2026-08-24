@@ -19,7 +19,10 @@ export type GCodeOptions = {
   optimizeTravel?: boolean;
   mergeTolerance?: number;
   effects?: Partial<
-    Record<'halftone' | 'chroma' | 'humanizer' | 'blueprint' | 'topographicMap', boolean>
+    Record<
+      'halftone' | 'chroma' | 'humanizer' | 'yarnCurl' | 'blueprint' | 'topographicMap',
+      boolean
+    >
   >;
 };
 
@@ -130,6 +133,10 @@ export function generateGCode(
     lines.push('; Note: chromatic SVG offsets are exported as one base contour set');
   if (effects.humanizer)
     lines.push('; Humanizer: hand-drawn variations are included in these toolpaths');
+  if (effects.yarnCurl)
+    lines.push(
+      '; Yarn cut & curl: opened contours and curled ends are included in these toolpaths',
+    );
   if (effects.blueprint)
     lines.push(
       '; Note: blueprint border and annotations are SVG-only; G-code contains the base contour set',

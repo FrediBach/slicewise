@@ -216,6 +216,9 @@ const state: AppState = {
   chromaAmount: 1.5,
   humanizer: false,
   humanizerAmount: 30,
+  yarnCurl: false,
+  yarnCutPercent: 15,
+  yarnCurlSize: 100,
   blueprint: false,
   blueprintStyle: 'blue',
   topographicMap: false,
@@ -369,6 +372,9 @@ if (typeof document !== 'undefined') {
       chromaAmount,
       humanizer,
       humanizerAmount,
+      yarnCurl,
+      yarnCutPercent,
+      yarnCurlSize,
       blueprint,
       blueprintStyle,
       topographicMap,
@@ -449,6 +455,9 @@ if (typeof document !== 'undefined') {
       chromaAmount,
       humanizer,
       humanizerAmount,
+      yarnCurl,
+      yarnCutPercent,
+      yarnCurlSize,
       blueprint,
       blueprintStyle,
       topographicMap,
@@ -1012,6 +1021,8 @@ if (typeof document !== 'undefined') {
   bindPair('maskLfo2Waveform', 'maskLfo2Waveform');
   bindPair('chromaAmount', 'chromaAmount');
   bindPair('humanizerAmount', 'humanizerAmount');
+  bindPair('yarnCutPercent', 'yarnCutPercent');
+  bindPair('yarnCurlSize', 'yarnCurlSize');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1408,6 +1419,13 @@ if (typeof document !== 'undefined') {
     $('humanizerAmountN').disabled = !state.humanizer;
     $('humanizerAmountControl').classList.toggle('is-disabled', !state.humanizer);
   }
+  function syncYarnCurlControls(): void {
+    for (const id of ['yarnCutPercent', 'yarnCurlSize']) {
+      $(id).disabled = !state.yarnCurl;
+      $(id + 'N').disabled = !state.yarnCurl;
+      $(id + 'Control').classList.toggle('is-disabled', !state.yarnCurl);
+    }
+  }
   function syncBlueprintControls(): void {
     $('blueprintStyle').disabled = !state.blueprint;
     $('blueprintStyleControl').classList.toggle('is-disabled', !state.blueprint);
@@ -1425,6 +1443,11 @@ if (typeof document !== 'undefined') {
   $('humanizer').addEventListener('change', (e) => {
     state.humanizer = inputTarget(e).checked;
     syncHumanizerControls();
+    redraw(false);
+  });
+  $('yarnCurl').addEventListener('change', (e) => {
+    state.yarnCurl = inputTarget(e).checked;
+    syncYarnCurlControls();
     redraw(false);
   });
   $('gradientEnabled').addEventListener('change', (e) => {
@@ -1738,6 +1761,8 @@ if (typeof document !== 'undefined') {
     ['halftoneCycles', 'halftoneCycles'],
     ['chromaAmount', 'chromaAmount'],
     ['humanizerAmount', 'humanizerAmount'],
+    ['yarnCutPercent', 'yarnCutPercent'],
+    ['yarnCurlSize', 'yarnCurlSize'],
     ['morphSteps', 'morphSteps'],
     ['morphStepsY', 'morphStepsY'],
   ];
@@ -1764,6 +1789,7 @@ if (typeof document !== 'undefined') {
     'halftone',
     'chroma',
     'humanizer',
+    'yarnCurl',
     'blueprint',
     'topographicMap',
     'morphEnabled',
@@ -1835,6 +1861,7 @@ if (typeof document !== 'undefined') {
     syncHalftoneControls();
     syncChromaAmount();
     syncHumanizerControls();
+    syncYarnCurlControls();
     syncBlueprintControls();
     syncMorphControls();
     const morphTargetsById: Record<string, string | number> = {},
@@ -2093,6 +2120,7 @@ if (typeof document !== 'undefined') {
       halftone: 0.22,
       chroma: 0.18,
       humanizer: 0.3,
+      yarnCurl: 0.25,
       blueprint: 0.16,
       topographicMap: 0.18,
     } satisfies Partial<Record<keyof AppState, number>>;
@@ -2125,6 +2153,10 @@ if (typeof document !== 'undefined') {
     $('humanizer').checked = state.humanizer;
     randomizePair('humanizerAmount', 'humanizerAmount', () => randomInt(18, 58));
     syncHumanizerControls();
+    $('yarnCurl').checked = state.yarnCurl;
+    randomizePair('yarnCutPercent', 'yarnCutPercent', () => randomInt(5, 45));
+    randomizePair('yarnCurlSize', 'yarnCurlSize', () => randomInt(65, 175));
+    syncYarnCurlControls();
     $('blueprint').checked = state.blueprint;
     if (shouldRandomize('blueprint')) {
       state.blueprintStyle = randomItem(['blue', 'blue', 'blue', 'black']);
@@ -2165,6 +2197,7 @@ if (typeof document !== 'undefined') {
           halftone: state.halftone,
           chroma: state.chroma,
           humanizer: state.humanizer,
+          yarnCurl: state.yarnCurl,
           blueprint: state.blueprint,
           topographicMap: state.topographicMap,
         },
