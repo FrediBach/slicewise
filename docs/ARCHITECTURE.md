@@ -76,6 +76,7 @@ Complex React controls communicate through custom DOM events:
 
 - `morphchange` and `morphseconddimension` synchronize morph targets.
 - `randomlockchange` and `randomlockbulk` coordinate parameter locks.
+- `randomizegroup` sends the randomizable parameter IDs from one accordion to the runtime.
 - `gradientchange` publishes normalized gradient stops.
 - `setgradient` synchronizes generated gradient stops into the React editor.
 - `restoreparameters` restores React-owned control state during undo/redo.

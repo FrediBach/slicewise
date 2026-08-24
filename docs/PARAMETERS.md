@@ -187,6 +187,7 @@ G-code uses millimetres, absolute positioning, and feed-per-minute mode (`G21`, 
 ## Randomization, locking, and history
 
 - **Randomize parameters** changes creative view, contour, colour, and effect settings within curated subranges. It deliberately keeps the loaded source and physical sheet dimensions stable. Its ranges can be narrower than the manual control ranges.
+- The dice button in a group header applies the same curated randomization only to that group's parameters. Parameters in other groups remain unchanged.
 - An open-lock button means the parameter participates in randomization. Clicking it shows a closed lock and excludes the base value—and any active morph target for that parameter—from later randomization.
 - **Lock all** and **Unlock all** temporarily set every randomization lock at once. Click the active bulk button again to restore the previous individual lock set. Changing an individual lock ends that temporary bulk state; the next bulk action starts from the newly edited set.
 - Randomization locks are available for morphable numeric/colour controls, Divergence, Background colour, Camera lens, Gap easing, Slice axis, slice-plane modulation, Line-weight variation, Continuous spiral, Remove hidden lines, Add outer silhouette, Use colour gradient, Halftone stroke, Chromatic aberration, Humanizer, Technical blueprint, and Topographic map.

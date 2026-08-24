@@ -1,4 +1,4 @@
-import { ChevronDown, Lock } from 'lucide-react';
+import { ChevronDown, Dices, Lock } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 type SectionProps = {
@@ -31,7 +31,7 @@ export function Section({
   children,
 }: SectionProps) {
   const sectionRef = useRef<HTMLDetailsElement>(null);
-  const [activeControls, setActiveControls] = useState({ locks: 0, morphs: 0 });
+  const [activeControls, setActiveControls] = useState({ locks: 0, morphs: 0, randomizable: 0 });
 
   useEffect(() => {
     const section = sectionRef.current;
@@ -39,8 +39,13 @@ export function Section({
     const update = () => {
       const locks = section.querySelectorAll('.random-lock[aria-pressed="true"]').length;
       const morphs = section.querySelectorAll('.morph-toggle[aria-pressed="true"]').length;
+      const randomizable = section.querySelectorAll('.random-lock[data-random-lock-id]').length;
       setActiveControls((current) =>
-        current.locks === locks && current.morphs === morphs ? current : { locks, morphs },
+        current.locks === locks &&
+        current.morphs === morphs &&
+        current.randomizable === randomizable
+          ? current
+          : { locks, morphs, randomizable },
       );
     };
     update();
@@ -54,6 +59,18 @@ export function Section({
     return () => observer.disconnect();
   }, []);
 
+  const randomizeGroup = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const ids = Array.from(
+      sectionRef.current?.querySelectorAll<HTMLButtonElement>(
+        '.random-lock[data-random-lock-id]',
+      ) ?? [],
+      (button) => button.dataset.randomLockId,
+    ).filter((id): id is string => Boolean(id));
+    document.dispatchEvent(new CustomEvent('randomizegroup', { detail: { ids, title } }));
+  };
+
   return (
     <details ref={sectionRef} className="control-section" open={defaultOpen}>
       <summary className="section-heading">
@@ -65,6 +82,17 @@ export function Section({
           <span className="section-description">{description}</span>
         </span>
         <span className="section-heading-actions">
+          {activeControls.randomizable > 0 ? (
+            <button
+              type="button"
+              className="section-randomize"
+              aria-label={`Randomize ${title} group`}
+              title={`Randomize ${title.toLowerCase()} parameters`}
+              onClick={randomizeGroup}
+            >
+              <Dices size={13} aria-hidden="true" />
+            </button>
+          ) : null}
           {activeControls.locks > 0 ? (
             <span
               className="section-indicator section-indicator--lock"

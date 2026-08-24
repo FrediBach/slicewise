@@ -44,4 +44,32 @@ describe('Section', () => {
       expect(screen.getByLabelText('1 active morph target in this group')).toBeInTheDocument();
     });
   });
+
+  it('requests randomization for only the parameters in its group', async () => {
+    const user = userEvent.setup();
+    let detail: { ids: string[]; title: string } | undefined;
+    document.addEventListener(
+      'randomizegroup',
+      (event) => {
+        detail = (event as CustomEvent<{ ids: string[]; title: string }>).detail;
+      },
+      { once: true },
+    );
+    render(
+      <Section title="Contours" description="Shape the slices.">
+        <button className="random-lock" data-random-lock-id="lines" aria-pressed="false">
+          Lock lines
+        </button>
+        <button className="random-lock" data-random-lock-id="quality" aria-pressed="false">
+          Lock quality
+        </button>
+      </Section>,
+    );
+
+    const group = screen.getByText('Contours').closest('details');
+    await user.click(await screen.findByRole('button', { name: 'Randomize Contours group' }));
+
+    expect(detail).toEqual({ ids: ['lines', 'quality'], title: 'Contours' });
+    expect(group).not.toHaveAttribute('open');
+  });
 });

@@ -94,6 +94,7 @@ type MorphChangeDetail = {
 };
 
 type RandomLockDetail = { id?: string; locked?: boolean };
+type RandomizeGroupDetail = { ids?: string[]; title?: string };
 type GradientChangeDetail = { stops: GradientStop[] };
 type ApplyParameterSnapshotDetail = {
   parameters?: ContourSettings;
@@ -1901,6 +1902,9 @@ if (typeof document !== 'undefined') {
     $(id).checked = value;
   }
   const randomLocks = new Set<string>();
+  let randomizationScope: Set<string> | null = null;
+  const shouldRandomize = (id: string): boolean =>
+    !randomLocks.has(id) && (!randomizationScope || randomizationScope.has(id));
   document.addEventListener('randomlockchange', (event) => {
     const { id, locked } = (event as CustomEvent<RandomLockDetail>).detail || {};
     if (!id) return;
@@ -1930,7 +1934,7 @@ if (typeof document !== 'undefined') {
     toast(name ? `Snapshot “${name}” restored` : 'Snapshot restored');
   });
   function randomizePair(id: string, key: string, makeValue: () => number): void {
-    if (randomLocks.has(id)) return;
+    if (!shouldRandomize(id)) return;
     setPairValue(id, key, makeValue());
     for (const [dimension, targets] of [
       [1, state.morphTargets],
@@ -1945,7 +1949,7 @@ if (typeof document !== 'undefined') {
     }
   }
   function randomizeColor(id: string, key: string, colors: readonly string[]): void {
-    if (randomLocks.has(id)) return;
+    if (!shouldRandomize(id)) return;
     const value = randomItem(colors);
     dynamicState[key] = value;
     $(id).value = value;
@@ -1965,16 +1969,17 @@ if (typeof document !== 'undefined') {
     }
   }
   function randomizeSelect(id: string, key: string, values: readonly string[]): void {
-    if (randomLocks.has(id)) return;
+    if (!shouldRandomize(id)) return;
     const value = randomItem(values);
     dynamicState[key] = value;
     $(id).value = value;
   }
   function randomizeCheckbox(id: string, key: string, probability: number): void {
-    if (!randomLocks.has(id)) setCheckbox(id, key, Math.random() < probability);
+    if (shouldRandomize(id)) setCheckbox(id, key, Math.random() < probability);
   }
 
-  $('randomize').addEventListener('click', () => {
+  function randomizeParameters(scope?: readonly string[], groupTitle?: string): void {
+    randomizationScope = scope ? new Set(scope) : null;
     // Keep the loaded source and physical sheet size stable; randomize the
     // creative choices that shape the contour study.
     randomizePair('az', 'az', () => randomInt(-180, 180));
@@ -2035,7 +2040,7 @@ if (typeof document !== 'undefined') {
     syncSliceLfoControls();
     syncSliceConstruction();
     randomizeCheckbox('spiral', 'spiral', 0.22);
-    if (state.divergence > 0 || state.sliceLfo) {
+    if (shouldRandomize('spiral') && (state.divergence > 0 || state.sliceLfo)) {
       state.spiral = false;
       $('spiral').checked = false;
     }
@@ -2094,12 +2099,12 @@ if (typeof document !== 'undefined') {
     for (const [id, chance] of Object.entries(effectChances) as Array<
       [keyof typeof effectChances, number]
     >) {
-      if (!randomLocks.has(id)) state[id] = Math.random() < chance;
+      if (shouldRandomize(id)) state[id] = Math.random() < chance;
     }
     $('gradientEnabled').checked = state.gradientEnabled;
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
     randomizePair('gradientColors', 'gradientColors', () => randomInt(3, 10));
-    if (state.gradientEnabled) {
+    if (state.gradientEnabled && shouldRandomize('gradientColors')) {
       state.gradientStops = createColorGradient(state.color, {
         count: randomInt(3, 5),
       });
@@ -2121,7 +2126,7 @@ if (typeof document !== 'undefined') {
     randomizePair('humanizerAmount', 'humanizerAmount', () => randomInt(18, 58));
     syncHumanizerControls();
     $('blueprint').checked = state.blueprint;
-    if (!randomLocks.has('blueprint')) {
+    if (shouldRandomize('blueprint')) {
       state.blueprintStyle = randomItem(['blue', 'blue', 'blue', 'black']);
       $('blueprintStyle').value = state.blueprintStyle;
     }
@@ -2129,7 +2134,14 @@ if (typeof document !== 'undefined') {
     $('topographicMap').checked = state.topographicMap;
 
     redraw(false);
-    toast('Parameters randomized');
+    toast(groupTitle ? `${groupTitle} parameters randomized` : 'Parameters randomized');
+    randomizationScope = null;
+  }
+  $('randomize').addEventListener('click', () => randomizeParameters());
+  document.addEventListener('randomizegroup', (event) => {
+    const { ids, title } = (event as CustomEvent<RandomizeGroupDetail>).detail || {};
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    randomizeParameters(ids, title);
   });
 
   /* export */
