@@ -79,6 +79,9 @@ Complex React controls communicate through custom DOM events:
 - `gradientchange` publishes normalized gradient stops.
 - `setgradient` synchronizes generated gradient stops into the React editor.
 - `restoreparameters` restores React-owned control state during undo/redo.
+- `captureparametersnapshot` and `applyparametersnapshot` bridge the React snapshot manager to the runtime-owned parameter and lock state.
+
+Named parameter snapshots are stored locally in IndexedDB by `parameter-snapshots.ts`. They use the same render-setting shape as undo/redo and additionally preserve randomization locks; active X/Y morph targets are already part of the render settings.
 
 These event names and their payloads are internal interfaces. Change producers and consumers together.
 

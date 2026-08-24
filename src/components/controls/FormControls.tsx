@@ -137,7 +137,15 @@ function RandomLockActions() {
       setTemporaryMode(null);
     };
     document.addEventListener('randomlockchange', individualChange);
-    return () => document.removeEventListener('randomlockchange', individualChange);
+    const restored = () => {
+      previousLocks.current = [];
+      setTemporaryMode(null);
+    };
+    document.addEventListener('randomlockrestore', restored);
+    return () => {
+      document.removeEventListener('randomlockchange', individualChange);
+      document.removeEventListener('randomlockrestore', restored);
+    };
   }, []);
 
   const apply = (mode: 'lock' | 'unlock') => {

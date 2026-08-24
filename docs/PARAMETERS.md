@@ -191,6 +191,7 @@ G-code uses millimetres, absolute positioning, and feed-per-minute mode (`G21`, 
 - **Lock all** and **Unlock all** temporarily set every randomization lock at once. Click the active bulk button again to restore the previous individual lock set. Changing an individual lock ends that temporary bulk state; the next bulk action starts from the newly edited set.
 - Randomization locks are available for morphable numeric/colour controls, Divergence, Background colour, Camera lens, Gap easing, Slice axis, slice-plane modulation, Line-weight variation, Continuous spiral, Remove hidden lines, Add outer silhouette, Use colour gradient, Halftone stroke, Chromatic aberration, Humanizer, Technical blueprint, and Topographic map.
 - **Undo** and **Redo** keep up to 100 snapshots of render parameters. Source selection, SVG extrusion, model up axis, paper preset as a label, export format/profile, and G-code-only values are not part of those snapshots.
+- **Named snapshots** save the current render parameters, X/Y morph configuration, and randomization locks in the browser's IndexedDB storage. Each entry keeps its name and creation date and can be restored or deleted later. Like undo/redo, named snapshots do not replace the loaded source or export-machine settings.
 
 ## Display-only statistics
 

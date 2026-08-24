@@ -254,6 +254,111 @@ button {
 .section-content > .field-group:first-child .field-group-title {
   margin-top: 0;
 }
+.snapshot-create label {
+  display: block;
+  margin-bottom: 6px;
+  color: #747973;
+  font-size: 9px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.snapshot-create-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-auto-rows: 27px;
+  gap: 6px;
+}
+.snapshot-create-row input {
+  min-width: 0;
+  height: 100%;
+  padding: 0 9px;
+  border: 1px solid #cbd0c9;
+  border-radius: 0;
+  background: #fff;
+  font-size: 10px;
+  outline: none;
+}
+.snapshot-create-row input:focus {
+  border-color: var(--blue);
+}
+.button.snapshot-save-button {
+  width: auto;
+  min-width: 70px;
+  height: 100%;
+  padding: 0 11px;
+  border-color: #c7cbc5;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+.snapshot-list {
+  display: grid;
+  gap: 1px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  background: #dde0db;
+  border: 1px solid #dde0db;
+}
+.snapshot-list li {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 8px 9px 10px;
+  background: #f8f9f6;
+}
+.snapshot-copy {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 3px;
+}
+.snapshot-copy strong {
+  overflow: hidden;
+  font-family: Manrope, sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.snapshot-copy time {
+  color: #868b85;
+  font-size: 8.5px;
+}
+.snapshot-actions {
+  display: flex;
+  gap: 3px;
+}
+.snapshot-actions button {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d2d6d0;
+  background: transparent;
+  color: #676c66;
+  cursor: pointer;
+}
+.snapshot-actions button:hover {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.snapshot-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.snapshot-empty,
+.snapshot-status {
+  margin: 11px 0 0;
+  color: #858a84;
+  font-family: Manrope, sans-serif;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.snapshot-status {
+  color: #a34435;
+}
 .field-group + .field-group {
   margin-top: 15px;
 }

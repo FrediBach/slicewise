@@ -95,6 +95,14 @@ type MorphChangeDetail = {
 
 type RandomLockDetail = { id?: string; locked?: boolean };
 type GradientChangeDetail = { stops: GradientStop[] };
+type ApplyParameterSnapshotDetail = {
+  parameters?: ContourSettings;
+  randomLocks?: string[];
+  name?: string;
+};
+type CaptureParameterSnapshotDetail = {
+  snapshot?: { parameters: ContourSettings; randomLocks: string[] };
+};
 
 function $<T extends HTMLElement = HTMLInputElement>(id: string): T {
   const element = document.getElementById(id);
@@ -1898,6 +1906,28 @@ if (typeof document !== 'undefined') {
     if (!id) return;
     if (locked) randomLocks.add(id);
     else randomLocks.delete(id);
+  });
+  document.addEventListener('captureparametersnapshot', (event) => {
+    const detail = (event as CustomEvent<CaptureParameterSnapshotDetail>).detail;
+    if (!detail) return;
+    detail.snapshot = {
+      parameters: cloneParameterSnapshot(),
+      randomLocks: Array.from(randomLocks).sort(),
+    };
+  });
+  document.addEventListener('applyparametersnapshot', (event) => {
+    const {
+      parameters,
+      randomLocks: locks,
+      name,
+    } = (event as CustomEvent<ApplyParameterSnapshotDetail>).detail || {};
+    if (!parameters || !Array.isArray(locks)) return;
+    commitParameterHistory();
+    restoreParameterSnapshot(parameters);
+    document.dispatchEvent(new CustomEvent('randomlockbulk', { detail: { locks } }));
+    document.dispatchEvent(new CustomEvent('randomlockrestore'));
+    commitParameterHistory();
+    toast(name ? `Snapshot “${name}” restored` : 'Snapshot restored');
   });
   function randomizePair(id: string, key: string, makeValue: () => number): void {
     if (randomLocks.has(id)) return;
