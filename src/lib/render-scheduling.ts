@@ -17,9 +17,9 @@ type RenderDispositionInput = {
 };
 
 /**
- * Exact results update preview and export state. Older quick results may still
- * update the preview so continuous input remains animated, but must never
- * replace the exportable result.
+ * Only the latest request may update the preview. Quick results stay out of
+ * exact export state, but stale quick frames are discarded so an older design
+ * cannot flash between the current preview and its final render.
  */
 export function renderDisposition({
   responseId,
@@ -27,9 +27,9 @@ export function renderDisposition({
   sameMesh,
   quick,
 }: RenderDispositionInput): RenderDisposition {
-  if (!sameMesh || responseId > latestRequestId) return 'discard';
+  if (!sameMesh || responseId !== latestRequestId) return 'discard';
   if (quick) return 'preview';
-  return responseId === latestRequestId ? 'commit' : 'discard';
+  return 'commit';
 }
 
 export function isPreviewBusy({

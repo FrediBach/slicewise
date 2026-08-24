@@ -16,8 +16,6 @@ import {
   observePreviewPerformance,
   previewCurveQuality,
   previewDetail,
-  previewLineCount,
-  previewMorphSteps,
 } from './preview-detail';
 import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
 
@@ -457,18 +455,17 @@ if (typeof document !== 'undefined') {
   function throttleDelay(): number {
     const triangles = state.mesh ? state.mesh.T.length / 3 : 0;
     const detail = previewDetail(previewPerformance);
-    const previewLines = previewLineCount(state.lines, detail);
     const visibilityCost = state.hide ? 1.55 : 1;
     const quality = previewCurveQuality(state.quality, detail);
     const curveCost = 1 + Math.max(0, quality - 1) * 0.055;
     const morphCost =
       state.morphEnabled && Object.keys(state.morphTargets).length
-        ? previewMorphSteps(state.morphSteps, detail) *
+        ? state.morphSteps *
           (state.morphSecondEnabled && Object.keys(state.morphTargets2).length
-            ? previewMorphSteps(state.morphStepsY, detail)
+            ? state.morphStepsY
             : 1)
         : 1;
-    const score = triangles * previewLines * visibilityCost * curveCost * morphCost;
+    const score = triangles * state.lines * visibilityCost * curveCost * morphCost;
     let complexityDelay = 150;
     if (score < 450000) complexityDelay = 16;
     else if (score < 1500000) complexityDelay = 32;

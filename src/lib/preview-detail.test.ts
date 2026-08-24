@@ -4,8 +4,6 @@ import {
   observePreviewPerformance,
   previewCurveQuality,
   previewDetail,
-  previewLineCount,
-  previewMorphSteps,
 } from './preview-detail';
 
 describe('adaptive preview detail', () => {
@@ -27,9 +25,8 @@ describe('adaptive preview detail', () => {
     expect(previewDetail(performance)).toBe(0.5);
   });
 
-  it('allows full contour density and quality while bounding morph previews', () => {
-    expect(previewLineCount(80, 1)).toBe(80);
+  it('reduces curve precision without changing the preview composition', () => {
     expect(previewCurveQuality(9, 1)).toBe(9);
-    expect(previewMorphSteps(24, 1)).toBe(5);
+    expect(previewCurveQuality(9, 0.5)).toBe(5);
   });
 });

@@ -8,10 +8,10 @@ describe('renderDisposition', () => {
     ).toBe('commit');
   });
 
-  it('uses an older quick result only as transient preview feedback', () => {
+  it('discards an older quick result instead of flashing a stale design', () => {
     expect(
       renderDisposition({ responseId: 6, latestRequestId: 7, sameMesh: true, quick: true }),
-    ).toBe('preview');
+    ).toBe('discard');
   });
 
   it('keeps even the latest quick result out of exact export state', () => {

@@ -63,7 +63,7 @@ describe('computeContours', () => {
     expect(result.paths).toBeGreaterThan(0);
   });
 
-  it('caps large morph grids in quick previews', () => {
+  it('preserves large morph grids in quick previews', () => {
     const result = computeContours(
       makeContourMesh(),
       {
@@ -80,10 +80,9 @@ describe('computeContours', () => {
       true,
     );
 
-    expect(result.svg.match(/data-morph-x-step=/g)).toHaveLength(9);
-    expect(result.svg).toContain('data-morph-x-step="3"');
-    expect(result.svg).toContain('data-morph-y-step="3"');
-    expect(result.svg).not.toContain('data-morph-x-step="4"');
+    expect(result.svg.match(/data-morph-x-step=/g)).toHaveLength(144);
+    expect(result.svg).toContain('data-morph-x-step="12"');
+    expect(result.svg).toContain('data-morph-y-step="12"');
   });
 
   it('renders normalized SVG centerlines directly as plotter paths', () => {
