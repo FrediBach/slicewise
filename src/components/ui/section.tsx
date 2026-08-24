@@ -1,19 +1,34 @@
+import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 type SectionProps = {
   title: string;
+  description: string;
   badge?: ReactNode;
+  defaultOpen?: boolean;
   children: ReactNode;
 };
 
-export function Section({ title, badge, children }: SectionProps) {
+export function Section({
+  title,
+  description,
+  badge,
+  defaultOpen = false,
+  children,
+}: SectionProps) {
   return (
-    <section className="control-section">
-      <div className="section-heading">
-        <h2>{title}</h2>
-        {badge ? <span>{badge}</span> : null}
-      </div>
-      {children}
-    </section>
+    <details className="control-section" open={defaultOpen}>
+      <summary className="section-heading">
+        <span className="section-heading-copy">
+          <span className="section-heading-meta">
+            <span className="section-title">{title}</span>
+            {badge ? <span className="section-badge">{badge}</span> : null}
+          </span>
+          <span className="section-description">{description}</span>
+        </span>
+        <ChevronDown className="section-chevron" size={17} aria-hidden="true" />
+      </summary>
+      <div className="section-content">{children}</div>
+    </details>
   );
 }

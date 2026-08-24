@@ -27,9 +27,13 @@ function TopographicMapControl() {
   );
 }
 
-export function OutputPanel() {
+export function AppearancePanel() {
   return (
-    <Section title="Output" badge="03">
+    <Section
+      title="Appearance"
+      description="Set the contour weight, inks, and colour treatment."
+      badge="04"
+    >
       <FieldGroup title="Line style">
         <ValueControl
           id="sw"
@@ -77,6 +81,17 @@ export function OutputPanel() {
         <BackgroundColorControl />
         <GradientChooser />
       </FieldGroup>
+    </Section>
+  );
+}
+
+export function CanvasPanel() {
+  return (
+    <Section
+      title="Canvas"
+      description="Define the physical sheet, margins, and clipping boundary."
+      badge="05"
+    >
       <FieldGroup title="Artboard">
         <SelectControl
           id="paperPreset"
@@ -134,6 +149,17 @@ export function OutputPanel() {
         </Checkbox>
       </FieldGroup>
       <GenerativeMaskControls />
+    </Section>
+  );
+}
+
+export function EffectsPanel() {
+  return (
+    <Section
+      title="Effects"
+      description="Layer plotter-safe texture, colour, and annotations."
+      badge="06"
+    >
       <FieldGroup title="Post-processing">
         <Checkbox id="halftone" randomizable>
           Halftone stroke
@@ -224,6 +250,17 @@ export function OutputPanel() {
         </div>
         <TopographicMapControl />
       </FieldGroup>
+    </Section>
+  );
+}
+
+export function ExportPanel() {
+  return (
+    <Section
+      title="Export"
+      description="Choose the final format and configure plotter motion."
+      badge="08"
+    >
       <FieldGroup title="Export format">
         <SelectControl
           id="exportFormat"

@@ -6,9 +6,10 @@ export function ViewPanel() {
   return (
     <Section
       title="View"
+      description="Frame the model and set its projection on the page."
       badge={
         <>
-          <Rotate3d size={12} /> drag canvas
+          02 <Rotate3d size={12} /> drag
         </>
       }
     >

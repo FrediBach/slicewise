@@ -3,7 +3,11 @@ import { Checkbox, FieldGroup, ValueControl } from '../controls/FormControls';
 
 export function MorphPanel() {
   return (
-    <Section title="Morph" badge="multi instance">
+    <Section
+      title="Morph"
+      description="Interpolate selected parameters into layered variations."
+      badge="07"
+    >
       <FieldGroup title="Parameter interpolation">
         <Checkbox id="morphEnabled">Enable morph instances</Checkbox>
         <div className="morph-settings" id="morphSettings">

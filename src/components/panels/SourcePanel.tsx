@@ -5,7 +5,12 @@ import { GEN_DEFAULTS } from '../../lib/generativeMesh';
 
 export function SourcePanel() {
   return (
-    <Section title="Source model" badge="01">
+    <Section
+      title="Source"
+      description="Choose, generate, or import the geometry to contour."
+      badge="01"
+      defaultOpen
+    >
       <SelectControl id="demo" label="Source" defaultValue="knot" rowClassName="demo-row">
         <optgroup label="Generate">
           <option value="generative">Generative mesh</option>

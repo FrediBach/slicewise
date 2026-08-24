@@ -120,51 +120,106 @@ button {
   scrollbar-color: #c7cac5 transparent;
 }
 .intro {
-  padding: 18px 20px;
+  padding: 24px 20px 22px;
   border-bottom: 1px solid var(--line);
   background: #f0f2ee;
 }
-.intro p {
-  margin: 0;
-  max-width: 36ch;
-  font-family: Manrope, sans-serif;
-  font-size: 13px;
-  line-height: 1.55;
-}
-.intro span {
+.intro > span {
   display: block;
-  margin-top: 9px;
+  margin-bottom: 8px;
   color: #8b908a;
-  font-size: 9.5px;
-  letter-spacing: 0.1em;
+  font-size: 9px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+.intro h2 {
+  margin: 0;
+  font-family: Manrope, sans-serif;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  line-height: 1.18;
+}
+.intro p {
+  max-width: 38ch;
+  margin: 9px 0 0;
+  color: #6f746e;
+  font-family: Manrope, sans-serif;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
 .control-section {
-  padding: 18px 20px 19px;
   border-bottom: 1px solid var(--line);
 }
 .section-heading {
+  min-height: 76px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 13px;
+  gap: 14px;
+  padding: 15px 20px;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.16s ease;
 }
-.section-heading h2 {
-  margin: 0;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+.section-heading::-webkit-details-marker {
+  display: none;
 }
-.section-heading > span {
+.section-heading:hover {
+  background: #f0f2ee;
+}
+.section-heading-copy {
+  min-width: 0;
+  display: grid;
+  flex: 1;
+  gap: 5px;
+}
+.section-heading-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.section-title {
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.section-badge {
   display: flex;
   align-items: center;
   gap: 5px;
   color: #999e98;
-  font-size: 9px;
-  letter-spacing: 0.08em;
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+.section-description {
+  max-width: 31ch;
+  color: #777c76;
+  font-family: Manrope, sans-serif;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.section-chevron {
+  flex: 0 0 auto;
+  color: #858a84;
+  transition: transform 0.18s ease;
+}
+.control-section[open] .section-chevron {
+  transform: rotate(180deg);
+}
+.control-section[open] .section-heading {
+  padding-bottom: 12px;
+}
+.section-content {
+  padding: 0 20px 20px;
+}
+.section-content > .field-group:first-child .field-group-title {
+  margin-top: 0;
 }
 .field-group + .field-group {
   margin-top: 15px;

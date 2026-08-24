@@ -3,7 +3,12 @@ import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../controls/F
 
 export function ContoursPanel() {
   return (
-    <Section title="Contours" badge="02">
+    <Section
+      title="Contours"
+      description="Shape the slice density, spacing, and path construction."
+      badge="03"
+      defaultOpen
+    >
       <FieldGroup title="Density & finish">
         <ValueControl id="lines" label="Line count" min="1" max="200" step="1" value="40" />
         <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />

@@ -6,7 +6,12 @@ import { SourcePanel } from './components/panels/SourcePanel';
 import { MorphPanel } from './components/panels/MorphPanel';
 import { ViewPanel } from './components/panels/ViewPanel';
 import { ContoursPanel } from './components/panels/ContoursPanel';
-import { OutputPanel } from './components/panels/OutputPanel';
+import {
+  AppearancePanel,
+  CanvasPanel,
+  EffectsPanel,
+  ExportPanel,
+} from './components/panels/OutputPanel';
 
 export default function App() {
   useEffect(() => {
@@ -43,15 +48,19 @@ export default function App() {
 
         <div className="rail-scroll">
           <div className="intro">
-            <p>Transform a 3D model into precise, plotter-ready contour lines.</p>
-            <span>Local processing · SVG + G-code output</span>
+            <span>Parameter workspace</span>
+            <h2>Shape your contour study</h2>
+            <p>Move from source geometry to precise, plotter-ready output one stage at a time.</p>
           </div>
 
           <SourcePanel />
-          <MorphPanel />
           <ViewPanel />
           <ContoursPanel />
-          <OutputPanel />
+          <AppearancePanel />
+          <CanvasPanel />
+          <EffectsPanel />
+          <MorphPanel />
+          <ExportPanel />
         </div>
 
         <footer className="actions">

@@ -2,11 +2,11 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { OutputPanel } from './OutputPanel';
+import { AppearancePanel } from './OutputPanel';
 
 describe('OutputPanel line-weight controls', () => {
   it('exposes randomization locks and numeric morph controls', () => {
-    render(<OutputPanel />);
+    render(<AppearancePanel />);
 
     expect(
       screen.getByRole('button', { name: 'Lock Line-weight variation randomization' }),
