@@ -14,6 +14,18 @@ describe('renderDisposition', () => {
     ).toBe('discard');
   });
 
+  it('uses an older quick result as transient feedback during a direct manipulation', () => {
+    expect(
+      renderDisposition({
+        responseId: 6,
+        latestRequestId: 7,
+        sameMesh: true,
+        quick: true,
+        allowStaleQuickPreview: true,
+      }),
+    ).toBe('preview');
+  });
+
   it('keeps even the latest quick result out of exact export state', () => {
     expect(
       renderDisposition({ responseId: 7, latestRequestId: 7, sameMesh: true, quick: true }),
@@ -22,7 +34,13 @@ describe('renderDisposition', () => {
 
   it('discards stale final results and results for replaced meshes', () => {
     expect(
-      renderDisposition({ responseId: 6, latestRequestId: 7, sameMesh: true, quick: false }),
+      renderDisposition({
+        responseId: 6,
+        latestRequestId: 7,
+        sameMesh: true,
+        quick: false,
+        allowStaleQuickPreview: true,
+      }),
     ).toBe('discard');
     expect(
       renderDisposition({ responseId: 7, latestRequestId: 7, sameMesh: false, quick: true }),

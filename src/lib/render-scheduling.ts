@@ -14,20 +14,24 @@ type RenderDispositionInput = {
   latestRequestId: number;
   sameMesh: boolean;
   quick: boolean;
+  allowStaleQuickPreview?: boolean;
 };
 
 /**
- * Only the latest request may update the preview. Quick results stay out of
- * exact export state, but stale quick frames are discarded so an older design
- * cannot flash between the current preview and its final render.
+ * Exact results must always be current. During a direct manipulation gesture,
+ * an older same-mesh quick result may provide transient feedback while the
+ * latest request remains queued; it never replaces exact export state.
  */
 export function renderDisposition({
   responseId,
   latestRequestId,
   sameMesh,
   quick,
+  allowStaleQuickPreview = false,
 }: RenderDispositionInput): RenderDisposition {
-  if (!sameMesh || responseId !== latestRequestId) return 'discard';
+  if (!sameMesh || responseId > latestRequestId) return 'discard';
+  if (responseId !== latestRequestId)
+    return quick && allowStaleQuickPreview ? 'preview' : 'discard';
   if (quick) return 'preview';
   return 'commit';
 }

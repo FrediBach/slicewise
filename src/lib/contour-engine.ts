@@ -2,7 +2,7 @@
 
 import { clipRunToRect } from './toolpaths';
 import { createMapAnnotations } from './mapAnnotations';
-import { previewCurveQuality } from './preview-detail';
+import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
 import {
   clipRunToGenerativeMask,
   generativeMaskPath,
@@ -2435,7 +2435,7 @@ function computeContourInstance(
     ),
   );
   const outlineOut: Polyline[] = [];
-  const N = settings.lines;
+  const N = quick ? previewLineCount(settings.lines, settings.previewDetail) : settings.lines;
   const quality = clamp(
     Math.round(
       quick ? previewCurveQuality(settings.quality, settings.previewDetail) : settings.quality,
@@ -2445,7 +2445,8 @@ function computeContourInstance(
   );
   const curveStrength = (quality - 1) / 9;
   if (settings.spiral && !settings.divergence && lineWeightMode === 'uniform') {
-    const { pts, values, segs } = spiralContours(P, mesh, field, settings);
+    const previewSettings = quick && N !== settings.lines ? { ...settings, lines: N } : settings;
+    const { pts, values, segs } = spiralContours(P, mesh, field, previewSettings);
     if (segs.length)
       for (const poly of chain(pts, segs)) {
         if (settings.gradientEnabled) {
@@ -2721,8 +2722,22 @@ export function computeContours(
   if (!targetsX.length && !targetsY.length) return computeContourInstance(mesh, settings, quick);
 
   const started = performance.now();
-  const stepsX = targetsX.length ? clamp(Math.round(settings.morphSteps || 2), 2, 24) : 1;
-  const stepsY = targetsY.length ? clamp(Math.round(settings.morphStepsY || 2), 2, 24) : 1;
+  const stepsX = targetsX.length
+    ? quick
+      ? previewMorphSteps(
+          clamp(Math.round(settings.morphSteps || 2), 2, 24),
+          settings.previewDetail,
+        )
+      : clamp(Math.round(settings.morphSteps || 2), 2, 24)
+    : 1;
+  const stepsY = targetsY.length
+    ? quick
+      ? previewMorphSteps(
+          clamp(Math.round(settings.morphStepsY || 2), 2, 24),
+          settings.previewDetail,
+        )
+      : clamp(Math.round(settings.morphStepsY || 2), 2, 24)
+    : 1;
   const targetsXByKey = new Map(targetsX),
     targetsYByKey = new Map(targetsY);
   const targetKeys = new Set([...targetsXByKey.keys(), ...targetsYByKey.keys()]);

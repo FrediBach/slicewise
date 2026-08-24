@@ -34,6 +34,15 @@ export function observePreviewPerformance(
 const normalizedDetail = (detail: number | undefined): number =>
   Math.min(1, Math.max(PREVIEW_DETAIL_LEVELS[0], detail ?? PREVIEW_DETAIL_LEVELS[1]));
 
+export function previewLineCount(lines: number, detail?: number): number {
+  return Math.min(lines, Math.max(12, Math.round(lines * normalizedDetail(detail))));
+}
+
 export function previewCurveQuality(quality: number, detail?: number): number {
   return Math.min(quality, Math.max(3, Math.round(quality * normalizedDetail(detail))));
+}
+
+export function previewMorphSteps(steps: number, detail?: number): number {
+  const limit = Math.round(1 + normalizedDetail(detail) * 4);
+  return Math.min(steps, Math.max(2, limit));
 }
