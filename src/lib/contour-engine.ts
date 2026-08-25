@@ -39,6 +39,7 @@ export interface ContourSettings extends GenerativeMaskSettings {
   panY: number;
   lensFocalLength?: number;
   lensPerspective?: number;
+  lensWarpExponent?: number;
   lensDistortion?: number;
   /** Legacy preset fields retained for stored snapshots and callers. */
   lens?: string;
@@ -141,6 +142,7 @@ interface Projection extends CameraBasis {
   oy: number;
   lensFocalLength: number;
   lensPerspective: number;
+  lensWarpExponent: number;
   lensDistortion: number;
 }
 
@@ -316,6 +318,22 @@ function distortLens(x: number, y: number, distortion: number): Vec2 {
   return [x * factor, y * factor];
 }
 
+function warpKleinPoincare(x: number, y: number, exponentPercent: number): Vec2 {
+  const exponent = clamp(exponentPercent / 100, 0, 1);
+  if (!exponent) return [x, y];
+  const radius = Math.hypot(x, y);
+  if (radius < 1e-12) return [x, y];
+
+  // For a point k in the Klein unit disk, the corresponding Poincaré radius
+  // is p = k / (1 + sqrt(1 - k²)). A geometric interpolation preserves both
+  // exact endpoints while making the control act like a continuous exponent.
+  const kleinRadius = Math.min(radius, 1 - 1e-9);
+  const poincareRadius = kleinRadius / (1 + Math.sqrt(1 - kleinRadius * kleinRadius));
+  const warpedRadius = radius * Math.pow(poincareRadius / radius, exponent);
+  const factor = warpedRadius / radius;
+  return [x * factor, y * factor];
+}
+
 function projectCameraPoint(
   x: number,
   y: number,
@@ -325,6 +343,7 @@ function projectCameraPoint(
   oy: number,
   focalLength: number,
   perspectiveAmount: number,
+  warpExponent: number,
   distortion: number,
 ): Vec2 {
   // The normalized mesh has radius 1. This maps a full-frame-style focal
@@ -332,7 +351,8 @@ function projectCameraPoint(
   const cameraDistance = 1.25 + focalLength / 24;
   const physicalPerspective = cameraDistance / (cameraDistance - depth);
   const perspective = 1 + (physicalPerspective - 1) * clamp(perspectiveAmount / 100, 0, 1);
-  const warped = distortLens(x * perspective, y * perspective, distortion);
+  const hyperbolic = warpKleinPoincare(x * perspective, y * perspective, warpExponent);
+  const warped = distortLens(hyperbolic[0], hyperbolic[1], distortion);
   return [ox + warped[0] * scale, oy - warped[1] * scale];
 }
 
@@ -549,7 +569,18 @@ function sliceLevelWorld(
 
 function projectWorldPoints(points: NumericArray, P: Projection): number[] {
   const projected: number[] = [];
-  const { r, u, f, scale, ox, oy, lensFocalLength, lensPerspective, lensDistortion } = P;
+  const {
+    r,
+    u,
+    f,
+    scale,
+    ox,
+    oy,
+    lensFocalLength,
+    lensPerspective,
+    lensWarpExponent,
+    lensDistortion,
+  } = P;
   for (let i = 0; i < points.length; i += 3) {
     const x = points[i],
       y = points[i + 1],
@@ -564,6 +595,7 @@ function projectWorldPoints(points: NumericArray, P: Projection): number[] {
       oy,
       lensFocalLength,
       lensPerspective,
+      lensWarpExponent,
       lensDistortion,
     );
     projected.push(screen[0], screen[1], depth);
@@ -1169,6 +1201,7 @@ function deterministicDrawingNumber(
       settings.panY,
       settings.lensFocalLength,
       settings.lensPerspective,
+      settings.lensWarpExponent,
       settings.lensDistortion,
       settings.lens,
       settings.lensAmount,
@@ -1302,7 +1335,7 @@ function blueprintDocument(
   const fieldSpan = fieldMax - fieldMin;
   const lineCount = Math.max(1, Math.round(settings.lines || 1));
   const [focalLength, distortion] = resolveLens(settings);
-  const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(settings.lensPerspective ?? 0)}%persp,${fmt(distortion)}%dist(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
+  const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(settings.lensPerspective ?? 0)}%persp,${fmt(settings.lensWarpExponent ?? 0)}%K→P,${fmt(distortion)}%dist(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
   const slicing = settings.spiral
     ? `Γₖ: ${lineCount}q(p) − atan2(v,u) = k + 0.5`
     : `hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
@@ -2052,6 +2085,7 @@ function project(
   panY: number,
   lensFocalLength: number,
   lensPerspective: number,
+  lensWarpExponent: number,
   lensDistortion: number,
 ): Projection {
   const { V } = mesh;
@@ -2079,6 +2113,7 @@ function project(
       oy,
       lensFocalLength,
       lensPerspective,
+      lensWarpExponent,
       lensDistortion,
     );
     sx[v] = screen[0];
@@ -2101,6 +2136,7 @@ function project(
     u,
     lensFocalLength,
     lensPerspective,
+    lensWarpExponent,
     lensDistortion,
   };
 }
@@ -2307,6 +2343,7 @@ function computeLineArtInstance(
     H = settings.ph;
   const [focalLength, distortion] = resolveLens(settings);
   const perspective = clamp(settings.lensPerspective ?? 0, 0, 100);
+  const warpExponent = clamp(settings.lensWarpExponent ?? 0, 0, 100);
   const P = project(
     mesh,
     cameraBasis(settings.az, settings.el, settings.roll),
@@ -2318,6 +2355,7 @@ function computeLineArtInstance(
     settings.panY,
     focalLength,
     perspective,
+    warpExponent,
     distortion,
   );
   const offsets = mesh.lineArt!.offsets;
@@ -2485,6 +2523,7 @@ function computeContourInstance(
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
   const [focalLength, distortion] = resolveLens(settings);
   const perspective = clamp(settings.lensPerspective ?? 0, 0, 100);
+  const warpExponent = clamp(settings.lensWarpExponent ?? 0, 0, 100);
   const P = project(
     mesh,
     cam,
@@ -2496,6 +2535,7 @@ function computeContourInstance(
     settings.panY,
     focalLength,
     perspective,
+    warpExponent,
     distortion,
   );
   const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);

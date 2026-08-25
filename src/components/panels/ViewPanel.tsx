@@ -60,6 +60,15 @@ export function ViewPanel() {
           unit="%"
         />
         <ValueControl
+          id="lensWarpExponent"
+          label="Klein ↔ Poincaré"
+          min="0"
+          max="100"
+          step="1"
+          value="0"
+          unit="%"
+        />
+        <ValueControl
           id="lensDistortion"
           label="Lens distortion"
           min="-100"

@@ -150,6 +150,7 @@ const state: AppState = {
   panY: 0,
   lensFocalLength: 50,
   lensPerspective: 0,
+  lensWarpExponent: 0,
   lensDistortion: 0,
   lines: 40,
   gapEase: 'linear',
@@ -314,6 +315,7 @@ if (typeof document !== 'undefined') {
       panY,
       lensFocalLength,
       lensPerspective,
+      lensWarpExponent,
       lensDistortion,
       lines,
       gapEase,
@@ -398,6 +400,7 @@ if (typeof document !== 'undefined') {
       panY,
       lensFocalLength,
       lensPerspective,
+      lensWarpExponent,
       lensDistortion,
       lines,
       gapEase,
@@ -1005,6 +1008,7 @@ if (typeof document !== 'undefined') {
   bindPair('panY', 'panY');
   bindPair('lensFocalLength', 'lensFocalLength');
   bindPair('lensPerspective', 'lensPerspective');
+  bindPair('lensWarpExponent', 'lensWarpExponent');
   bindPair('lensDistortion', 'lensDistortion');
   bindPair('lines', 'lines');
   bindPair('easeStrength', 'easeStrength');
@@ -1722,6 +1726,7 @@ if (typeof document !== 'undefined') {
     ['panY', 'panY'],
     ['lensFocalLength', 'lensFocalLength'],
     ['lensPerspective', 'lensPerspective'],
+    ['lensWarpExponent', 'lensWarpExponent'],
     ['lensDistortion', 'lensDistortion'],
     ['lines', 'lines'],
     ['quality', 'quality'],
@@ -1838,6 +1843,9 @@ if (typeof document !== 'undefined') {
       : 50;
     restored.lensPerspective = Number.isFinite(restored.lensPerspective)
       ? restored.lensPerspective
+      : 0;
+    restored.lensWarpExponent = Number.isFinite(restored.lensWarpExponent)
+      ? restored.lensWarpExponent
       : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
@@ -1978,6 +1986,7 @@ if (typeof document !== 'undefined') {
           ...locks.filter((id) => id !== 'lens'),
           'lensFocalLength',
           'lensPerspective',
+          'lensWarpExponent',
           'lensDistortion',
         ]
       : locks;
@@ -2044,6 +2053,7 @@ if (typeof document !== 'undefined') {
 
     randomizePair('lensFocalLength', 'lensFocalLength', () => randomInt(16, 135));
     randomizePair('lensPerspective', 'lensPerspective', () => randomInt(0, 100));
+    randomizePair('lensWarpExponent', 'lensWarpExponent', () => randomInt(0, 100));
     randomizePair('lensDistortion', 'lensDistortion', () => randomInt(-70, 55));
 
     randomizePair('lines', 'lines', () => randomInt(22, 84));

@@ -14,6 +14,9 @@ describe('ViewPanel lens controls', () => {
     expect(screen.getByRole('slider', { name: 'Perspective' })).toHaveAttribute('min', '0');
     expect(screen.getByRole('slider', { name: 'Perspective' })).toHaveAttribute('max', '100');
     expect(screen.getByRole('slider', { name: 'Perspective' })).toHaveValue('0');
+    expect(screen.getByRole('slider', { name: 'Klein ↔ Poincaré' })).toHaveAttribute('min', '0');
+    expect(screen.getByRole('slider', { name: 'Klein ↔ Poincaré' })).toHaveAttribute('max', '100');
+    expect(screen.getByRole('slider', { name: 'Klein ↔ Poincaré' })).toHaveValue('0');
     expect(screen.getByRole('slider', { name: 'Lens distortion' })).toHaveAttribute('min', '-100');
     expect(screen.getByRole('slider', { name: 'Lens distortion' })).toHaveAttribute('max', '100');
   });

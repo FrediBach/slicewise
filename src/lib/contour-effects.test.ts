@@ -505,6 +505,29 @@ describe('contour projection modes', () => {
     expect(render(18, 0, 0)).toBe(render(300, 0, 0));
   });
 
+  it('warps continuously from Klein to Poincaré disk coordinates', () => {
+    const render = (lensWarpExponent: number) =>
+      computeContours(
+        makeContourMesh(),
+        {
+          ...contourSettings,
+          lensPerspective: 0,
+          lensWarpExponent,
+          lensDistortion: 0,
+          hide: false,
+          sil: false,
+        },
+        true,
+      ).svg;
+
+    const klein = render(0);
+    const halfway = render(50);
+    const poincare = render(100);
+    expect(halfway).not.toBe(klein);
+    expect(poincare).not.toBe(halfway);
+    expect(poincare).not.toMatch(/NaN|Infinity/);
+  });
+
   it('fans slice planes from an inferred source without producing invalid paths', () => {
     const parallel = computeContours(
       makeContourMesh(),
