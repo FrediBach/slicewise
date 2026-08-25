@@ -6,6 +6,30 @@ import { pointInGenerativeMask } from './generative-mask';
 import { vertexNormals, weld } from './mesh';
 
 describe('contour output effects', () => {
+  it('separates contour layers along the slice direction', () => {
+    const baseSettings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      clipToArtboard: false,
+    };
+    const base = computeContours(makeContourMesh(), baseSettings, false);
+    const exploded = computeContours(
+      makeContourMesh(),
+      { ...baseSettings, explodeAmount: 100 },
+      false,
+    );
+    const verticalSpan = (result: typeof base): number => {
+      const ys = result.toolpaths.flatMap((group) =>
+        group.runs.flatMap((run) => run.filter((_, index) => index % 2 === 1)),
+      );
+      return Math.max(...ys) - Math.min(...ys);
+    };
+
+    expect(exploded.paths).toBe(base.paths);
+    expect(verticalSpan(exploded)).toBeGreaterThan(verticalSpan(base) * 1.25);
+  });
+
   it('keeps the hidden-line silhouette of a rounded cube closed', () => {
     const normalized = weld(sphereDemo('cube', 128, 64));
     const mesh = { ...normalized, N: vertexNormals(normalized.V, normalized.T) };

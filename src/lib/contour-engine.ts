@@ -65,6 +65,7 @@ export interface ContourSettings extends GenerativeMaskSettings {
   sliceLfoModulationDepth: number;
   sliceLfoModulationCycles: number;
   sliceLfoModulationPhase: number;
+  explodeAmount: number;
   spiral: boolean;
   hide: boolean;
   sil: boolean;
@@ -160,6 +161,7 @@ interface PointSegments {
 
 interface CachedSlice {
   position: number;
+  direction: Vec3;
   worldPoints: number[];
   polylines: number[][];
 }
@@ -835,7 +837,12 @@ function contourSlices(
       6 + Math.round(clamp(curveStrength, 0, 1) * 18),
       scalarAtPoint ? adaptiveDepth : 0,
     );
-    slices.push({ position, worldPoints: pts, polylines: segs.length ? chain(pts, segs) : [] });
+    slices.push({
+      position,
+      direction: sliceDirection,
+      worldPoints: pts,
+      polylines: segs.length ? chain(pts, segs) : [],
+    });
   }
 
   if (key) {
@@ -847,6 +854,23 @@ function contourSlices(
     cache.set(key, slices);
   }
   return slices;
+}
+
+function explodeSlicePoints(
+  points: NumericArray,
+  direction: Vec3,
+  position: number,
+  span: number,
+  amount: number,
+): number[] {
+  const distance = span * (position - 0.5) * clamp(amount / 100, 0, 3);
+  const exploded = Array.from(points);
+  for (let offset = 0; offset < exploded.length; offset += 3) {
+    exploded[offset] += direction[0] * distance;
+    exploded[offset + 1] += direction[1] * distance;
+    exploded[offset + 2] += direction[2] * distance;
+  }
+  return exploded;
 }
 
 interface SliceFanGeometry {
@@ -1032,6 +1056,7 @@ function emitPath(
   step: number,
   out: Polyline[],
   healGap = 0,
+  outputPts: NumericArray = pts,
 ): void {
   // Walk a chained polyline and keep only the stretches the camera can see.
   // Visibility is sampled at roughly one sample per depth-buffer pixel, but only
@@ -1054,6 +1079,10 @@ function emitPath(
     const bx = pts[b],
       by = pts[b + 1],
       bd = pts[b + 2];
+    const outputAx = outputPts[a],
+      outputAy = outputPts[a + 1],
+      outputBx = outputPts[b],
+      outputBy = outputPts[b + 1];
     if (!isFinite(ax) || !isFinite(bx)) {
       flush();
       continue;
@@ -1061,9 +1090,9 @@ function emitPath(
 
     if (!visible) {
       if (!run) {
-        run = [ax, ay];
+        run = [outputAx, outputAy];
       }
-      run.push(bx, by);
+      run.push(outputBx, outputBy);
       openEnd = true;
       continue;
     }
@@ -1093,10 +1122,10 @@ function emitPath(
       }
       const t0 = s / n,
         t1 = e / n;
-      const x0 = ax + (bx - ax) * t0,
-        y0 = ay + (by - ay) * t0;
-      const x1 = ax + (bx - ax) * t1,
-        y1 = ay + (by - ay) * t1;
+      const x0 = outputAx + (outputBx - outputAx) * t0,
+        y0 = outputAy + (outputBy - outputAy) * t0;
+      const x1 = outputAx + (outputBx - outputAx) * t1,
+        y1 = outputAy + (outputBy - outputAy) * t1;
       if (t0 === 0 && run && openEnd) run.push(x1, y1);
       else {
         flush();
@@ -2594,7 +2623,12 @@ function computeContourInstance(
     10,
   );
   const curveStrength = (quality - 1) / 9;
-  if (settings.spiral && !settings.divergence && lineWeightMode === 'uniform') {
+  if (
+    settings.spiral &&
+    !settings.divergence &&
+    !settings.explodeAmount &&
+    lineWeightMode === 'uniform'
+  ) {
     const previewSettings = quick && N !== settings.lines ? { ...settings, lines: N } : settings;
     const { pts, values, segs } = spiralContours(P, mesh, field, previewSettings);
     if (segs.length)
@@ -2622,15 +2656,29 @@ function computeContourInstance(
   } else {
     const slices = contourSlices(mesh, settings, field, N, curveStrength);
     for (let sliceIndex = 0; sliceIndex < slices.length; sliceIndex++) {
-      const { position, worldPoints, polylines } = slices[sliceIndex];
+      const { position, direction, worldPoints, polylines } = slices[sliceIndex];
       if (!polylines.length) continue;
       const pts = projectWorldPoints(worldPoints, P);
+      const explodeAmount = clamp(Number(settings.explodeAmount) || 0, 0, 300);
+      const outputPts = explodeAmount
+        ? projectWorldPoints(
+            explodeSlicePoints(
+              worldPoints,
+              direction,
+              position,
+              field.max - field.min,
+              explodeAmount,
+            ),
+            P,
+          )
+        : pts;
       const band = settings.gradientEnabled
         ? clamp(Math.floor(position * palette.length), 0, palette.length - 1)
         : 0;
       const tone = settings.halftone ? toneBand(position) : 0;
       const weight = weightBand(position, sliceIndex);
-      for (const poly of polylines) emitPath(poly, pts, vis, step, out[band][tone][weight]);
+      for (const poly of polylines)
+        emitPath(poly, pts, vis, step, out[band][tone][weight], 0, outputPts);
     }
   }
   if (settings.sil) {

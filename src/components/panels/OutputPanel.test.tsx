@@ -38,3 +38,14 @@ describe('OutputPanel yarn controls', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('OutputPanel explode control', () => {
+  it('exposes a morphable slice explosion slider', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('spinbutton', { name: 'Slice explode in %' })).toHaveValue(0);
+    expect(
+      screen.getByRole('button', { name: 'Slice explode morph mode: none' }),
+    ).toBeInTheDocument();
+  });
+});

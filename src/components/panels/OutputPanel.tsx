@@ -161,6 +161,19 @@ export function EffectsPanel() {
       badge="06"
     >
       <FieldGroup title="Post-processing">
+        <ValueControl
+          id="explodeAmount"
+          label="Slice explode"
+          min="0"
+          max="300"
+          step="1"
+          value="0"
+          unit="%"
+        />
+        <p className="gradient-note blueprint-note">
+          Separates contour layers along their slice-plane normals. At 100%, the original spacing is
+          doubled.
+        </p>
         <Checkbox id="halftone" randomizable>
           Halftone stroke
         </Checkbox>

@@ -173,6 +173,7 @@ const state: AppState = {
   sliceLfoModulationDepth: 50,
   sliceLfoModulationCycles: 1,
   sliceLfoModulationPhase: 0,
+  explodeAmount: 0,
   spiral: false,
   hide: true,
   sil: true,
@@ -338,6 +339,7 @@ if (typeof document !== 'undefined') {
       sliceLfoModulationDepth,
       sliceLfoModulationCycles,
       sliceLfoModulationPhase,
+      explodeAmount,
       spiral,
       hide,
       sil,
@@ -423,6 +425,7 @@ if (typeof document !== 'undefined') {
       sliceLfoModulationDepth,
       sliceLfoModulationCycles,
       sliceLfoModulationPhase,
+      explodeAmount,
       spiral,
       hide,
       sil,
@@ -1050,6 +1053,7 @@ if (typeof document !== 'undefined') {
   bindPair('sliceLfoModulationDepth', 'sliceLfoModulationDepth');
   bindPair('sliceLfoModulationCycles', 'sliceLfoModulationCycles');
   bindPair('sliceLfoModulationPhase', 'sliceLfoModulationPhase');
+  bindPair('explodeAmount', 'explodeAmount', syncSliceConstruction);
   bindPair('morphSteps', 'morphSteps');
   bindPair('morphStepsY', 'morphStepsY');
   bindExportPair('drawFeed', 'drawFeed');
@@ -1278,7 +1282,10 @@ if (typeof document !== 'undefined') {
   });
   function syncSliceConstruction(): void {
     const spiralBlocked =
-      state.divergence > 0 || state.sliceLfo || state.lineWeightMode !== 'uniform';
+      state.divergence > 0 ||
+      state.sliceLfo ||
+      state.explodeAmount > 0 ||
+      state.lineWeightMode !== 'uniform';
     if (spiralBlocked && state.spiral) {
       state.spiral = false;
       $('spiral').checked = false;
@@ -1743,6 +1750,7 @@ if (typeof document !== 'undefined') {
     ['sliceLfoModulationDepth', 'sliceLfoModulationDepth'],
     ['sliceLfoModulationCycles', 'sliceLfoModulationCycles'],
     ['sliceLfoModulationPhase', 'sliceLfoModulationPhase'],
+    ['explodeAmount', 'explodeAmount'],
     ['sw', 'sw'],
     ['lineWeightInterval', 'lineWeightInterval'],
     ['lineWeightAmount', 'lineWeightAmount'],
@@ -1847,6 +1855,7 @@ if (typeof document !== 'undefined') {
     restored.lensWarpExponent = Number.isFinite(restored.lensWarpExponent)
       ? restored.lensWarpExponent
       : 0;
+    restored.explodeAmount = Number.isFinite(restored.explodeAmount) ? restored.explodeAmount : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
         clean: 0,
@@ -2090,6 +2099,9 @@ if (typeof document !== 'undefined') {
     randomizePair('sliceLfoModulationDepth', 'sliceLfoModulationDepth', () => randomInt(20, 85));
     randomizePair('sliceLfoModulationCycles', 'sliceLfoModulationCycles', () => randomIn(0.5, 4));
     randomizePair('sliceLfoModulationPhase', 'sliceLfoModulationPhase', () => randomInt(0, 359));
+    randomizePair('explodeAmount', 'explodeAmount', () =>
+      Math.random() < 0.7 ? 0 : randomInt(20, 160),
+    );
     randomizeCheckbox('sliceLfo', 'sliceLfo', 0.28);
     randomizeCheckbox('sliceLfoModulation', 'sliceLfoModulation', 0.45);
     randomizeSelect('sliceLfoWaveform', 'sliceLfoWaveform', ['sine', 'sine', 'triangle']);

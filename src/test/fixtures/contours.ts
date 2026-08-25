@@ -38,6 +38,7 @@ export const contourSettings = {
   sliceLfoModulationDepth: 50,
   sliceLfoModulationCycles: 1,
   sliceLfoModulationPhase: 0,
+  explodeAmount: 0,
   spiral: false,
   hide: true,
   sil: true,
