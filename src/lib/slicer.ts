@@ -148,8 +148,8 @@ const state: AppState = {
   zoom: 1,
   panX: 0,
   panY: 0,
-  lens: 'clean',
-  lensAmount: 100,
+  lensFocalLength: 50,
+  lensDistortion: 0,
   lines: 40,
   gapEase: 'linear',
   easeStrength: 100,
@@ -311,8 +311,8 @@ if (typeof document !== 'undefined') {
       zoom,
       panX,
       panY,
-      lens,
-      lensAmount,
+      lensFocalLength,
+      lensDistortion,
       lines,
       gapEase,
       easeStrength,
@@ -394,8 +394,8 @@ if (typeof document !== 'undefined') {
       zoom,
       panX,
       panY,
-      lens,
-      lensAmount,
+      lensFocalLength,
+      lensDistortion,
       lines,
       gapEase,
       easeStrength,
@@ -1000,7 +1000,8 @@ if (typeof document !== 'undefined') {
   bindPair('zoom', 'zoom');
   bindPair('panX', 'panX');
   bindPair('panY', 'panY');
-  bindPair('lensAmount', 'lensAmount');
+  bindPair('lensFocalLength', 'lensFocalLength');
+  bindPair('lensDistortion', 'lensDistortion');
   bindPair('lines', 'lines');
   bindPair('easeStrength', 'easeStrength');
   bindPair('easeCycles', 'easeCycles');
@@ -1254,17 +1255,6 @@ if (typeof document !== 'undefined') {
   $('axis').addEventListener('change', (e) => {
     state.axis = inputTarget(e).value;
     $('customAxis').hidden = state.axis !== 'custom';
-    redraw(false);
-  });
-  function syncLensAmount(): void {
-    const enabled = state.lens !== 'clean';
-    $('lensAmount').disabled = !enabled;
-    $('lensAmountN').disabled = !enabled;
-    $('lensAmountControl').classList.toggle('is-disabled', !enabled);
-  }
-  $('lens').addEventListener('change', (e) => {
-    state.lens = inputTarget(e).value;
-    syncLensAmount();
     redraw(false);
   });
   function syncEaseCenter(): void {
@@ -1726,7 +1716,8 @@ if (typeof document !== 'undefined') {
     ['zoom', 'zoom'],
     ['panX', 'panX'],
     ['panY', 'panY'],
-    ['lensAmount', 'lensAmount'],
+    ['lensFocalLength', 'lensFocalLength'],
+    ['lensDistortion', 'lensDistortion'],
     ['lines', 'lines'],
     ['quality', 'quality'],
     ['easeStrength', 'easeStrength'],
@@ -1771,7 +1762,6 @@ if (typeof document !== 'undefined') {
     ['morphStepsY', 'morphStepsY'],
   ];
   const historySelects: Array<keyof ContourSettings> = [
-    'lens',
     'gapEase',
     'axis',
     'sliceLfoWaveform',
@@ -1837,7 +1827,24 @@ if (typeof document !== 'undefined') {
   function restoreParameterSnapshot(snapshot: ContourSettings): void {
     restoringParameters = true;
     clearTimeout(parameterHistoryTimer);
-    Object.assign(state, structuredClone(snapshot));
+    const restored = structuredClone(snapshot);
+    restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
+      ? restored.lensFocalLength
+      : 50;
+    if (!Number.isFinite(restored.lensDistortion)) {
+      const legacyCurve: Readonly<Record<string, number>> = {
+        clean: 0,
+        wide: -0.18,
+        fisheye: -0.4,
+        tele: 0.16,
+      };
+      restored.lensDistortion = clamp(
+        ((legacyCurve[restored.lens || 'clean'] || 0) * (restored.lensAmount ?? 100)) / 0.4,
+        -100,
+        100,
+      );
+    }
+    Object.assign(state, restored);
     for (const [id, key] of historyPairs) {
       $(id).value = String(dynamicState[key]);
       $(id + 'N').value = String(dynamicState[key]);
@@ -1856,7 +1863,6 @@ if (typeof document !== 'undefined') {
     syncPaperPreset();
     $('customAxis').hidden = state.axis !== 'custom';
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
-    syncLensAmount();
     syncEaseCenter();
     syncSliceConstruction();
     syncSliceLfoControls();
@@ -1959,7 +1965,10 @@ if (typeof document !== 'undefined') {
     if (!parameters || !Array.isArray(locks)) return;
     commitParameterHistory();
     restoreParameterSnapshot(parameters);
-    document.dispatchEvent(new CustomEvent('randomlockbulk', { detail: { locks } }));
+    const migratedLocks = locks.includes('lens')
+      ? [...locks.filter((id) => id !== 'lens'), 'lensFocalLength', 'lensDistortion']
+      : locks;
+    document.dispatchEvent(new CustomEvent('randomlockbulk', { detail: { locks: migratedLocks } }));
     document.dispatchEvent(new CustomEvent('randomlockrestore'));
     commitParameterHistory();
     toast(name ? `Snapshot “${name}” restored` : 'Snapshot restored');
@@ -2020,9 +2029,8 @@ if (typeof document !== 'undefined') {
     randomizePair('panX', 'panX', () => randomIn(-state.pw * 0.15, state.pw * 0.15));
     randomizePair('panY', 'panY', () => randomIn(-state.ph * 0.15, state.ph * 0.15));
 
-    randomizeSelect('lens', 'lens', ['clean', 'clean', 'wide', 'fisheye', 'tele']);
-    randomizePair('lensAmount', 'lensAmount', () => randomInt(45, 145));
-    syncLensAmount();
+    randomizePair('lensFocalLength', 'lensFocalLength', () => randomInt(16, 135));
+    randomizePair('lensDistortion', 'lensDistortion', () => randomInt(-70, 55));
 
     randomizePair('lines', 'lines', () => randomInt(22, 84));
     randomizePair('quality', 'quality', () => randomInt(5, 9));

@@ -37,8 +37,11 @@ export interface ContourSettings extends GenerativeMaskSettings {
   zoom: number;
   panX: number;
   panY: number;
-  lens: string;
-  lensAmount: number;
+  lensFocalLength?: number;
+  lensDistortion?: number;
+  /** Legacy preset fields retained for stored snapshots and callers. */
+  lens?: string;
+  lensAmount?: number;
   lines: number;
   gapEase: string;
   easeStrength: number;
@@ -135,8 +138,8 @@ interface Projection extends CameraBasis {
   scale: number;
   ox: number;
   oy: number;
-  lens: string;
-  lensAmount: number;
+  lensFocalLength: number;
+  lensDistortion: number;
 }
 
 interface ScalarField {
@@ -285,15 +288,23 @@ function cameraBasis(azDeg: number, elDeg: number, rollDeg: number): CameraBasis
   return { f, r, u };
 }
 
-const LENS_CURVE: Readonly<Record<string, number>> = {
+const LEGACY_LENS_CURVE: Readonly<Record<string, number>> = {
   clean: 0,
   wide: -0.18,
   fisheye: -0.4,
   tele: 0.16,
 };
 
-function distortLens(x: number, y: number, lens: string, amount: number): Vec2 {
-  const curve = (LENS_CURVE[lens] || 0) * clamp(amount / 100, 0, 2);
+function resolveLens(settings: ContourSettings): [focalLength: number, distortion: number] {
+  const focalLength = clamp(settings.lensFocalLength ?? 50, 8, 300);
+  if (Number.isFinite(settings.lensDistortion))
+    return [focalLength, clamp(settings.lensDistortion!, -100, 100)];
+  const legacyCurve = LEGACY_LENS_CURVE[settings.lens || 'clean'] || 0;
+  return [focalLength, clamp((legacyCurve * (settings.lensAmount ?? 100)) / 0.4, -100, 100)];
+}
+
+function distortLens(x: number, y: number, distortion: number): Vec2 {
+  const curve = clamp(distortion, -100, 100) * 0.004;
   if (!curve) return [x, y];
   const radius2 = x * x + y * y;
   // Radial optical distortion around the image centre. Keeping this in camera
@@ -306,13 +317,18 @@ function distortLens(x: number, y: number, lens: string, amount: number): Vec2 {
 function projectCameraPoint(
   x: number,
   y: number,
+  depth: number,
   scale: number,
   ox: number,
   oy: number,
-  lens: string,
-  lensAmount: number,
+  focalLength: number,
+  distortion: number,
 ): Vec2 {
-  const warped = distortLens(x, y, lens, lensAmount);
+  // The normalized mesh has radius 1. This maps a full-frame-style focal
+  // length to a camera distance that always remains outside the model.
+  const cameraDistance = 1.25 + focalLength / 24;
+  const perspective = cameraDistance / (cameraDistance - depth);
+  const warped = distortLens(x * perspective, y * perspective, distortion);
   return [ox + warped[0] * scale, oy - warped[1] * scale];
 }
 
@@ -529,21 +545,23 @@ function sliceLevelWorld(
 
 function projectWorldPoints(points: NumericArray, P: Projection): number[] {
   const projected: number[] = [];
-  const { r, u, f, scale, ox, oy, lens, lensAmount } = P;
+  const { r, u, f, scale, ox, oy, lensFocalLength, lensDistortion } = P;
   for (let i = 0; i < points.length; i += 3) {
     const x = points[i],
       y = points[i + 1],
       z = points[i + 2];
+    const depth = x * f[0] + y * f[1] + z * f[2];
     const screen = projectCameraPoint(
       x * r[0] + y * r[1] + z * r[2],
       x * u[0] + y * u[1] + z * u[2],
+      depth,
       scale,
       ox,
       oy,
-      lens,
-      lensAmount,
+      lensFocalLength,
+      lensDistortion,
     );
-    projected.push(screen[0], screen[1], x * f[0] + y * f[1] + z * f[2]);
+    projected.push(screen[0], screen[1], depth);
   }
   return projected;
 }
@@ -1144,6 +1162,8 @@ function deterministicDrawingNumber(
       settings.zoom,
       settings.panX,
       settings.panY,
+      settings.lensFocalLength,
+      settings.lensDistortion,
       settings.lens,
       settings.lensAmount,
     ],
@@ -1275,7 +1295,8 @@ function blueprintDocument(
   const fieldMax = Number(geometry.fieldMax || 0);
   const fieldSpan = fieldMax - fieldMin;
   const lineCount = Math.max(1, Math.round(settings.lines || 1));
-  const transform = `pₛ = ${fmt(settings.zoom || 1)}·D_${escapeXml(settings.lens || 'clean')}(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
+  const [focalLength, distortion] = resolveLens(settings);
+  const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(distortion)}%(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
   const slicing = settings.spiral
     ? `Γₖ: ${lineCount}q(p) − atan2(v,u) = k + 0.5`
     : `hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
@@ -2023,8 +2044,8 @@ function project(
   zoom: number,
   panX: number,
   panY: number,
-  lens: string,
-  lensAmount: number,
+  lensFocalLength: number,
+  lensDistortion: number,
 ): Projection {
   const { V } = mesh;
   const n = V.length / 3;
@@ -2041,23 +2062,38 @@ function project(
     const x = V[i],
       y = V[i + 1],
       z = V[i + 2];
+    const d = x * f[0] + y * f[1] + z * f[2];
     const screen = projectCameraPoint(
       x * r[0] + y * r[1] + z * r[2],
       x * u[0] + y * u[1] + z * u[2],
+      d,
       scale,
       ox,
       oy,
-      lens,
-      lensAmount,
+      lensFocalLength,
+      lensDistortion,
     );
     sx[v] = screen[0];
     sy[v] = screen[1]; // SVG y grows downward
-    const d = x * f[0] + y * f[1] + z * f[2];
     sd[v] = d;
     if (d < dmin) dmin = d;
     if (d > dmax) dmax = d;
   }
-  return { sx, sy, sd, dmin, dmax, scale, ox, oy, f, r, u, lens, lensAmount };
+  return {
+    sx,
+    sy,
+    sd,
+    dmin,
+    dmax,
+    scale,
+    ox,
+    oy,
+    f,
+    r,
+    u,
+    lensFocalLength,
+    lensDistortion,
+  };
 }
 
 function scalarField(
@@ -2260,6 +2296,7 @@ function computeLineArtInstance(
   const started = performance.now();
   const W = settings.pw,
     H = settings.ph;
+  const [focalLength, distortion] = resolveLens(settings);
   const P = project(
     mesh,
     cameraBasis(settings.az, settings.el, settings.roll),
@@ -2269,8 +2306,8 @@ function computeLineArtInstance(
     settings.zoom,
     settings.panX,
     settings.panY,
-    settings.lens,
-    settings.lensAmount,
+    focalLength,
+    distortion,
   );
   const offsets = mesh.lineArt!.offsets;
   const quality = quick
@@ -2435,6 +2472,7 @@ function computeContourInstance(
   const W = settings.pw,
     H = settings.ph;
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
+  const [focalLength, distortion] = resolveLens(settings);
   const P = project(
     mesh,
     cam,
@@ -2444,8 +2482,8 @@ function computeContourInstance(
     settings.zoom,
     settings.panX,
     settings.panY,
-    settings.lens,
-    settings.lensAmount,
+    focalLength,
+    distortion,
   );
   const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);
   const blueprintGeometry = {

@@ -460,19 +460,19 @@ describe('contour output effects', () => {
 
 describe('contour projection modes', () => {
   it.each([
-    ['up', 'clean'],
-    ['cam', 'wide'],
-    ['x', 'fisheye'],
-    ['y', 'tele'],
-    ['custom', 'clean'],
-  ])('renders the %s field through the %s lens', (axis, lens) => {
+    ['up', 50, 0],
+    ['cam', 24, -45],
+    ['x', 12, -100],
+    ['y', 85, 40],
+    ['custom', 300, 0],
+  ])('renders the %s field through a %s mm / %s%% lens', (axis, focalLength, distortion) => {
     const result = computeContours(
       makeContourMesh(),
       {
         ...contourSettings,
         axis,
-        lens,
-        lensAmount: 180,
+        lensFocalLength: focalLength,
+        lensDistortion: distortion,
         hide: false,
         sil: false,
       },
@@ -481,6 +481,20 @@ describe('contour projection modes', () => {
 
     expect(result.paths).toBeGreaterThan(0);
     expect(result.svg).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('changes the projection continuously with focal length and signed distortion', () => {
+    const render = (lensFocalLength: number, lensDistortion: number) =>
+      computeContours(
+        makeContourMesh(),
+        { ...contourSettings, lensFocalLength, lensDistortion, hide: false, sil: false },
+        true,
+      ).svg;
+
+    const neutral = render(50, 0);
+    expect(render(18, 0)).not.toBe(neutral);
+    expect(render(50, -60)).not.toBe(neutral);
+    expect(render(50, 60)).not.toBe(neutral);
   });
 
   it('fans slice planes from an inferred source without producing invalid paths', () => {

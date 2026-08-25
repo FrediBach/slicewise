@@ -1,5 +1,5 @@
 import { Section } from '../ui/section';
-import { FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
+import { FieldGroup, ValueControl } from '../controls/FormControls';
 
 export function ViewPanel() {
   return (
@@ -33,27 +33,23 @@ export function ViewPanel() {
           value="0"
           unit="mm"
         />
-        <SelectControl
-          id="lens"
-          label="Camera lens"
-          defaultValue="clean"
-          randomizable
-          rowClassName="select-row"
-        >
-          <option value="clean">50 mm · clean</option>
-          <option value="wide">24 mm · wide barrel</option>
-          <option value="fisheye">12 mm · fisheye</option>
-          <option value="tele">85 mm · pincushion</option>
-        </SelectControl>
         <ValueControl
-          id="lensAmount"
-          label="Distortion"
-          min="0"
-          max="200"
+          id="lensFocalLength"
+          label="Focal length"
+          min="8"
+          max="300"
           step="1"
-          value="100"
+          value="50"
+          unit="mm"
+        />
+        <ValueControl
+          id="lensDistortion"
+          label="Lens distortion"
+          min="-100"
+          max="100"
+          step="1"
+          value="0"
           unit="%"
-          disabled
         />
       </FieldGroup>
     </Section>
