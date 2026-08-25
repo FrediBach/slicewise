@@ -9,9 +9,17 @@ export function ViewPanel() {
       badge="02"
     >
       <FieldGroup title="Orientation">
-        <ValueControl id="az" label="Azimuth" min="-180" max="180" step="1" value="35" unit="°" />
-        <ValueControl id="el" label="Elevation" min="-180" max="180" step="1" value="24" unit="°" />
-        <ValueControl id="rl" label="Roll" min="-180" max="180" step="1" value="0" unit="°" />
+        <ValueControl id="az" label="Azimuth" min="-180" max="180" step="0.1" value="35" unit="°" />
+        <ValueControl
+          id="el"
+          label="Elevation"
+          min="-180"
+          max="180"
+          step="0.1"
+          value="24"
+          unit="°"
+        />
+        <ValueControl id="rl" label="Roll" min="-180" max="180" step="0.1" value="0" unit="°" />
       </FieldGroup>
       <FieldGroup title="Framing & lens">
         <ValueControl id="zoom" label="Scale" min="0.2" max="3" step="0.01" value="1" unit="×" />
@@ -41,6 +49,15 @@ export function ViewPanel() {
           step="1"
           value="50"
           unit="mm"
+        />
+        <ValueControl
+          id="lensPerspective"
+          label="Perspective"
+          min="0"
+          max="100"
+          step="1"
+          value="0"
+          unit="%"
         />
         <ValueControl
           id="lensDistortion"

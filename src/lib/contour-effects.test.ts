@@ -484,10 +484,17 @@ describe('contour projection modes', () => {
   });
 
   it('changes the projection continuously with focal length and signed distortion', () => {
-    const render = (lensFocalLength: number, lensDistortion: number) =>
+    const render = (lensFocalLength: number, lensDistortion: number, lensPerspective = 100) =>
       computeContours(
         makeContourMesh(),
-        { ...contourSettings, lensFocalLength, lensDistortion, hide: false, sil: false },
+        {
+          ...contourSettings,
+          lensFocalLength,
+          lensPerspective,
+          lensDistortion,
+          hide: false,
+          sil: false,
+        },
         true,
       ).svg;
 
@@ -495,6 +502,7 @@ describe('contour projection modes', () => {
     expect(render(18, 0)).not.toBe(neutral);
     expect(render(50, -60)).not.toBe(neutral);
     expect(render(50, 60)).not.toBe(neutral);
+    expect(render(18, 0, 0)).toBe(render(300, 0, 0));
   });
 
   it('fans slice planes from an inferred source without producing invalid paths', () => {

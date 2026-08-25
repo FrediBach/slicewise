@@ -149,6 +149,7 @@ const state: AppState = {
   panX: 0,
   panY: 0,
   lensFocalLength: 50,
+  lensPerspective: 0,
   lensDistortion: 0,
   lines: 40,
   gapEase: 'linear',
@@ -312,6 +313,7 @@ if (typeof document !== 'undefined') {
       panX,
       panY,
       lensFocalLength,
+      lensPerspective,
       lensDistortion,
       lines,
       gapEase,
@@ -395,6 +397,7 @@ if (typeof document !== 'undefined') {
       panX,
       panY,
       lensFocalLength,
+      lensPerspective,
       lensDistortion,
       lines,
       gapEase,
@@ -1001,6 +1004,7 @@ if (typeof document !== 'undefined') {
   bindPair('panX', 'panX');
   bindPair('panY', 'panY');
   bindPair('lensFocalLength', 'lensFocalLength');
+  bindPair('lensPerspective', 'lensPerspective');
   bindPair('lensDistortion', 'lensDistortion');
   bindPair('lines', 'lines');
   bindPair('easeStrength', 'easeStrength');
@@ -1717,6 +1721,7 @@ if (typeof document !== 'undefined') {
     ['panX', 'panX'],
     ['panY', 'panY'],
     ['lensFocalLength', 'lensFocalLength'],
+    ['lensPerspective', 'lensPerspective'],
     ['lensDistortion', 'lensDistortion'],
     ['lines', 'lines'],
     ['quality', 'quality'],
@@ -1831,6 +1836,9 @@ if (typeof document !== 'undefined') {
     restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
       ? restored.lensFocalLength
       : 50;
+    restored.lensPerspective = Number.isFinite(restored.lensPerspective)
+      ? restored.lensPerspective
+      : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
         clean: 0,
@@ -1966,7 +1974,12 @@ if (typeof document !== 'undefined') {
     commitParameterHistory();
     restoreParameterSnapshot(parameters);
     const migratedLocks = locks.includes('lens')
-      ? [...locks.filter((id) => id !== 'lens'), 'lensFocalLength', 'lensDistortion']
+      ? [
+          ...locks.filter((id) => id !== 'lens'),
+          'lensFocalLength',
+          'lensPerspective',
+          'lensDistortion',
+        ]
       : locks;
     document.dispatchEvent(new CustomEvent('randomlockbulk', { detail: { locks: migratedLocks } }));
     document.dispatchEvent(new CustomEvent('randomlockrestore'));
@@ -2030,6 +2043,7 @@ if (typeof document !== 'undefined') {
     randomizePair('panY', 'panY', () => randomIn(-state.ph * 0.15, state.ph * 0.15));
 
     randomizePair('lensFocalLength', 'lensFocalLength', () => randomInt(16, 135));
+    randomizePair('lensPerspective', 'lensPerspective', () => randomInt(0, 100));
     randomizePair('lensDistortion', 'lensDistortion', () => randomInt(-70, 55));
 
     randomizePair('lines', 'lines', () => randomInt(22, 84));

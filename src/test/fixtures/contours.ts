@@ -14,6 +14,7 @@ export const contourSettings = {
   panX: 0,
   panY: 0,
   lensFocalLength: 50,
+  lensPerspective: 0,
   lensDistortion: 0,
   lines: 8,
   gapEase: 'linear',
