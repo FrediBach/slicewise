@@ -10,6 +10,11 @@ import {
   type LineIndexColor,
 } from './contour-engine';
 import { GEN_DEFAULTS, type GeneratedMesh, type GenerativeParams } from './generativeMesh';
+import {
+  generateHyperbolicTiling,
+  HYPERBOLIC_TILING_DEFAULTS,
+  isHyperbolicPair,
+} from './hyperbolic-tiling';
 import { radialColumnDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from './demo-meshes';
 import { parseOBJ, parsePLY, parseSTL, vertexNormals, weld } from './mesh';
 import {
@@ -31,7 +36,7 @@ type RenderMesh = ContourMesh & {
   V: Float32Array;
   T: Uint32Array;
   N: Float32Array;
-  lineArt?: { offsets: Uint32Array };
+  lineArt?: { offsets: Uint32Array; kind?: 'svg' | 'hyperbolic-tiling' };
 };
 type NormalizedMesh = Omit<RenderMesh, 'N'> & { N?: Float32Array };
 
@@ -49,6 +54,10 @@ type AppState = RenderSettings &
     svgRoundness: number;
     svgMode: 'extrude' | 'centerline';
     svgCenterlinePruning: number;
+    tilingP: number;
+    tilingQ: number;
+    tilingDepth: number;
+    tilingDiskScale: number;
     exportFormat: string;
     gcodeProfile: string;
     drawFeed: number;
@@ -143,6 +152,7 @@ const state: AppState = {
   svgRoundness: 25,
   svgMode: 'extrude',
   svgCenterlinePruning: 2,
+  ...HYPERBOLIC_TILING_DEFAULTS,
   ...GEN_DEFAULTS,
   az: 35,
   el: 24,
@@ -357,6 +367,10 @@ if (typeof document !== 'undefined') {
       inversionCenterY,
       inversionRadius,
       inversionStrength,
+      tilingP,
+      tilingQ,
+      tilingDepth,
+      tilingDiskScale,
       lines,
       gapEase,
       easeStrength,
@@ -470,6 +484,10 @@ if (typeof document !== 'undefined') {
       inversionCenterY,
       inversionRadius,
       inversionStrength,
+      tilingP,
+      tilingQ,
+      tilingDepth,
+      tilingDiskScale,
       lines,
       gapEase,
       easeStrength,
@@ -764,6 +782,7 @@ if (typeof document !== 'undefined') {
           T: T.buffer,
           N: N.buffer,
           lineArtOffsets: offsets?.buffer,
+          lineArtKind: mesh.lineArt?.kind,
         },
       },
       transfer,
@@ -851,6 +870,53 @@ if (typeof document !== 'undefined') {
       $(id).value = String(value);
       $(id + 'N').value = String(value);
     }
+  }
+  function buildHyperbolicTiling(announce = false): void {
+    try {
+      const tiling = generateHyperbolicTiling({
+        p: state.tilingP,
+        q: state.tilingQ,
+        depth: state.tilingDepth,
+        maxEdges: 12_000,
+      });
+      const pointCount = tiling.points.length / 2;
+      const V = new Float32Array(pointCount * 3);
+      for (let point = 0; point < pointCount; point++) {
+        V[point * 3] = tiling.points[point * 2];
+        V[point * 3 + 1] = tiling.points[point * 2 + 1];
+      }
+      state.mesh = {
+        V,
+        T: new Uint32Array(),
+        N: new Float32Array(V.length),
+        lineArt: { offsets: tiling.offsets, kind: 'hyperbolic-tiling' },
+      };
+      rawCache = null;
+      sendMeshToWorker(state.mesh);
+      state.name = `generative · {${state.tilingP},${state.tilingQ}} hyperbolic tiling`;
+      $('mName').textContent = state.name;
+      $('mName').title =
+        `${tiling.tileCount.toLocaleString()} reflected polygons${tiling.truncated ? ' · edge limit reached' : ''}`;
+      $('mTris').textContent = tiling.edges.length.toLocaleString();
+      $('mUnits').textContent = 'geodesic edges';
+      $('mErr').hidden = true;
+      redraw(false);
+      if (announce) toast(`Generated {${state.tilingP},${state.tilingQ}} tiling`);
+    } catch (error) {
+      showError(errorMessage(error));
+    }
+  }
+  function loadHyperbolicTiling(announce = true): void {
+    state.source = 'hyperbolic-tiling';
+    state.svgSource = null;
+    state.svgSourceName = '';
+    cancelGeneration();
+    syncSourceControls();
+    state.upY = false;
+    $('upZ').setAttribute('aria-pressed', 'true');
+    $('upY').setAttribute('aria-pressed', 'false');
+    setCenterlineView();
+    buildHyperbolicTiling(announce);
   }
   function showError(msg: string): void {
     const el = $('mErr');
@@ -1104,6 +1170,7 @@ if (typeof document !== 'undefined') {
   bindPair('inversionCenterY', 'inversionCenterY');
   bindPair('inversionRadius', 'inversionRadius');
   bindPair('inversionStrength', 'inversionStrength');
+  bindPair('tilingDiskScale', 'tilingDiskScale');
   bindPair('lensDistortion', 'lensDistortion');
   bindPair('lines', 'lines');
   bindPair('easeStrength', 'easeStrength');
@@ -1235,6 +1302,27 @@ if (typeof document !== 'undefined') {
     state.genField = inputTarget(event).value as GenerativeParams['genField'];
     queueGeneration(0);
   });
+  function bindTilingInteger(id: 'tilingP' | 'tilingQ' | 'tilingDepth'): void {
+    const slider = $(id),
+      number = $(id + 'N');
+    const apply = (value: string, from: 's' | 'n'): void => {
+      const next = Math.round(
+        clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max)),
+      );
+      if (!Number.isFinite(next)) return;
+      state[id] = next;
+      if (from !== 's') slider.value = String(next);
+      if (from !== 'n') number.value = String(next);
+      if (state.source === 'hyperbolic-tiling') buildHyperbolicTiling();
+    };
+    slider.addEventListener('input', (event) => apply(inputTarget(event).value, 's'));
+    number.addEventListener('input', (event) => apply(inputTarget(event).value, 'n'));
+    slider.addEventListener('change', () => scheduleParameterHistory());
+    number.addEventListener('change', () => scheduleParameterHistory());
+  }
+  bindTilingInteger('tilingP');
+  bindTilingInteger('tilingQ');
+  bindTilingInteger('tilingDepth');
 
   document.addEventListener('morphchange', (event) => {
     const customEvent = event as CustomEvent<MorphChangeDetail>;
@@ -1338,6 +1426,7 @@ if (typeof document !== 'undefined') {
   }
   function syncSourceControls(): void {
     $('generativeControls').hidden = state.source !== 'generative';
+    $('tilingControls').hidden = state.source !== 'hyperbolic-tiling';
     syncSVGControls();
   }
   $('svgRounded').addEventListener('change', (event) => {
@@ -1795,7 +1884,11 @@ if (typeof document !== 'undefined') {
 
   /* file input + drag and drop */
   $('demo').addEventListener('change', (e) =>
-    inputTarget(e).value === 'generative' ? loadGenerative() : loadDemo(inputTarget(e).value),
+    inputTarget(e).value === 'generative'
+      ? loadGenerative()
+      : inputTarget(e).value === 'hyperbolic-tiling'
+        ? loadHyperbolicTiling()
+        : loadDemo(inputTarget(e).value),
   );
   $('file').addEventListener('change', (e) => {
     const file = inputTarget(e).files?.[0];
@@ -1964,6 +2057,10 @@ if (typeof document !== 'undefined') {
     ['inversionCenterY', 'inversionCenterY'],
     ['inversionRadius', 'inversionRadius'],
     ['inversionStrength', 'inversionStrength'],
+    ['tilingP', 'tilingP'],
+    ['tilingQ', 'tilingQ'],
+    ['tilingDepth', 'tilingDepth'],
+    ['tilingDiskScale', 'tilingDiskScale'],
     ['lensDistortion', 'lensDistortion'],
     ['lines', 'lines'],
     ['quality', 'quality'],
@@ -2146,6 +2243,22 @@ if (typeof document !== 'undefined') {
     restored.inversionStrength = Number.isFinite(restored.inversionStrength)
       ? restored.inversionStrength
       : 100;
+    restored.tilingP = Number.isFinite(restored.tilingP)
+      ? Math.round(restored.tilingP)
+      : HYPERBOLIC_TILING_DEFAULTS.tilingP;
+    restored.tilingQ = Number.isFinite(restored.tilingQ)
+      ? Math.round(restored.tilingQ)
+      : HYPERBOLIC_TILING_DEFAULTS.tilingQ;
+    if (!isHyperbolicPair(restored.tilingP, restored.tilingQ)) {
+      restored.tilingP = HYPERBOLIC_TILING_DEFAULTS.tilingP;
+      restored.tilingQ = HYPERBOLIC_TILING_DEFAULTS.tilingQ;
+    }
+    restored.tilingDepth = Number.isFinite(restored.tilingDepth)
+      ? Math.round(restored.tilingDepth)
+      : HYPERBOLIC_TILING_DEFAULTS.tilingDepth;
+    restored.tilingDiskScale = Number.isFinite(restored.tilingDiskScale)
+      ? restored.tilingDiskScale
+      : HYPERBOLIC_TILING_DEFAULTS.tilingDiskScale;
     restored.waveCenterX = Number.isFinite(restored.waveCenterX) ? restored.waveCenterX : 0;
     restored.waveCenterY = Number.isFinite(restored.waveCenterY) ? restored.waveCenterY : 0;
     restored.waveCenterZ = Number.isFinite(restored.waveCenterZ) ? restored.waveCenterZ : 0;
@@ -2247,7 +2360,8 @@ if (typeof document !== 'undefined') {
         },
       }),
     );
-    redraw(false);
+    if (state.source === 'hyperbolic-tiling') buildHyperbolicTiling();
+    else redraw(false);
     restoringParameters = false;
     updateHistoryButtons();
   }
@@ -2400,6 +2514,24 @@ if (typeof document !== 'undefined') {
     randomizationScope = scope ? new Set(scope) : null;
     // Keep the loaded source and physical sheet size stable; randomize the
     // creative choices that shape the contour study.
+    if (shouldRandomize('tilingP') || shouldRandomize('tilingQ')) {
+      const validPairs: Array<readonly [number, number]> = [];
+      for (let p = 3; p <= 12; p++)
+        for (let q = 3; q <= 12; q++)
+          if (
+            isHyperbolicPair(p, q) &&
+            (shouldRandomize('tilingP') || p === state.tilingP) &&
+            (shouldRandomize('tilingQ') || q === state.tilingQ)
+          )
+            validPairs.push([p, q]);
+      const [p, q] = randomItem(validPairs);
+      if (shouldRandomize('tilingP')) state.tilingP = p;
+      if (shouldRandomize('tilingQ')) state.tilingQ = q;
+      $('tilingP').value = $('tilingPN').value = String(state.tilingP);
+      $('tilingQ').value = $('tilingQN').value = String(state.tilingQ);
+    }
+    randomizePair('tilingDepth', 'tilingDepth', () => randomInt(2, 5));
+    randomizePair('tilingDiskScale', 'tilingDiskScale', () => randomInt(72, 100));
     randomizePair('az', 'az', () => randomInt(-180, 180));
     randomizePair('el', 'el', () => randomInt(-70, 70));
     randomizePair('rl', 'roll', () => randomInt(-35, 35));
@@ -2611,7 +2743,8 @@ if (typeof document !== 'undefined') {
     syncBlueprintControls();
     $('topographicMap').checked = state.topographicMap;
 
-    redraw(false);
+    if (state.source === 'hyperbolic-tiling') buildHyperbolicTiling();
+    else redraw(false);
     toast(groupTitle ? `${groupTitle} parameters randomized` : 'Parameters randomized');
     randomizationScope = null;
   }

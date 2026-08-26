@@ -600,6 +600,8 @@ Orthographic already exists as a camera projection and should be described in th
 
 ## Session 12 — Hyperbolic tiling generator
 
+**Status: completed.**
+
 ### Goal
 
 Generate deterministic `{p,q}` tilings in the Poincaré disk as plotter-ready line art.
@@ -625,6 +627,15 @@ Only accept hyperbolic pairs satisfying `(p - 2) * (q - 2) > 4`.
 - Decide source placement: preferred initial design is a new deterministic demo/generative line-art source, not an effect applied to arbitrary meshes.
 - Reuse the Möbius kernel to navigate the tiling.
 - Ensure clipping, color, Humanizer, yarn, masks, SVG, and G-code work through normal line-art composition.
+
+### Decisions recorded
+
+- The first source ships as complete unique edges; selected-ring output remains deferred.
+- The source accepts integer `p` and `q` from 3–12 only when `(p − 2)(q − 2) > 4`, generation depth 0–6, and disk scale 10–100%. Defaults are `{7,3}`, depth 4, and 92% scale.
+- Breadth-first reflection is capped at 12,000 unique edges. Disk-space tile centres and unoriented edge endpoints use deterministic quantized keys; reaching the cap returns the deterministic prefix and reports it in the source status.
+- Geodesics use circles orthogonal to the unit boundary, with the collinear diameter limit represented as a straight segment. Circular arcs are sampled to a 0.0015 disk-space sagitta tolerance and capped at 64 segments per edge.
+- Disk scale is applied during line-art rendering rather than baked into the tiling, so snapshots, undo/redo, randomization, and X/Y morphing can reuse one generated edge set. Möbius rotation and displacement reuse the existing exclusive projection-warp controls.
+- The worker line-art payload carries a small source kind alongside transferable points and offsets. Hyperbolic tilings otherwise use the same effects, clipping, SVG, and G-code composition path as imported SVG centrelines.
 
 ### Tests and manual check
 

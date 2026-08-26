@@ -45,7 +45,7 @@ export interface ContourMesh {
   V: NumericArray;
   T: NumericArray;
   N?: NumericArray;
-  lineArt?: { offsets: NumericArray };
+  lineArt?: { offsets: NumericArray; kind?: 'svg' | 'hyperbolic-tiling' };
 }
 
 export interface GradientStop {
@@ -82,6 +82,10 @@ export interface ContourSettings extends GenerativeMaskSettings {
   inversionCenterY?: number;
   inversionRadius?: number;
   inversionStrength?: number;
+  tilingP?: number;
+  tilingQ?: number;
+  tilingDepth?: number;
+  tilingDiskScale?: number;
   /** Legacy preset fields retained for stored snapshots and callers. */
   lens?: string;
   lensAmount?: number;
@@ -2545,8 +2549,20 @@ function computeLineArtInstance(
   const [focalLength, distortion] = resolveLens(settings);
   const perspective = clamp(settings.lensPerspective ?? 0, 0, 100);
   const warpExponent = clamp(settings.lensWarpExponent ?? 0, 0, 100);
+  const lineArtKind = mesh.lineArt!.kind ?? 'svg';
+  const diskScale =
+    lineArtKind === 'hyperbolic-tiling' ? clamp((settings.tilingDiskScale ?? 92) / 100, 0.1, 1) : 1;
+  const projectedMesh =
+    diskScale === 1
+      ? mesh
+      : {
+          ...mesh,
+          V: Float32Array.from(mesh.V, (value, index) =>
+            index % 3 === 2 ? value : value * diskScale,
+          ),
+        };
   const P = project(
-    mesh,
+    projectedMesh,
     cameraBasis(settings.az, settings.el, settings.roll),
     W,
     H,
@@ -2585,7 +2601,7 @@ function computeLineArtInstance(
     const polyline: number[] = [];
     for (let point = offsets[runIndex]; point < offsets[runIndex + 1]; point++)
       polyline.push(point);
-    const projected = projectPolylineAdaptive(mesh.V, polyline, P, {
+    const projected = projectPolylineAdaptive(projectedMesh.V, polyline, P, {
       tolerance: tolerance * 0.5,
       maxDepth: Math.min(8, 3 + Math.ceil(quality / 2)),
       maxNodes: Math.min(8192, Math.max(1024, quality * 1024)),
@@ -2704,7 +2720,9 @@ ${artwork}
                   color: palette[index],
                   label: settings.gradientEnabled
                     ? `gradient colour ${index + 1}`
-                    : 'SVG centreline',
+                    : lineArtKind === 'hyperbolic-tiling'
+                      ? 'Hyperbolic tiling'
+                      : 'SVG centreline',
                   runs: colorRuns,
                 },
               ]

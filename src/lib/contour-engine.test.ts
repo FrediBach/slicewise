@@ -2,9 +2,28 @@ import { describe, expect, it } from 'vitest';
 import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
 import { computeContours } from './contour-engine';
 import { generateGCode } from './gcode';
+import { generateHyperbolicTiling } from './hyperbolic-tiling';
 import { cameraBasis, projectMesh } from './projection';
 
 describe('computeContours', () => {
+  function hyperbolicTilingMesh() {
+    const tiling = generateHyperbolicTiling({ p: 7, q: 3, depth: 2 });
+    const V = new Float32Array((tiling.points.length / 2) * 3);
+    for (let index = 0; index < tiling.points.length / 2; index++) {
+      V[index * 3] = tiling.points[index * 2];
+      V[index * 3 + 1] = tiling.points[index * 2 + 1];
+    }
+    return {
+      tiling,
+      mesh: {
+        V,
+        T: new Uint32Array(),
+        N: new Float32Array(V.length),
+        lineArt: { offsets: tiling.offsets, kind: 'hyperbolic-tiling' as const },
+      },
+    };
+  }
+
   it('turns a normalized mesh into finite SVG and grouped toolpaths', () => {
     const result = computeContours(makeContourMesh(), contourSettings, false);
 
@@ -105,6 +124,75 @@ describe('computeContours', () => {
     expect(result.toolpaths[0].label).toBe('SVG centreline');
     expect(result.toolpaths[0].runs[0]).toHaveLength(4);
     expect(result.svg).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('renders hyperbolic geodesics through matching SVG and G-code centreline runs', () => {
+    const { mesh, tiling } = hyperbolicTilingMesh();
+    const settings = {
+      ...contourSettings,
+      az: -90,
+      el: 90,
+      hide: false,
+      sil: false,
+      bg: false,
+      maskOutline: false,
+      clipToArtboard: false,
+      tilingDiskScale: 92,
+    };
+    const result = computeContours(mesh, settings, false);
+    const gcode = generateGCode(
+      result.toolpaths,
+      { width: settings.pw, height: settings.ph },
+      {
+        name: 'hyperbolic tiling',
+        drawFeed: 1200,
+        travelFeed: 3000,
+        penUp: 5,
+        penDown: 0,
+        zFeed: 600,
+        origin: 'bottom-left',
+      },
+    );
+
+    expect(result.paths).toBe(tiling.edges.length);
+    expect(result.toolpaths).toHaveLength(1);
+    expect(result.toolpaths[0].label).toBe('Hyperbolic tiling');
+    expect(result.toolpaths[0].runs).toHaveLength(tiling.edges.length);
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+    expect(gcode).toContain('; Tool 1: Hyperbolic tiling');
+    expect(gcode).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('morphs hyperbolic disk scale without regenerating or changing edge count', () => {
+    const { mesh, tiling } = hyperbolicTilingMesh();
+    const result = computeContours(
+      mesh,
+      {
+        ...contourSettings,
+        az: -90,
+        el: 90,
+        hide: false,
+        sil: false,
+        bg: false,
+        maskOutline: false,
+        clipToArtboard: false,
+        tilingDiskScale: 100,
+        morphEnabled: true,
+        morphSteps: 2,
+        morphTargets: { tilingDiskScale: 50 },
+      },
+      false,
+    );
+
+    expect(result.paths).toBe(tiling.edges.length * 2);
+    expect(result.svg).toContain('data-morph-x-step="2"');
+    expect(result.toolpaths[0].runs).toHaveLength(tiling.edges.length * 2);
+    const centerX = contourSettings.pw / 2,
+      first = result.toolpaths[0].runs.slice(0, tiling.edges.length),
+      second = result.toolpaths[0].runs.slice(tiling.edges.length);
+    const horizontalExtent = (runs: number[][]) =>
+      Math.max(...runs.flatMap((run) => run.filter((_, index) => index % 2 === 0))) - centerX;
+    expect(horizontalExtent(first)).toBeGreaterThan(horizontalExtent(second) * 1.8);
   });
 
   it.each([

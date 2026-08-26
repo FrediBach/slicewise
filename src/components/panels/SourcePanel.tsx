@@ -2,6 +2,7 @@ import { Box, FileUp } from 'lucide-react';
 import { Section } from '../ui/section';
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
 import { GEN_DEFAULTS } from '../../lib/generativeMesh';
+import { HYPERBOLIC_TILING_DEFAULTS } from '../../lib/hyperbolic-tiling';
 
 export function SourcePanel() {
   return (
@@ -14,6 +15,7 @@ export function SourcePanel() {
       <SelectControl id="demo" label="Source" defaultValue="knot" rowClassName="demo-row">
         <optgroup label="Generate">
           <option value="generative">Generative mesh</option>
+          <option value="hyperbolic-tiling">Hyperbolic tiling</option>
         </optgroup>
         <optgroup label="Demo meshes">
           <option value="knot">Torus knot</option>
@@ -123,6 +125,50 @@ export function SourcePanel() {
           />
           <p className="gradient-note">
             The mesh rebuilds live. Higher resolutions are smoother but take longer to generate.
+          </p>
+        </div>
+      </FieldGroup>
+      <FieldGroup title="Hyperbolic tiling" className="tiling-controls">
+        <div id="tilingControls" hidden>
+          <ValueControl
+            id="tilingP"
+            label="Polygon sides"
+            min="3"
+            max="12"
+            step="1"
+            value={HYPERBOLIC_TILING_DEFAULTS.tilingP}
+            morphable={false}
+          />
+          <ValueControl
+            id="tilingQ"
+            label="Polygons per vertex"
+            min="3"
+            max="12"
+            step="1"
+            value={HYPERBOLIC_TILING_DEFAULTS.tilingQ}
+            morphable={false}
+          />
+          <ValueControl
+            id="tilingDepth"
+            label="Generation depth"
+            min="0"
+            max="6"
+            step="1"
+            value={HYPERBOLIC_TILING_DEFAULTS.tilingDepth}
+            morphable={false}
+          />
+          <ValueControl
+            id="tilingDiskScale"
+            label="Disk scale"
+            min="10"
+            max="100"
+            step="1"
+            value={HYPERBOLIC_TILING_DEFAULTS.tilingDiskScale}
+            unit="%"
+          />
+          <p className="gradient-note">
+            Requires (p − 2)(q − 2) &gt; 4. Use Hyperbolic Möbius in View to rotate or navigate the
+            disk.
           </p>
         </div>
       </FieldGroup>
