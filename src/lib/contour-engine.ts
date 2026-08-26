@@ -20,6 +20,7 @@ import {
 } from './generative-mask';
 import {
   createCylindricalScalarField,
+  createCurvatureScalarField,
   createGeodesicScalarField,
   createMultiSourceGeodesicField,
   createPlanarScalarField,
@@ -96,6 +97,11 @@ export interface ContourSettings extends GenerativeMaskSettings {
   geodesicMode?: 'single' | 'nearest' | 'difference' | 'voronoi';
   geodesicSeedBAzimuth?: number;
   geodesicSeedBElevation?: number;
+  curvatureMethod?: 'gaussian' | 'mean';
+  curvatureSmoothing?: number;
+  curvatureRange?: number;
+  curvatureContrast?: number;
+  curvatureIncludeZero?: boolean;
   divergence: number;
   sliceLfo: boolean;
   sliceLfoAmplitude: number;
@@ -1406,6 +1412,11 @@ function deterministicDrawingNumber(
       settings.geodesicMode,
       settings.geodesicSeedBAzimuth,
       settings.geodesicSeedBElevation,
+      settings.curvatureMethod,
+      settings.curvatureSmoothing,
+      settings.curvatureRange,
+      settings.curvatureContrast,
+      settings.curvatureIncludeZero,
       settings.sliceLfo,
       settings.sliceLfoAmplitude,
       settings.sliceLfoCycles,
@@ -1549,7 +1560,7 @@ function blueprintDocument(
       ? geodesicFormula
       : settings.axis === 'geodesic' && geodesicMode === 'difference'
         ? `${geodesicFormula}hᵢ ∈ [${fieldMin.toFixed(3)}, 0, ${fieldMax.toFixed(3)}] · symmetric`
-        : `${settings.axis === 'geodesic' ? geodesicFormula : ''}hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
+        : `${settings.axis === 'geodesic' ? geodesicFormula : settings.axis === 'curvature' ? `q(v) = ${settings.curvatureMethod === 'mean' ? 'H' : 'K'}(v); ` : ''}hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
   const objectStats = `${vector ? `n̂_${axis} = [${vector}]` : '∇q = LOCAL / UNAVAILABLE'} · V=${Math.round(geometry.vertices || 0)} · F=${Math.round(geometry.triangles || 0)}`;
   const common = `fill="none" stroke="${ink}" vector-effect="non-scaling-stroke"`;
   const text = `fill="${ink}" stroke="none" font-family="DM Mono,ui-monospace,monospace"`;
@@ -2744,12 +2755,38 @@ function computeContourInstance(
                 directionB: geodesicSeedBDirection,
                 mode: geodesicMode,
               })
-          : createPlanarScalarField(mesh, {
-              axis: settings.axis,
-              cutAz: settings.cutAz,
-              cutEl: settings.cutEl,
-              camera: { values: P.sd, min: P.dmin, max: P.dmax, direction: P.f },
-            });
+          : settings.axis === 'curvature'
+            ? createCurvatureScalarField(mesh, {
+                method: settings.curvatureMethod === 'mean' ? 'mean' : 'gaussian',
+                smoothingIterations: clamp(
+                  Number.isFinite(Number(settings.curvatureSmoothing))
+                    ? Number(settings.curvatureSmoothing)
+                    : 2,
+                  0,
+                  20,
+                ),
+                rangePercentile: clamp(
+                  Number.isFinite(Number(settings.curvatureRange))
+                    ? Number(settings.curvatureRange)
+                    : 98,
+                  80,
+                  100,
+                ),
+                contrast: clamp(
+                  Number.isFinite(Number(settings.curvatureContrast))
+                    ? Number(settings.curvatureContrast)
+                    : 100,
+                  25,
+                  200,
+                ),
+                includeZero: settings.curvatureIncludeZero !== false,
+              })
+            : createPlanarScalarField(mesh, {
+                axis: settings.axis,
+                cutAz: settings.cutAz,
+                cutEl: settings.cutEl,
+                camera: { values: P.sd, min: P.dmin, max: P.dmax, direction: P.f },
+              });
   const fieldFeatures = resolveScalarFieldFeatures(field, {
     lfo: Boolean(settings.sliceLfo),
     divergence: clamp(settings.divergence || 0, 0, 160),

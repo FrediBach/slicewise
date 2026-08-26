@@ -9,6 +9,7 @@ import {
   type SurfaceGraphVoronoi,
 } from './mesh-geodesics';
 import { getMeshTopology, type TopologyMesh } from './mesh-topology';
+import { meshCurvature, type CurvatureMethod } from './mesh-curvature';
 
 export type MeshScalarFieldKind = 'planar' | 'analytic' | 'intrinsic';
 
@@ -83,6 +84,16 @@ export interface MultiSourceGeodesicFieldOptions {
   directionA: ModelDirection;
   directionB: ModelDirection;
   mode: MultiSourceGeodesicMode;
+}
+
+export interface CurvatureScalarFieldOptions {
+  method: CurvatureMethod;
+  smoothingIterations: number;
+  /** Symmetric absolute-value percentile retained for display, from 80 to 100. */
+  rangePercentile: number;
+  /** Mid-range contrast. 100 preserves a linear normalized field. */
+  contrast: number;
+  includeZero: boolean;
 }
 
 export type SliceExplosionMode = 'constant-direction' | 'local-gradient' | 'none';
@@ -222,6 +233,48 @@ function finiteRange(values: ArrayLike<number>): {
     min: min === Infinity ? 0 : min,
     max: max === -Infinity ? 0 : max,
     finiteCount,
+  };
+}
+
+const percentile = (sorted: readonly number[], percentage: number): number => {
+  if (!sorted.length) return 0;
+  const position = ((sorted.length - 1) * percentage) / 100;
+  const lower = Math.floor(position),
+    upper = Math.ceil(position),
+    blend = position - lower;
+  return sorted[lower] * (1 - blend) + sorted[upper] * blend;
+};
+
+export function createCurvatureScalarField(
+  mesh: TopologyMesh,
+  options: CurvatureScalarFieldOptions,
+): MeshScalarField {
+  const smoothingIterations = Math.max(0, Math.min(20, Math.floor(options.smoothingIterations)));
+  const rangePercentile = Math.max(80, Math.min(100, options.rangePercentile));
+  const contrast = Math.max(25, Math.min(200, options.contrast));
+  const raw = meshCurvature(mesh, options.method, smoothingIterations).values;
+  const magnitudes = Array.from(raw, Math.abs)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  const limit = percentile(magnitudes, rangePercentile);
+  const values = new Float64Array(raw.length);
+  values.fill(Number.NaN);
+  const exponent = 100 / contrast;
+  for (let vertex = 0; vertex < raw.length; vertex++) {
+    const value = raw[vertex];
+    if (!Number.isFinite(value) || !(limit > 1e-15)) continue;
+    const normalized = Math.max(-1, Math.min(1, value / limit));
+    values[vertex] = Math.sign(normalized) * Math.pow(Math.abs(normalized), exponent);
+  }
+  const range = finiteRange(values);
+  const extent = Math.max(Math.abs(range.min), Math.abs(range.max));
+  return {
+    values,
+    min: options.includeZero ? -extent : range.min,
+    max: options.includeZero ? extent : range.max,
+    kind: 'intrinsic',
+    cacheKey: `intrinsic:curvature:${options.method}:${smoothingIterations}:${rangePercentile}:${contrast}:${options.includeZero ? 1 : 0}`,
+    levelMode: options.includeZero ? 'symmetric-zero' : undefined,
   };
 }
 

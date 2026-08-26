@@ -79,6 +79,7 @@ export function ContoursPanel() {
           <option value="spherical">Spherical wavefront</option>
           <option value="cylindrical">Cylindrical wavefront</option>
           <option value="geodesic">Geodesic distance · mesh</option>
+          <option value="curvature">Mesh curvature</option>
         </SelectControl>
         <div className="custom-axis" id="customAxis" hidden>
           <ValueControl
@@ -208,6 +209,53 @@ export function ContoursPanel() {
           <p className="gradient-note blueprint-note">
             Directional extremes select mesh vertices. Distances follow mesh edges; difference mode
             uses symmetric levels and always includes zero.
+          </p>
+        </div>
+        <div id="curvatureControls" hidden>
+          <SelectControl
+            id="curvatureMethod"
+            label="Curvature field"
+            defaultValue="gaussian"
+            randomizable
+            rowClassName="select-row"
+            controlId="curvatureMethodControl"
+          >
+            <option value="gaussian">Gaussian curvature</option>
+            <option value="mean">Signed mean curvature</option>
+          </SelectControl>
+          <ValueControl
+            id="curvatureSmoothing"
+            label="Field smoothing"
+            min="0"
+            max="20"
+            step="1"
+            value="2"
+            unit="iterations"
+          />
+          <ValueControl
+            id="curvatureRange"
+            label="Robust range"
+            min="80"
+            max="100"
+            step="1"
+            value="98"
+            unit="percentile"
+          />
+          <ValueControl
+            id="curvatureContrast"
+            label="Curvature contrast"
+            min="25"
+            max="200"
+            step="1"
+            value="100"
+            unit="%"
+          />
+          <Checkbox id="curvatureIncludeZero" defaultChecked randomizable>
+            Include zero curvature
+          </Checkbox>
+          <p className="gradient-note blueprint-note">
+            Boundary, degenerate, and non-manifold samples are masked. The robust range clips
+            outliers symmetrically before contrast is applied.
           </p>
         </div>
         <ValueControl

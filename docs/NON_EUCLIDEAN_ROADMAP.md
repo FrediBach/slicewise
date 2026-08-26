@@ -511,6 +511,8 @@ Start with two sources using independent azimuth/elevation controls. More source
 
 ## Session 10 — Curvature contours
 
+**Status: completed.**
+
 ### Goal
 
 Expose local differential geometry as contour fields.
@@ -542,6 +544,14 @@ Ship Gaussian and mean curvature first. Treat shape index as optional within thi
 - Scale normalization is understood: meshes are normalized on load, but tests should still verify mathematical scaling behavior.
 - Degenerate and non-manifold fixtures remain finite.
 - Manually inspect gyroid, Schwarz P, rounded cube, and noisy uploaded meshes at several smoothing levels.
+
+### Decisions recorded
+
+- Gaussian curvature uses barycentric vertex area and angle defect; signed mean curvature uses the cotangent Laplacian projected onto area-weighted oriented vertex normals. Mean sign therefore follows source winding.
+- Vertices touching mesh boundaries, non-manifold edges, invalid or degenerate triangles, and isolated vertices are masked. Masked samples do not participate in smoothing or contour interpolation.
+- Scalar smoothing is a deterministic uniform one-ring average with the original sample included, capped at 20 iterations. Raw Gaussian/mean arrays and each method/iteration result are weakly cached per installed mesh.
+- Display normalization clips symmetrically at the selected absolute-value percentile (80th–100th), maps the retained magnitude to `[−1,+1]`, then applies a signed power contrast curve. Include zero selects a symmetric range and raises an even line count by one so zero is present.
+- Curvature remains an intrinsic field: slice LFO, divergence, continuous spiral, and slice explosion are disabled. SVG and G-code consume the same extracted centreline runs.
 
 ## Session 11 — Spherical projections and circle inversion
 

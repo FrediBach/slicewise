@@ -178,6 +178,11 @@ const state: AppState = {
   geodesicMode: 'single',
   geodesicSeedBAzimuth: 0,
   geodesicSeedBElevation: -90,
+  curvatureMethod: 'gaussian',
+  curvatureSmoothing: 2,
+  curvatureRange: 98,
+  curvatureContrast: 100,
+  curvatureIncludeZero: true,
   divergence: 0,
   sliceLfo: false,
   sliceLfoAmplitude: 75,
@@ -361,6 +366,11 @@ if (typeof document !== 'undefined') {
       geodesicMode,
       geodesicSeedBAzimuth,
       geodesicSeedBElevation,
+      curvatureMethod,
+      curvatureSmoothing,
+      curvatureRange,
+      curvatureContrast,
+      curvatureIncludeZero,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -464,6 +474,11 @@ if (typeof document !== 'undefined') {
       geodesicMode,
       geodesicSeedBAzimuth,
       geodesicSeedBElevation,
+      curvatureMethod,
+      curvatureSmoothing,
+      curvatureRange,
+      curvatureContrast,
+      curvatureIncludeZero,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -1111,6 +1126,9 @@ if (typeof document !== 'undefined') {
   bindPair('geodesicSeedElevation', 'geodesicSeedElevation');
   bindPair('geodesicSeedBAzimuth', 'geodesicSeedBAzimuth');
   bindPair('geodesicSeedBElevation', 'geodesicSeedBElevation');
+  bindPair('curvatureSmoothing', 'curvatureSmoothing');
+  bindPair('curvatureRange', 'curvatureRange');
+  bindPair('curvatureContrast', 'curvatureContrast');
   bindPair('divergence', 'divergence', syncSliceConstruction);
   bindPair('sliceLfoAmplitude', 'sliceLfoAmplitude');
   bindPair('sliceLfoCycles', 'sliceLfoCycles');
@@ -1358,12 +1376,13 @@ if (typeof document !== 'undefined') {
 
   const curvedSliceField = (): boolean =>
     state.axis === 'spherical' || state.axis === 'cylindrical';
-  const intrinsicSliceField = (): boolean => state.axis === 'geodesic';
+  const intrinsicSliceField = (): boolean =>
+    state.axis === 'geodesic' || state.axis === 'curvature';
   const nonPlanarSliceField = (): boolean => curvedSliceField() || intrinsicSliceField();
   const multiSourceGeodesic = (): boolean =>
-    intrinsicSliceField() && state.geodesicMode !== 'single';
+    state.axis === 'geodesic' && state.geodesicMode !== 'single';
   const fixedGeodesicSpacing = (): boolean =>
-    intrinsicSliceField() &&
+    state.axis === 'geodesic' &&
     (state.geodesicMode === 'difference' || state.geodesicMode === 'voronoi');
   function syncSliceFieldControls(): void {
     const curved = curvedSliceField();
@@ -1372,7 +1391,8 @@ if (typeof document !== 'undefined') {
     $('customAxis').hidden = state.axis !== 'custom';
     $('wavefrontControls').hidden = !curved;
     $('cylinderAxisControls').hidden = state.axis !== 'cylindrical';
-    $('geodesicControls').hidden = !intrinsic;
+    $('geodesicControls').hidden = state.axis !== 'geodesic';
+    $('curvatureControls').hidden = state.axis !== 'curvature';
     $('geodesicSecondSeedControls').hidden = !multiSourceGeodesic();
     for (const id of ['divergence']) {
       $(id).disabled = nonPlanar;
@@ -1384,7 +1404,7 @@ if (typeof document !== 'undefined') {
     $('explodeAmount').disabled = intrinsic;
     $('explodeAmountN').disabled = intrinsic;
     $('explodeAmountControl').classList.toggle('is-disabled', intrinsic);
-    const voronoi = intrinsic && state.geodesicMode === 'voronoi';
+    const voronoi = state.axis === 'geodesic' && state.geodesicMode === 'voronoi';
     $('lines').disabled = voronoi;
     $('linesN').disabled = voronoi;
     $('linesControl').classList.toggle('is-disabled', voronoi);
@@ -1400,6 +1420,14 @@ if (typeof document !== 'undefined') {
   $('geodesicMode').addEventListener('change', (event) => {
     state.geodesicMode = inputTarget(event).value as ContourSettings['geodesicMode'];
     syncSliceFieldControls();
+    redraw(false);
+  });
+  $('curvatureMethod').addEventListener('change', (event) => {
+    state.curvatureMethod = inputTarget(event).value as ContourSettings['curvatureMethod'];
+    redraw(false);
+  });
+  $('curvatureIncludeZero').addEventListener('change', (event) => {
+    state.curvatureIncludeZero = inputTarget(event).checked;
     redraw(false);
   });
   function syncEaseCenter(): void {
@@ -1909,6 +1937,9 @@ if (typeof document !== 'undefined') {
     ['geodesicSeedElevation', 'geodesicSeedElevation'],
     ['geodesicSeedBAzimuth', 'geodesicSeedBAzimuth'],
     ['geodesicSeedBElevation', 'geodesicSeedBElevation'],
+    ['curvatureSmoothing', 'curvatureSmoothing'],
+    ['curvatureRange', 'curvatureRange'],
+    ['curvatureContrast', 'curvatureContrast'],
     ['divergence', 'divergence'],
     ['sliceLfoAmplitude', 'sliceLfoAmplitude'],
     ['sliceLfoCycles', 'sliceLfoCycles'],
@@ -1951,6 +1982,7 @@ if (typeof document !== 'undefined') {
     'gapEase',
     'axis',
     'geodesicMode',
+    'curvatureMethod',
     'sliceLfoWaveform',
     'sliceLfoModulationMode',
     'lineWeightMode',
@@ -1960,6 +1992,7 @@ if (typeof document !== 'undefined') {
     'spiral',
     'sliceLfo',
     'sliceLfoModulation',
+    'curvatureIncludeZero',
     'hide',
     'sil',
     'bg',
@@ -2074,6 +2107,19 @@ if (typeof document !== 'undefined') {
     restored.geodesicSeedBElevation = Number.isFinite(restored.geodesicSeedBElevation)
       ? restored.geodesicSeedBElevation
       : -90;
+    restored.curvatureMethod = ['gaussian', 'mean'].includes(String(restored.curvatureMethod))
+      ? restored.curvatureMethod
+      : 'gaussian';
+    restored.curvatureSmoothing = Number.isFinite(restored.curvatureSmoothing)
+      ? restored.curvatureSmoothing
+      : 2;
+    restored.curvatureRange = Number.isFinite(restored.curvatureRange)
+      ? restored.curvatureRange
+      : 98;
+    restored.curvatureContrast = Number.isFinite(restored.curvatureContrast)
+      ? restored.curvatureContrast
+      : 100;
+    restored.curvatureIncludeZero = restored.curvatureIncludeZero !== false;
     restored.explodeAmount = Number.isFinite(restored.explodeAmount) ? restored.explodeAmount : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
@@ -2339,6 +2385,7 @@ if (typeof document !== 'undefined') {
       'spherical',
       'cylindrical',
       'geodesic',
+      'curvature',
     ]);
     randomizePair('cutAz', 'cutAz', () => randomInt(-180, 180));
     randomizePair('cutEl', 'cutEl', () => randomInt(-80, 80));
@@ -2352,6 +2399,11 @@ if (typeof document !== 'undefined') {
     randomizeSelect('geodesicMode', 'geodesicMode', ['single', 'nearest', 'difference', 'voronoi']);
     randomizePair('geodesicSeedBAzimuth', 'geodesicSeedBAzimuth', () => randomInt(-180, 180));
     randomizePair('geodesicSeedBElevation', 'geodesicSeedBElevation', () => randomInt(-80, 80));
+    randomizeSelect('curvatureMethod', 'curvatureMethod', ['gaussian', 'mean']);
+    randomizePair('curvatureSmoothing', 'curvatureSmoothing', () => randomInt(0, 8));
+    randomizePair('curvatureRange', 'curvatureRange', () => randomInt(90, 100));
+    randomizePair('curvatureContrast', 'curvatureContrast', () => randomInt(65, 160));
+    randomizeCheckbox('curvatureIncludeZero', 'curvatureIncludeZero', 0.75);
     randomizePair('divergence', 'divergence', () => (Math.random() < 0.6 ? 0 : randomInt(15, 110)));
     randomizePair('sliceLfoAmplitude', 'sliceLfoAmplitude', () => randomInt(35, 180));
     randomizePair('sliceLfoCycles', 'sliceLfoCycles', () => randomIn(0.75, 5));

@@ -6,6 +6,7 @@ import {
 } from './contour-engine';
 import {
   createCylindricalScalarField,
+  createCurvatureScalarField,
   createGeodesicScalarField,
   createMultiSourceGeodesicField,
   createPlanarScalarField,
@@ -18,6 +19,25 @@ import {
 const mesh = { V: new Float32Array([-1, 2, 3, 4, -5, 6]) };
 
 describe('scalar fields', () => {
+  it('normalizes curvature with a robust signed range and optional zero level', () => {
+    const sphere = {
+      V: new Float64Array([1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1]),
+      T: new Uint32Array([0, 2, 4, 2, 1, 4, 1, 3, 4, 3, 0, 4, 2, 0, 5, 1, 2, 5, 3, 1, 5, 0, 3, 5]),
+    };
+    const field = createCurvatureScalarField(sphere, {
+      method: 'gaussian',
+      smoothingIterations: 2,
+      rangePercentile: 98,
+      contrast: 100,
+      includeZero: true,
+    });
+    expect(field.kind).toBe('intrinsic');
+    expect(field.levelMode).toBe('symmetric-zero');
+    expect(field.min).toBe(-field.max);
+    expect(Array.from(field.values).every(Number.isFinite)).toBe(true);
+    expect(field.cacheKey).toContain('curvature:gaussian:2:98:100:1');
+  });
+
   it('builds geodesic values along the folded surface graph instead of ambient radius', () => {
     const folded = {
       V: new Float32Array([-1, 0, 0, 0, 10, 0, 1, 0, 0, -0.9, 0, 0.1]),

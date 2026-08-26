@@ -59,6 +59,7 @@ Coverage currently measures the focused core under active test:
 - `generativeMesh.ts`
 - `mapAnnotations.ts`
 - `mesh.ts`
+- `mesh-curvature.ts`
 - `mesh-geodesics.ts`
 - `mesh-topology.ts`
 - `projection.ts`

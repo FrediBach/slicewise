@@ -645,4 +645,94 @@ describe('computeContours', () => {
       ...targetResult.toolpaths[0].runs,
     ]);
   });
+
+  it.each(['gaussian', 'mean'] as const)(
+    'renders deterministic finite %s curvature contours for SVG and G-code',
+    (curvatureMethod) => {
+      const mesh = makeContourMesh();
+      const settings = {
+        ...contourSettings,
+        axis: 'curvature',
+        curvatureMethod,
+        curvatureSmoothing: 2,
+        curvatureRange: 98,
+        curvatureContrast: 110,
+        curvatureIncludeZero: true,
+        lines: 11,
+        hide: false,
+        sil: false,
+        bg: false,
+      };
+      const result = computeContours(mesh, settings, false);
+      const repeated = computeContours(mesh, settings, false);
+      const gcode = generateGCode(
+        result.toolpaths,
+        { width: settings.pw, height: settings.ph },
+        { origin: 'bottom-left', clipToArtboard: true, optimizeTravel: false },
+      );
+
+      expect(result.paths).toBeGreaterThan(0);
+      expect(result.svg).toBe(repeated.svg);
+      expect(result.toolpaths).toEqual(repeated.toolpaths);
+      expect(result.svg).not.toMatch(/NaN|Infinity/);
+      expect(gcode).not.toMatch(/NaN|Infinity/);
+    },
+  );
+
+  it('uses neutral curvature defaults for old snapshots and rejects intrinsic-only effects', () => {
+    const mesh = makeContourMesh();
+    const legacy = {
+      ...contourSettings,
+      axis: 'curvature',
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const defaults = {
+      ...legacy,
+      curvatureMethod: 'gaussian' as const,
+      curvatureSmoothing: 2,
+      curvatureRange: 98,
+      curvatureContrast: 100,
+      curvatureIncludeZero: true,
+    };
+    const plain = computeContours(mesh, defaults, false);
+    const incompatible = computeContours(
+      mesh,
+      { ...defaults, divergence: 120, sliceLfo: true, spiral: true, explodeAmount: 180 },
+      false,
+    );
+
+    expect(computeContours(mesh, legacy, false).toolpaths).toEqual(plain.toolpaths);
+    expect(incompatible.toolpaths).toEqual(plain.toolpaths);
+  });
+
+  it('morphs curvature controls through the shared numeric target contract', () => {
+    const mesh = makeContourMesh();
+    const base = {
+      ...contourSettings,
+      axis: 'curvature',
+      curvatureMethod: 'mean' as const,
+      curvatureSmoothing: 1,
+      curvatureRange: 96,
+      curvatureContrast: 70,
+      curvatureIncludeZero: false,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const target = { curvatureSmoothing: 5, curvatureRange: 100, curvatureContrast: 150 };
+    const start = computeContours(mesh, base, false);
+    const end = computeContours(mesh, { ...base, ...target }, false);
+    const morphed = computeContours(
+      mesh,
+      { ...base, morphEnabled: true, morphSteps: 2, morphTargets: target },
+      false,
+    );
+
+    expect(morphed.toolpaths[0].runs).toEqual([
+      ...start.toolpaths[0].runs,
+      ...end.toolpaths[0].runs,
+    ]);
+  });
 });
