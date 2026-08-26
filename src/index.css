@@ -595,6 +595,16 @@ button {
 .control-row.is-disabled > .control-stack > .control-inputs:first-child {
   opacity: 0.45;
 }
+.select-info {
+  margin: 0 0 7px 110px;
+  padding: 7px 9px;
+  border-left: 2px solid #aeb9aa;
+  border-radius: 0 4px 4px 0;
+  background: #f2f4ef;
+  color: #616860;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
 .control-label {
   min-width: 0;
   display: flex;
@@ -947,6 +957,10 @@ select {
   grid-template-columns: minmax(0, 1fr) 27px 24px;
   align-items: center;
   gap: 6px;
+}
+.line-index-info {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 .line-index-target {
   display: flex;
@@ -1512,5 +1526,11 @@ button:focus-visible,
   }
   .control-row {
     grid-template-columns: 72px minmax(0, 1fr);
+  }
+  .select-info {
+    margin-left: 82px;
+  }
+  .line-index-info {
+    margin-left: 0;
   }
 }

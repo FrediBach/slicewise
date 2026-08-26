@@ -26,6 +26,7 @@ type SelectControlProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & 
   rowClassName?: string;
   controlId?: string;
   disabledReason?: string;
+  optionDescriptions?: Readonly<Record<string, string>>;
 };
 type ValueControlProps = {
   id: string;
@@ -108,30 +109,64 @@ function SelectControl({
   rowClassName = '',
   controlId,
   disabledReason,
+  optionDescriptions,
   disabled = false,
+  onChange,
   ...selectProps
 }: SelectControlProps) {
+  const [selectedValue, setSelectedValue] = useState(() =>
+    String(
+      selectProps.value ??
+        selectProps.defaultValue ??
+        Object.keys(optionDescriptions ?? {}).find((value) => value !== '*') ??
+        '',
+    ),
+  );
+  const selectedDescription = optionDescriptions
+    ? (optionDescriptions[selectedValue] ?? optionDescriptions['*'])
+    : undefined;
+
+  useEffect(() => {
+    const syncProgrammaticValue = (event: CustomEvent<CustomDetail>) => {
+      if (event.detail?.id === id) setSelectedValue(String(event.detail.value));
+    };
+    document.addEventListener('selectvaluechange', syncProgrammaticValue);
+    return () => document.removeEventListener('selectvaluechange', syncProgrammaticValue);
+  }, [id]);
+
   return (
-    <div
-      className={`control-row${rowClassName ? ` ${rowClassName}` : ''}${disabled ? ' is-disabled' : ''}`}
-      id={controlId}
-      title={disabled ? disabledReason : undefined}
-    >
-      <ControlLabel htmlFor={id} randomizable={randomizable}>
-        {label}
-      </ControlLabel>
-      <div className="select-wrap">
-        <select
-          id={id}
-          disabled={disabled}
-          title={disabled ? disabledReason : undefined}
-          {...selectProps}
-        >
-          {children}
-        </select>
-        <ChevronDown size={14} />
+    <>
+      <div
+        className={`control-row${rowClassName ? ` ${rowClassName}` : ''}${disabled ? ' is-disabled' : ''}`}
+        id={controlId}
+        title={disabled ? disabledReason : undefined}
+      >
+        <ControlLabel htmlFor={id} randomizable={randomizable}>
+          {label}
+        </ControlLabel>
+        <div className="select-wrap">
+          <select
+            id={id}
+            disabled={disabled}
+            title={disabled ? disabledReason : undefined}
+            aria-describedby={selectedDescription ? `${id}Info` : undefined}
+            onChange={(event) => {
+              setSelectedValue(event.target.value);
+              onChange?.(event);
+            }}
+            {...selectProps}
+          >
+            {children}
+          </select>
+          <ChevronDown size={14} />
+        </div>
       </div>
-    </div>
+      {selectedDescription ? (
+        <p className="select-info" id={`${id}Info`}>
+          {selectedDescription}
+        </p>
+      ) : null}
+    </>
   );
 }
 

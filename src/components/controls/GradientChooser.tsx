@@ -286,6 +286,7 @@ function LineIndexColorChooser() {
               <select
                 value={series}
                 aria-label={`Line target ${position + 1}`}
+                aria-describedby={`lineIndexTargetInfo-${id}`}
                 onChange={(event) => update(id, { series: event.target.value as LineIndexSeries })}
               >
                 <option value="single">Specific line</option>
@@ -339,6 +340,18 @@ function LineIndexColorChooser() {
             >
               <Trash2 size={12} />
             </button>
+            <p className="select-info line-index-info" id={`lineIndexTargetInfo-${id}`}>
+              {
+                {
+                  single: 'Applies this colour to one specific one-based contour index.',
+                  even: 'Applies this colour to every even-numbered contour.',
+                  odd: 'Applies this colour to every odd-numbered contour.',
+                  prime: 'Applies this colour to contours whose indices are prime numbers.',
+                  fibonacci: 'Applies this colour to contours in the Fibonacci sequence.',
+                  tribonacci: 'Applies this colour to contours in the Tribonacci sequence.',
+                }[series]
+              }
+            </p>
           </div>
         ))}
         <button

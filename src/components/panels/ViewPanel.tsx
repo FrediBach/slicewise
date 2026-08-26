@@ -61,7 +61,27 @@ export function ViewPanel() {
         />
       </FieldGroup>
       <FieldGroup title="Projection warp">
-        <SelectControl id="projectionWarpMode" label="Projection warp" randomizable>
+        <SelectControl
+          id="projectionWarpMode"
+          label="Projection warp"
+          defaultValue="none"
+          randomizable
+          optionDescriptions={{
+            none: 'Keeps the camera projection unchanged. Use this for a conventional orthographic or perspective view.',
+            'klein-poincare':
+              'Morphs radially between Klein and Poincaré disk coordinates while preserving a centered circular composition.',
+            mobius:
+              'Navigates and rotates the image inside the Poincaré disk with an asymmetric hyperbolic transformation.',
+            stereographic:
+              'Lifts the camera plane onto a sphere and projects from a pole, strongly expanding the horizon.',
+            gnomonic:
+              'Projects the lifted sphere from its centre, keeping great-circle paths straight while stretching the horizon.',
+            lambert:
+              'Uses an equal-area spherical projection with gentler radial compression than stereographic mode.',
+            inversion:
+              'Turns geometry inside out around a configurable circle, with a blendable transformation strength.',
+          }}
+        >
           <option value="none">None</option>
           <option value="klein-poincare">Klein ↔ Poincaré</option>
           <option value="mobius">Hyperbolic Möbius</option>

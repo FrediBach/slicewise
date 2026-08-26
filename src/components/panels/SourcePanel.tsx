@@ -12,7 +12,25 @@ export function SourcePanel() {
       badge="01"
       defaultOpen
     >
-      <SelectControl id="demo" label="Source" defaultValue="knot" rowClassName="demo-row">
+      <SelectControl
+        id="demo"
+        label="Source"
+        defaultValue="knot"
+        rowClassName="demo-row"
+        optionDescriptions={{
+          generative: 'Builds a configurable implicit-surface mesh locally in the browser.',
+          'hyperbolic-tiling': 'Generates line art from a regular tiling of the Poincaré disk.',
+          knot: 'Loads a looping torus knot with strong depth and silhouette variation.',
+          ripple: 'Loads a sphere with rhythmic radial waves across its surface.',
+          cube: 'Loads a softened cube with broad faces and rounded transitions.',
+          diamond: 'Loads a smooth faceted form with pointed vertical poles.',
+          torus: 'Loads a simple ring torus for clear circular contour studies.',
+          twist: 'Loads a twisted, petal-like form with rotational symmetry.',
+          hourglass: 'Loads a pinched rotational form with a narrow waist.',
+          tetrapod: 'Loads a four-lobed branching form with complex overlaps.',
+          upload: 'Uses the model or SVG artwork loaded from this device.',
+        }}
+      >
         <optgroup label="Generate">
           <option value="generative">Generative mesh</option>
           <option value="hyperbolic-tiling">Hyperbolic tiling</option>
@@ -38,6 +56,15 @@ export function SourcePanel() {
             label="Field"
             defaultValue={GEN_DEFAULTS.genField}
             rowClassName="select-row"
+            optionDescriptions={{
+              gyroid: 'Creates a smooth triply periodic surface with winding passages.',
+              schwarzP: 'Creates a cubic periodic surface with rounded chambers and necks.',
+              diamond: 'Creates a highly connected diamond-family periodic surface.',
+              neovius: 'Creates a dense periodic surface with strong spherical chambers.',
+              metaballs: 'Blends seeded soft volumes into an organic connected solid.',
+              supershape: 'Builds a sculptural radial form from superformula profiles.',
+              relief: 'Creates a closed circular terrain medallion designed for height contours.',
+            }}
           >
             <option value="gyroid">Gyroid</option>
             <option value="schwarzP">Schwarz P</option>
@@ -187,6 +214,12 @@ export function SourcePanel() {
             label="Interpretation"
             defaultValue="extrude"
             rowClassName="select-row"
+            optionDescriptions={{
+              extrude:
+                'Turns filled SVG artwork into a shallow 3D mesh that can be sliced from any view.',
+              centerline:
+                'Extracts plotter-ready medial lines and bypasses mesh-only slicing fields.',
+            }}
           >
             <option value="extrude">Extruded shape</option>
             <option value="centerline">Single-line centreline</option>

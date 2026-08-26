@@ -42,6 +42,37 @@ describe('shared control labels', () => {
     );
     expect(container.querySelector('.control-row.is-disabled')).toBeInTheDocument();
   });
+
+  it('explains the selected option and follows user and programmatic changes', async () => {
+    const user = userEvent.setup();
+    render(
+      <SelectControl
+        id="projection"
+        label="Projection"
+        defaultValue="none"
+        optionDescriptions={{
+          none: 'Uses the camera projection without an additional warp.',
+          spherical: 'Wraps the camera plane onto a sphere before projecting it.',
+        }}
+      >
+        <option value="none">None</option>
+        <option value="spherical">Spherical</option>
+      </SelectControl>,
+    );
+
+    expect(screen.getByText(/without an additional warp/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Projection' }), 'spherical');
+    expect(screen.getByText(/onto a sphere/)).toBeInTheDocument();
+
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('selectvaluechange', {
+          detail: { id: 'projection', value: 'none' },
+        }),
+      ),
+    );
+    expect(screen.getByText(/without an additional warp/)).toBeInTheDocument();
+  });
 });
 
 describe('randomization locks', () => {

@@ -21,6 +21,27 @@ export function ContoursPanel() {
           randomizable
           rowClassName="select-row"
           controlId="gapEaseControl"
+          optionDescriptions={{
+            linear: 'Spaces contour levels evenly across the slice range.',
+            'sine-in':
+              'Uses a gentle sine-in curve to shift contour spacing toward the start of the range.',
+            'sine-out':
+              'Uses a gentle sine-out curve to shift contour spacing toward the end of the range.',
+            'sine-in-out': 'Uses a smooth sine curve around an adjustable centre point.',
+            'sine-out-in': 'Uses a reversed smooth sine curve around an adjustable centre point.',
+            'ease-in':
+              'Uses quadratic acceleration to shift contour spacing toward the start of the range.',
+            'ease-out':
+              'Uses quadratic deceleration to shift contour spacing toward the end of the range.',
+            'ease-in-out': 'Uses a quadratic curve around an adjustable centre point.',
+            'ease-out-in': 'Uses a reversed quadratic curve around an adjustable centre point.',
+            'cubic-in':
+              'Uses stronger cubic acceleration to shift contour spacing toward the start of the range.',
+            'cubic-out':
+              'Uses stronger cubic deceleration to shift contour spacing toward the end of the range.',
+            'cubic-in-out': 'Uses a strong cubic curve around an adjustable centre point.',
+            'cubic-out-in': 'Uses a reversed cubic curve around an adjustable centre point.',
+          }}
         >
           <option value="linear">Linear</option>
           <optgroup label="Sine">
@@ -71,6 +92,18 @@ export function ContoursPanel() {
           defaultValue="up"
           randomizable
           rowClassName="select-row"
+          optionDescriptions={{
+            up: 'Slices by model-space height to create familiar topographic contours.',
+            cam: 'Slices along the current viewing direction, so orbiting the camera changes the contour field.',
+            x: 'Slices across the model width using parallel model-space planes.',
+            y: 'Slices across the model depth using parallel model-space planes.',
+            custom: 'Uses parallel planes oriented by the custom azimuth and elevation controls.',
+            spherical:
+              'Slices with expanding spherical shells around a configurable model-space centre.',
+            cylindrical: 'Slices with concentric cylinders around a configurable centre and axis.',
+            geodesic: 'Measures distance along mesh edges from one or two surface seeds.',
+            curvature: 'Contours a normalized estimate of the mesh surface curvature.',
+          }}
         >
           <option value="up">Height · topographic</option>
           <option value="cam">View depth · camera</option>
@@ -163,6 +196,13 @@ export function ContoursPanel() {
             randomizable
             rowClassName="select-row"
             controlId="geodesicModeControl"
+            optionDescriptions={{
+              single: 'Contours surface distance outward from seed A.',
+              nearest: 'Contours the shorter surface distance to either seed A or seed B.',
+              difference:
+                'Contours the signed difference between distances to the two seeds, including the zero level.',
+              voronoi: 'Draws the single surface boundary where the nearest seed changes.',
+            }}
           >
             <option value="single">Single source</option>
             <option value="nearest">Nearest of two sources</option>
@@ -220,6 +260,11 @@ export function ContoursPanel() {
             randomizable
             rowClassName="select-row"
             controlId="curvatureMethodControl"
+            optionDescriptions={{
+              gaussian:
+                'Measures intrinsic angle defect, highlighting locally dome-like and saddle-like regions.',
+              mean: 'Measures signed bending relative to the oriented vertex normals.',
+            }}
           >
             <option value="gaussian">Gaussian curvature</option>
             <option value="mean">Signed mean curvature</option>
@@ -325,6 +370,10 @@ export function ContoursPanel() {
             disabledReason="Turn on Modulate slice planes to edit this parameter."
             rowClassName="select-row"
             controlId="sliceLfoWaveformControl"
+            optionDescriptions={{
+              sine: 'Applies a smooth periodic displacement to the cutting surface.',
+              triangle: 'Applies a linear back-and-forth displacement with sharper turning points.',
+            }}
           >
             <option value="sine">Sine</option>
             <option value="triangle">Triangle</option>
@@ -341,6 +390,11 @@ export function ContoursPanel() {
               disabledReason="Turn on Modulate slice planes and Modulate LFO to edit this parameter."
               rowClassName="select-row"
               controlId="sliceLfoModulationModeControl"
+              optionDescriptions={{
+                amplitude: 'Varies the LFO displacement strength over the modulation cycle.',
+                frequency:
+                  'Varies how tightly the LFO oscillations are packed over the modulation cycle.',
+              }}
             >
               <option value="amplitude">Amplitude</option>
               <option value="frequency">Frequency</option>

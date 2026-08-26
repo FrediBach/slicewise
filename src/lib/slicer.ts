@@ -303,6 +303,11 @@ if (typeof document !== 'undefined') {
     if (row) row.title = disabled ? reason : '';
   }
 
+  function setSelectValue(id: string, value: string): void {
+    $<HTMLSelectElement>(id).value = value;
+    document.dispatchEvent(new CustomEvent('selectvaluechange', { detail: { id, value } }));
+  }
+
   function fitBed(W: number, H: number): void {
     const wrap = $('bedwrap'),
       bed = $('bed');
@@ -980,7 +985,7 @@ if (typeof document !== 'undefined') {
           state.svgSourceName = file.name;
           state.source = 'upload';
           cancelGeneration();
-          $('demo').value = 'upload';
+          setSelectValue('demo', 'upload');
           state.upY = false;
           $('upZ').setAttribute('aria-pressed', 'true');
           $('upY').setAttribute('aria-pressed', 'false');
@@ -1014,7 +1019,7 @@ if (typeof document !== 'undefined') {
         rawCache = raw;
         state.source = 'upload';
         cancelGeneration();
-        $('demo').value = 'upload';
+        setSelectValue('demo', 'upload');
         // OBJ and PLY usually ship Y-up; STL is almost always Z-up
         const guessY = ext === 'obj' || ext === 'ply';
         state.upY = guessY;
@@ -1937,7 +1942,7 @@ if (typeof document !== 'undefined') {
   }
   function activateCustomAxis(): void {
     state.axis = 'custom';
-    $('axis').value = 'custom';
+    setSelectValue('axis', 'custom');
     $('customAxis').hidden = false;
   }
   const paperSizes: Record<string, readonly [number, number]> = {
@@ -1956,7 +1961,7 @@ if (typeof document !== 'undefined') {
     const match = Object.entries(paperSizes).find(
       ([, size]) => size[0] === state.pw && size[1] === state.ph,
     );
-    $('paperPreset').value = match?.[0] || 'custom';
+    setSelectValue('paperPreset', match?.[0] || 'custom');
   }
   $('paperPreset').addEventListener('change', (e) => {
     const size = paperSizes[inputTarget(e).value];
@@ -2419,7 +2424,7 @@ if (typeof document !== 'undefined') {
       $(id).value = String(dynamicState[key]);
       $(id + 'N').value = String(dynamicState[key]);
     }
-    for (const id of historySelects) $(id).value = String(dynamicState[id]);
+    for (const id of historySelects) setSelectValue(id, String(dynamicState[id]));
     for (const id of historyChecks) $(id).checked = Boolean(dynamicState[id]);
     $('color').value = state.color;
     $('colorHex').value = state.color;
@@ -2606,7 +2611,7 @@ if (typeof document !== 'undefined') {
     if (!shouldRandomize(id)) return;
     const value = randomItem(values);
     dynamicState[key] = value;
-    $(id).value = value;
+    setSelectValue(id, value);
   }
   function randomizeCheckbox(id: string, key: string, probability: number): void {
     if (shouldRandomize(id)) setCheckbox(id, key, Math.random() < probability);
@@ -2840,7 +2845,7 @@ if (typeof document !== 'undefined') {
     $('blueprint').checked = state.blueprint;
     if (shouldRandomize('blueprint')) {
       state.blueprintStyle = randomItem(['blue', 'blue', 'blue', 'black']);
-      $('blueprintStyle').value = state.blueprintStyle;
+      setSelectValue('blueprintStyle', state.blueprintStyle);
     }
     syncBlueprintControls();
     $('topographicMap').checked = state.topographicMap;

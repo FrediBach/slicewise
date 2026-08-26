@@ -50,6 +50,12 @@ export function AppearancePanel() {
           defaultValue="uniform"
           randomizable
           rowClassName="select-row"
+          optionDescriptions={{
+            uniform: 'Uses the same stroke width for every contour.',
+            index: 'Emphasizes every nth contour according to the interval setting.',
+            wave: 'Cycles stroke thickness periodically across contour indices.',
+            center: 'Makes central contour levels heavier than levels near the range edges.',
+          }}
         >
           <option value="uniform">Uniform · off</option>
           <option value="index">Index contours</option>
@@ -100,6 +106,10 @@ export function CanvasPanel() {
           label="Paper size"
           defaultValue="custom"
           rowClassName="select-row"
+          optionDescriptions={{
+            custom: 'Keeps the width and height fields independently editable.',
+            '*': 'Sets the artboard dimensions to the selected standard paper size.',
+          }}
         >
           <option value="custom">Custom</option>
           <optgroup label="ISO A series">
@@ -290,6 +300,10 @@ export function EffectsPanel() {
             disabledReason="Turn on Technical blueprint to choose the document stock."
             rowClassName="select-row"
             controlId="blueprintStyleControl"
+            optionDescriptions={{
+              blue: 'Uses traditional blueprint blue stock with white technical linework.',
+              black: 'Uses black technical stock with white drafting linework.',
+            }}
           >
             <option value="blue">Blueprint blue · white ink</option>
             <option value="black">Technical black · white ink</option>
@@ -318,6 +332,10 @@ export function ExportPanel() {
           label="File type"
           defaultValue="svg"
           rowClassName="select-row"
+          optionDescriptions={{
+            svg: 'Exports scalable vector artwork for editing, printing, or plotter software.',
+            gcode: 'Exports machine motion commands using the selected plotter profile and speeds.',
+          }}
         >
           <option value="svg">SVG · vector</option>
           <option value="gcode">G-code · plotter</option>
@@ -328,6 +346,12 @@ export function ExportPanel() {
             label="Machine"
             defaultValue="uunatek3"
             rowClassName="select-row"
+            optionDescriptions={{
+              uunatek3:
+                'Uses rear-left origin conventions and pen settings tuned for the UUNA TEK 3.0.',
+              generic:
+                'Uses a bottom-left origin and conservative defaults for a generic Z-axis plotter.',
+            }}
           >
             <option value="uunatek3">UUNA TEK 3.0 · A3</option>
             <option value="generic">Generic Z-axis plotter</option>

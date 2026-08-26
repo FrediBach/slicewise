@@ -2,6 +2,8 @@
 
 This document describes the user-facing parameters in Slicewise as implemented in `src/App.tsx` and `src/lib/slicer.ts`. Ranges are the limits enforced by the interface. Unless noted otherwise, changing a parameter redraws the preview and affects both SVG and G-code output.
 
+Select controls show a short information banner for the active option. The banner updates after direct selection, randomization, snapshot restoration, and undo or redo.
+
 ## Source model
 
 | Parameter (ID)                          | Type and default                   | What it does                                                                                                                                                                                                                                                |

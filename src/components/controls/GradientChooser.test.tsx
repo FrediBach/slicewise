@@ -104,6 +104,9 @@ describe('GradientChooser', () => {
     });
 
     await user.selectOptions(screen.getByLabelText('Line target 2'), 'prime');
+    expect(
+      screen.getByText('Applies this colour to contours whose indices are prime numbers.'),
+    ).toBeInTheDocument();
     await waitFor(() => {
       const event = onChange.mock.calls.at(-1)?.[0] as CustomEvent;
       expect(event.detail.colors).toContainEqual({
