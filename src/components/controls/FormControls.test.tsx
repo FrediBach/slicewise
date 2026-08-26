@@ -150,6 +150,24 @@ describe('ValueControl morph contract', () => {
     expect(container.querySelector('.unit')).toHaveAttribute('title', '% radius');
   });
 
+  it('renders the same unit slot for every number field', () => {
+    const { container } = render(
+      <>
+        <ValueControl id="percent" label="Percent" min="0" max="100" step="1" value="50" unit="%" />
+        <ValueControl id="length" label="Length" min="0" max="100" step="1" value="50" unit="mm" />
+        <ValueControl id="count" label="Count" min="0" max="100" step="1" value="50" />
+      </>,
+    );
+
+    const fields = Array.from(container.querySelectorAll('.value-field'));
+    expect(fields).toHaveLength(3);
+    expect(fields.map((field) => field.querySelector('.unit')?.textContent)).toEqual([
+      '%',
+      'mm',
+      '',
+    ]);
+  });
+
   it('cycles through X and Y targets and publishes clamped values', async () => {
     const user = userEvent.setup();
     const onMorph = vi.fn();
