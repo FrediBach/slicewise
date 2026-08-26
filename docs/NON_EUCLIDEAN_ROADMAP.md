@@ -312,6 +312,8 @@ Remove the assumption that every contour level has one constant plane normal whi
 
 ## Session 6 — Spherical and cylindrical wavefront slicing
 
+**Status: completed.**
+
 ### Goal
 
 Ship the first curved model-space slicing fields.
@@ -338,6 +340,13 @@ Use actual min/max vertex values for contour levels. At analytic singularities, 
 - Disable divergence, LFO, and spiral in the UI while enforcing the same rule in the engine.
 - Support local-gradient slice explosion only after verifying it does not fold paths excessively. Otherwise ship wavefront slicing first and leave explode disabled with documentation.
 - Update `PARAMETERS.md`.
+
+### Decisions recorded
+
+- The existing `axis` discriminator now also accepts `spherical` and `cylindrical`, preserving old snapshots without a migration. Missing wavefront parameters restore to a centred field and a model-Z cylinder axis.
+- Centre controls are percentages of the normalized model radius; the renderer converts them to model coordinates before constructing the analytic field. Cylinder orientation uses the same azimuth/elevation convention as custom planar slicing.
+- Both fields use actual finite vertex minima and maxima for level placement. Analytic evaluation drives bounded adaptive triangle refinement, and field-specific cache keys include every centre and axis component.
+- Local-gradient slice explosion ships for both fields. Points at the sphere centre or cylinder axis return no gradient and remain unmoved; divergence, slice LFO, and continuous spiral are disabled in the UI and independently rejected by the engine compatibility resolver.
 
 ### Tests and manual check
 

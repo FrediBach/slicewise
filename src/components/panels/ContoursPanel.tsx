@@ -62,10 +62,10 @@ export function ContoursPanel() {
           disabled
         />
       </FieldGroup>
-      <FieldGroup title="Slice plane">
+      <FieldGroup title="Slice field">
         <SelectControl
           id="axis"
-          label="Slice axis"
+          label="Slice field"
           defaultValue="up"
           randomizable
           rowClassName="select-row"
@@ -75,6 +75,8 @@ export function ContoursPanel() {
           <option value="x">Model width</option>
           <option value="y">Model depth</option>
           <option value="custom">Custom plane angle</option>
+          <option value="spherical">Spherical wavefront</option>
+          <option value="cylindrical">Cylindrical wavefront</option>
         </SelectControl>
         <div className="custom-axis" id="customAxis" hidden>
           <ValueControl
@@ -95,6 +97,59 @@ export function ContoursPanel() {
             value="90"
             unit="°"
           />
+        </div>
+        <div id="wavefrontControls" hidden>
+          <ValueControl
+            id="waveCenterX"
+            label="Centre X"
+            min="-100"
+            max="100"
+            step="1"
+            value="0"
+            unit="% radius"
+          />
+          <ValueControl
+            id="waveCenterY"
+            label="Centre Y"
+            min="-100"
+            max="100"
+            step="1"
+            value="0"
+            unit="% radius"
+          />
+          <ValueControl
+            id="waveCenterZ"
+            label="Centre Z"
+            min="-100"
+            max="100"
+            step="1"
+            value="0"
+            unit="% radius"
+          />
+          <div id="cylinderAxisControls" hidden>
+            <ValueControl
+              id="cylinderAzimuth"
+              label="Cylinder azimuth"
+              min="-180"
+              max="180"
+              step="1"
+              value="0"
+              unit="°"
+            />
+            <ValueControl
+              id="cylinderElevation"
+              label="Cylinder elevation"
+              min="-90"
+              max="90"
+              step="1"
+              value="90"
+              unit="°"
+            />
+          </div>
+          <p className="gradient-note blueprint-note">
+            Curved fields use model-space distance. Centre values are percentages of the normalized
+            model radius.
+          </p>
         </div>
         <ValueControl
           id="divergence"

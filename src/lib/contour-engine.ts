@@ -19,7 +19,9 @@ import {
   type GenerativeMaskSettings,
 } from './generative-mask';
 import {
+  createCylindricalScalarField,
   createPlanarScalarField,
+  createSphericalScalarField,
   resolveScalarFieldFeatures,
   type MeshScalarField,
   type ResolvedScalarFieldFeatures,
@@ -81,6 +83,11 @@ export interface ContourSettings extends GenerativeMaskSettings {
   axis: string;
   cutAz: number;
   cutEl: number;
+  waveCenterX?: number;
+  waveCenterY?: number;
+  waveCenterZ?: number;
+  cylinderAzimuth?: number;
+  cylinderElevation?: number;
   divergence: number;
   sliceLfo: boolean;
   sliceLfoAmplitude: number;
@@ -1293,6 +1300,11 @@ function deterministicDrawingNumber(
       settings.axis,
       settings.cutAz,
       settings.cutEl,
+      settings.waveCenterX,
+      settings.waveCenterY,
+      settings.waveCenterZ,
+      settings.cylinderAzimuth,
+      settings.cylinderElevation,
       settings.sliceLfo,
       settings.sliceLfoAmplitude,
       settings.sliceLfoCycles,
@@ -2549,12 +2561,36 @@ function computeContourInstance(
       mobiusStrength: settings.mobiusStrength,
     },
   );
-  const field = createPlanarScalarField(mesh, {
-    axis: settings.axis,
-    cutAz: settings.cutAz,
-    cutEl: settings.cutEl,
-    camera: { values: P.sd, min: P.dmin, max: P.dmax, direction: P.f },
-  });
+  const waveCenter: Vec3 = [
+    clamp(Number(settings.waveCenterX) || 0, -100, 100) / 100,
+    clamp(Number(settings.waveCenterY) || 0, -100, 100) / 100,
+    clamp(Number(settings.waveCenterZ) || 0, -100, 100) / 100,
+  ];
+  const cylinderAzimuth = (clamp(Number(settings.cylinderAzimuth) || 0, -180, 180) * Math.PI) / 180;
+  const cylinderElevation =
+    (clamp(
+      Number.isFinite(Number(settings.cylinderElevation)) ? Number(settings.cylinderElevation) : 90,
+      -90,
+      90,
+    ) *
+      Math.PI) /
+    180;
+  const cylinderAxis: Vec3 = [
+    Math.cos(cylinderElevation) * Math.cos(cylinderAzimuth),
+    Math.cos(cylinderElevation) * Math.sin(cylinderAzimuth),
+    Math.sin(cylinderElevation),
+  ];
+  const field =
+    settings.axis === 'spherical'
+      ? createSphericalScalarField(mesh, { center: waveCenter })
+      : settings.axis === 'cylindrical'
+        ? createCylindricalScalarField(mesh, { center: waveCenter, axis: cylinderAxis })
+        : createPlanarScalarField(mesh, {
+            axis: settings.axis,
+            cutAz: settings.cutAz,
+            cutEl: settings.cutEl,
+            camera: { values: P.sd, min: P.dmin, max: P.dmax, direction: P.f },
+          });
   const fieldFeatures = resolveScalarFieldFeatures(field, {
     lfo: Boolean(settings.sliceLfo),
     divergence: clamp(settings.divergence || 0, 0, 160),

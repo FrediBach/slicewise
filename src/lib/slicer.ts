@@ -168,6 +168,11 @@ const state: AppState = {
   axis: 'up',
   cutAz: 0,
   cutEl: 90,
+  waveCenterX: 0,
+  waveCenterY: 0,
+  waveCenterZ: 0,
+  cylinderAzimuth: 0,
+  cylinderElevation: 90,
   divergence: 0,
   sliceLfo: false,
   sliceLfoAmplitude: 75,
@@ -341,6 +346,11 @@ if (typeof document !== 'undefined') {
       axis,
       cutAz,
       cutEl,
+      waveCenterX,
+      waveCenterY,
+      waveCenterZ,
+      cylinderAzimuth,
+      cylinderElevation,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -434,6 +444,11 @@ if (typeof document !== 'undefined') {
       axis,
       cutAz,
       cutEl,
+      waveCenterX,
+      waveCenterY,
+      waveCenterZ,
+      cylinderAzimuth,
+      cylinderElevation,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -1072,6 +1087,11 @@ if (typeof document !== 'undefined') {
   bindPair('gradientColors', 'gradientColors');
   bindPair('cutAz', 'cutAz', activateCustomAxis);
   bindPair('cutEl', 'cutEl', activateCustomAxis);
+  bindPair('waveCenterX', 'waveCenterX');
+  bindPair('waveCenterY', 'waveCenterY');
+  bindPair('waveCenterZ', 'waveCenterZ');
+  bindPair('cylinderAzimuth', 'cylinderAzimuth');
+  bindPair('cylinderElevation', 'cylinderElevation');
   bindPair('divergence', 'divergence', syncSliceConstruction);
   bindPair('sliceLfoAmplitude', 'sliceLfoAmplitude');
   bindPair('sliceLfoCycles', 'sliceLfoCycles');
@@ -1317,9 +1337,26 @@ if (typeof document !== 'undefined') {
   });
   syncTravelOptimization();
 
+  const curvedSliceField = (): boolean =>
+    state.axis === 'spherical' || state.axis === 'cylindrical';
+  function syncSliceFieldControls(): void {
+    const curved = curvedSliceField();
+    $('customAxis').hidden = state.axis !== 'custom';
+    $('wavefrontControls').hidden = !curved;
+    $('cylinderAxisControls').hidden = state.axis !== 'cylindrical';
+    for (const id of ['divergence']) {
+      $(id).disabled = curved;
+      $(id + 'N').disabled = curved;
+      $(id + 'Control').classList.toggle('is-disabled', curved);
+    }
+    $('sliceLfo').disabled = curved;
+    $('sliceLfo').closest('.checkbox-control')?.classList.toggle('is-disabled', curved);
+    syncSliceLfoControls();
+    syncSliceConstruction();
+  }
   $('axis').addEventListener('change', (e) => {
     state.axis = inputTarget(e).value;
-    $('customAxis').hidden = state.axis !== 'custom';
+    syncSliceFieldControls();
     redraw(false);
   });
   function syncEaseCenter(): void {
@@ -1335,6 +1372,7 @@ if (typeof document !== 'undefined') {
   });
   function syncSliceConstruction(): void {
     const spiralBlocked =
+      curvedSliceField() ||
       state.divergence > 0 ||
       state.sliceLfo ||
       state.explodeAmount > 0 ||
@@ -1347,7 +1385,7 @@ if (typeof document !== 'undefined') {
     $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', spiralBlocked);
   }
   function syncSliceLfoControls(): void {
-    const disabled = !state.sliceLfo;
+    const disabled = curvedSliceField() || !state.sliceLfo;
     for (const id of ['sliceLfoAmplitude', 'sliceLfoCycles', 'sliceLfoAngle', 'sliceLfoPhase']) {
       $(id).disabled = disabled;
       $(id + 'N').disabled = disabled;
@@ -1393,6 +1431,7 @@ if (typeof document !== 'undefined') {
     state.spiral = inputTarget(e).checked;
     redraw(false);
   });
+  syncSliceFieldControls();
   syncSliceLfoControls();
   syncSliceConstruction();
   function syncLineWeightControls(): void {
@@ -1809,6 +1848,11 @@ if (typeof document !== 'undefined') {
     ['easeCenter', 'easeCenter'],
     ['cutAz', 'cutAz'],
     ['cutEl', 'cutEl'],
+    ['waveCenterX', 'waveCenterX'],
+    ['waveCenterY', 'waveCenterY'],
+    ['waveCenterZ', 'waveCenterZ'],
+    ['cylinderAzimuth', 'cylinderAzimuth'],
+    ['cylinderElevation', 'cylinderElevation'],
     ['divergence', 'divergence'],
     ['sliceLfoAmplitude', 'sliceLfoAmplitude'],
     ['sliceLfoCycles', 'sliceLfoCycles'],
@@ -1947,6 +1991,15 @@ if (typeof document !== 'undefined') {
     restored.mobiusStrength = Number.isFinite(restored.mobiusStrength)
       ? restored.mobiusStrength
       : 100;
+    restored.waveCenterX = Number.isFinite(restored.waveCenterX) ? restored.waveCenterX : 0;
+    restored.waveCenterY = Number.isFinite(restored.waveCenterY) ? restored.waveCenterY : 0;
+    restored.waveCenterZ = Number.isFinite(restored.waveCenterZ) ? restored.waveCenterZ : 0;
+    restored.cylinderAzimuth = Number.isFinite(restored.cylinderAzimuth)
+      ? restored.cylinderAzimuth
+      : 0;
+    restored.cylinderElevation = Number.isFinite(restored.cylinderElevation)
+      ? restored.cylinderElevation
+      : 90;
     restored.explodeAmount = Number.isFinite(restored.explodeAmount) ? restored.explodeAmount : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
@@ -1978,7 +2031,7 @@ if (typeof document !== 'undefined') {
     $('pw').value = String(state.pw);
     $('ph').value = String(state.ph);
     syncPaperPreset();
-    $('customAxis').hidden = state.axis !== 'custom';
+    syncSliceFieldControls();
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
     $('lineIndexColorEditor').classList.toggle('enabled', state.lineIndexColorEnabled);
     syncEaseCenter();
@@ -2202,10 +2255,23 @@ if (typeof document !== 'undefined') {
     randomizePair('easeCenter', 'easeCenter', () => randomInt(25, 75));
     syncEaseCenter();
 
-    randomizeSelect('axis', 'axis', ['up', 'up', 'cam', 'x', 'y', 'custom']);
-    $('customAxis').hidden = state.axis !== 'custom';
+    randomizeSelect('axis', 'axis', [
+      'up',
+      'up',
+      'cam',
+      'x',
+      'y',
+      'custom',
+      'spherical',
+      'cylindrical',
+    ]);
     randomizePair('cutAz', 'cutAz', () => randomInt(-180, 180));
     randomizePair('cutEl', 'cutEl', () => randomInt(-80, 80));
+    randomizePair('waveCenterX', 'waveCenterX', () => randomInt(-70, 70));
+    randomizePair('waveCenterY', 'waveCenterY', () => randomInt(-70, 70));
+    randomizePair('waveCenterZ', 'waveCenterZ', () => randomInt(-70, 70));
+    randomizePair('cylinderAzimuth', 'cylinderAzimuth', () => randomInt(-180, 180));
+    randomizePair('cylinderElevation', 'cylinderElevation', () => randomInt(-80, 80));
     randomizePair('divergence', 'divergence', () => (Math.random() < 0.6 ? 0 : randomInt(15, 110)));
     randomizePair('sliceLfoAmplitude', 'sliceLfoAmplitude', () => randomInt(35, 180));
     randomizePair('sliceLfoCycles', 'sliceLfoCycles', () => randomIn(0.75, 5));
@@ -2227,10 +2293,14 @@ if (typeof document !== 'undefined') {
     ]);
     $('sliceLfo').checked = state.sliceLfo;
     $('sliceLfoModulation').checked = state.sliceLfoModulation;
+    syncSliceFieldControls();
     syncSliceLfoControls();
     syncSliceConstruction();
     randomizeCheckbox('spiral', 'spiral', 0.22);
-    if (shouldRandomize('spiral') && (state.divergence > 0 || state.sliceLfo)) {
+    if (
+      shouldRandomize('spiral') &&
+      (curvedSliceField() || state.divergence > 0 || state.sliceLfo)
+    ) {
       state.spiral = false;
       $('spiral').checked = false;
     }

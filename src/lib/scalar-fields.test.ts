@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { explodeScalarFieldPoints, extractScalarFieldLevel } from './contour-engine';
 import {
+  createCylindricalScalarField,
   createPlanarScalarField,
+  createSphericalScalarField,
   resolveScalarFieldFeatures,
   scalarFieldCompatibility,
   type MeshScalarField,
@@ -10,6 +12,36 @@ import {
 const mesh = { V: new Float32Array([-1, 2, 3, 4, -5, 6]) };
 
 describe('scalar fields', () => {
+  it('evaluates spherical wavefront values and normalized gradients', () => {
+    const field = createSphericalScalarField(
+      { V: new Float32Array([1, 2, 3, 4, 6, 3, 1, 2, 3]) },
+      { center: [1, 2, 3] },
+    );
+
+    expect(Array.from(field.values)).toEqual([0, 5, 0]);
+    expect(field.min).toBe(0);
+    expect(field.max).toBe(5);
+    expect(field.evaluate?.(1, 5, 7)).toBe(5);
+    expect(field.gradient?.(1, 5, 7)).toEqual([0, 0.6, 0.8]);
+    expect(field.gradient?.(1, 2, 3)).toBeNull();
+    expect(field.cacheKey).toBe('analytic:sphere:1,2,3');
+  });
+
+  it('evaluates cylindrical radial distance around a normalized axis', () => {
+    const field = createCylindricalScalarField(
+      { V: new Float32Array([2, 2, 8, 5, 6, -10, 2, 2, 0]) },
+      { center: [2, 2, 0], axis: [0, 0, 4] },
+    );
+
+    expect(Array.from(field.values)).toEqual([0, 5, 0]);
+    expect(field.min).toBe(0);
+    expect(field.max).toBe(5);
+    expect(field.evaluate?.(5, 6, 20)).toBe(5);
+    expect(field.gradient?.(5, 6, 20)).toEqual([0.6, 0.8, 0]);
+    expect(field.gradient?.(2, 2, 20)).toBeNull();
+    expect(field.cacheKey).toBe('analytic:cylinder:2,2,0:0,0,1');
+  });
+
   it('constructs deterministic model and custom planar fields with separated cache keys', () => {
     const up = createPlanarScalarField(mesh, { axis: 'up', cutAz: 0, cutEl: 90 });
     const x = createPlanarScalarField(mesh, { axis: 'x', cutAz: 0, cutEl: 90 });

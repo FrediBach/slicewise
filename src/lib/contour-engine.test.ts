@@ -365,4 +365,100 @@ describe('computeContours', () => {
         .every(Number.isFinite),
     ).toBe(true);
   });
+
+  it.each(['spherical', 'cylindrical'] as const)(
+    'renders deterministic finite %s wavefront contours and plotter output',
+    (axis) => {
+      const mesh = makeContourMesh();
+      const settings = {
+        ...contourSettings,
+        axis,
+        waveCenterX: 28,
+        waveCenterY: -17,
+        waveCenterZ: 11,
+        cylinderAzimuth: 37,
+        cylinderElevation: 52,
+        explodeAmount: 65,
+        quality: 7,
+        hide: false,
+        sil: false,
+        bg: false,
+      };
+      const result = computeContours(mesh, settings, false);
+      const repeated = computeContours(mesh, settings, false);
+      const gcode = generateGCode(
+        result.toolpaths,
+        { width: settings.pw, height: settings.ph },
+        { origin: 'bottom-left', clipToArtboard: true, optimizeTravel: false },
+      );
+
+      expect(result.paths).toBeGreaterThan(0);
+      expect(result.svg).toBe(repeated.svg);
+      expect(result.toolpaths).toEqual(repeated.toolpaths);
+      expect(result.svg).not.toMatch(/NaN|Infinity/);
+      expect(gcode).not.toMatch(/NaN|Infinity/);
+    },
+  );
+
+  it('changes spherical topology with its centre and ignores planar-only effects', () => {
+    const mesh = makeContourMesh();
+    const base = {
+      ...contourSettings,
+      axis: 'spherical',
+      waveCenterX: 0,
+      waveCenterY: 0,
+      waveCenterZ: 0,
+      quality: 6,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const centered = computeContours(mesh, base, false);
+    const shifted = computeContours(mesh, { ...base, waveCenterX: 55 }, false);
+    const incompatible = computeContours(
+      mesh,
+      {
+        ...base,
+        divergence: 140,
+        sliceLfo: true,
+        sliceLfoAmplitude: 300,
+        spiral: true,
+      },
+      false,
+    );
+
+    expect(shifted.toolpaths).not.toEqual(centered.toolpaths);
+    expect(incompatible.toolpaths).toEqual(centered.toolpaths);
+  });
+
+  it('morphs exactly between wavefront centres', () => {
+    const mesh = makeContourMesh();
+    const base = {
+      ...contourSettings,
+      axis: 'cylindrical',
+      waveCenterX: -35,
+      waveCenterY: 10,
+      waveCenterZ: 0,
+      cylinderAzimuth: -20,
+      cylinderElevation: 70,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const target = { waveCenterX: 45, cylinderAzimuth: 65 };
+    const startResult = computeContours(mesh, base, false);
+    const targetResult = computeContours(mesh, { ...base, ...target }, false);
+    const morphResult = computeContours(
+      mesh,
+      { ...base, morphEnabled: true, morphSteps: 2, morphTargets: target },
+      false,
+    );
+
+    expect(morphResult.toolpaths[0].runs).toEqual([
+      ...startResult.toolpaths[0].runs,
+      ...targetResult.toolpaths[0].runs,
+    ]);
+    expect(morphResult.svg).toContain('data-morph-x="0"');
+    expect(morphResult.svg).toContain('data-morph-x="1"');
+  });
 });
