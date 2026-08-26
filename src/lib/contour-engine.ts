@@ -35,6 +35,7 @@ export interface LineIndexColor {
   index: number;
   color: string;
   series?: 'single' | 'even' | 'odd' | 'prime' | 'fibonacci' | 'tribonacci';
+  reverse?: boolean;
 }
 
 export interface ContourSettings extends GenerativeMaskSettings {
@@ -1221,7 +1222,10 @@ function gradientPalette(settings: ContourSettings): string[] {
   });
 }
 
-function colorPlan(settings: ContourSettings): {
+function colorPlan(
+  settings: ContourSettings,
+  lineCount: number,
+): {
   palette: string[];
   indexedPalette: Map<number, number>;
   gradientCount: number;
@@ -1245,9 +1249,10 @@ function colorPlan(settings: ContourSettings): {
       if (index >= 0 && index < 9999) indexedPalette.set(index, paletteIndex);
       continue;
     }
-    for (let oneBasedIndex = 1; oneBasedIndex <= 9999; oneBasedIndex++) {
-      if (lineIndexMatchesSeries(oneBasedIndex, series))
-        indexedPalette.set(oneBasedIndex - 1, paletteIndex);
+    for (let zeroBasedIndex = 0; zeroBasedIndex < lineCount; zeroBasedIndex++) {
+      const seriesIndex = rule.reverse ? lineCount - zeroBasedIndex : zeroBasedIndex + 1;
+      if (lineIndexMatchesSeries(seriesIndex, series))
+        indexedPalette.set(zeroBasedIndex, paletteIndex);
     }
   }
   return { palette, indexedPalette, gradientCount };
@@ -2470,7 +2475,7 @@ function computeLineArtInstance(
     ? previewCurveQuality(settings.quality, settings.previewDetail)
     : settings.quality;
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
-  const { palette, indexedPalette, gradientCount } = colorPlan(settings);
+  const { palette, indexedPalette, gradientCount } = colorPlan(settings, offsets.length - 1);
   const pathDataByColor = palette.map(() => '');
   const runsByColor = palette.map((): Polyline[] => []);
   const runs: Polyline[] = [];
@@ -2668,8 +2673,9 @@ function computeContourInstance(
     step = Math.max(0.25, W / D.rw);
   }
 
+  const N = quick ? previewLineCount(settings.lines, settings.previewDetail) : settings.lines;
   const gradient = gradientPalette(settings);
-  const { palette, indexedPalette } = colorPlan(settings);
+  const { palette, indexedPalette } = colorPlan(settings, N);
   const toneBandCount = settings.halftone ? 12 : 1;
   const lineWeightMode = settings.lineWeightMode || 'uniform';
   const weightBandCount = lineWeightMode === 'uniform' ? 1 : lineWeightMode === 'index' ? 2 : 8;
@@ -2695,7 +2701,6 @@ function computeContourInstance(
     ),
   );
   const outlineOut: Polyline[] = [];
-  const N = quick ? previewLineCount(settings.lines, settings.previewDetail) : settings.lines;
   const quality = clamp(
     Math.round(
       quick ? previewCurveQuality(settings.quality, settings.previewDetail) : settings.quality,

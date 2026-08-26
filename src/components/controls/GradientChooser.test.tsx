@@ -99,6 +99,7 @@ describe('GradientChooser', () => {
         index: 7,
         color: '#336699',
         series: 'single',
+        reverse: false,
       });
     });
 
@@ -109,9 +110,20 @@ describe('GradientChooser', () => {
         index: 7,
         color: '#336699',
         series: 'prime',
+        reverse: false,
       });
     });
     expect(screen.queryByLabelText('Line index 2')).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText('Reverse line target 2'));
+    await waitFor(() => {
+      const event = onChange.mock.calls.at(-1)?.[0] as CustomEvent;
+      expect(event.detail.colors).toContainEqual({
+        index: 7,
+        color: '#336699',
+        series: 'prime',
+        reverse: true,
+      });
+    });
 
     document.dispatchEvent(
       new CustomEvent('restoreparameters', {

@@ -216,7 +216,7 @@ const state: AppState = {
     { position: 1, color: '#8b5cf6' },
   ],
   lineIndexColorEnabled: false,
-  lineIndexColors: [{ index: 1, color: '#ef4444', series: 'single' }],
+  lineIndexColors: [{ index: 1, color: '#ef4444', series: 'single', reverse: false }],
   halftone: false,
   halftoneSize: 2.4,
   halftoneContrast: 75,
@@ -1868,7 +1868,7 @@ if (typeof document !== 'undefined') {
     restored.lineIndexColorEnabled = restored.lineIndexColorEnabled ?? false;
     restored.lineIndexColors = restored.lineIndexColors?.length
       ? restored.lineIndexColors
-      : [{ index: 1, color: '#ef4444', series: 'single' }];
+      : [{ index: 1, color: '#ef4444', series: 'single', reverse: false }];
     restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
       ? restored.lensFocalLength
       : 50;

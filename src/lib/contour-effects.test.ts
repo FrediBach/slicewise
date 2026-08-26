@@ -144,6 +144,38 @@ describe('contour output effects', () => {
     }
   });
 
+  it('can count automatic series backwards from the last line', () => {
+    const mesh = {
+      V: Float32Array.from([
+        -1, -1, 0, 1, -1, 0, -1, -0.5, 0, 1, -0.5, 0, -1, 0, 0, 1, 0, 0, -1, 0.5, 0, 1, 0.5, 0, -1,
+        1, 0, 1, 1, 0,
+      ]),
+      T: new Uint32Array(),
+      lineArt: { offsets: Uint32Array.from([0, 2, 4, 6, 8, 10]) },
+    };
+    const settings = {
+      ...contourSettings,
+      az: 0,
+      el: 90,
+      hide: false,
+      sil: false,
+      lineIndexColorEnabled: true,
+      lineIndexColors: [{ index: 1, series: 'prime' as const, color: '#ff00aa' }],
+    };
+    const forward = computeContours(mesh, settings, false);
+    const reversed = computeContours(
+      mesh,
+      { ...settings, lineIndexColors: [{ ...settings.lineIndexColors[0], reverse: true }] },
+      false,
+    );
+
+    const colouredRuns = (result: typeof forward) =>
+      result.toolpaths.find((group) => group.color === '#ff00aa')?.runs;
+    expect(colouredRuns(forward)).toHaveLength(3);
+    expect(colouredRuns(reversed)).toHaveLength(3);
+    expect(colouredRuns(reversed)).not.toEqual(colouredRuns(forward));
+  });
+
   it('renders chromatic aberration as three screen-blended paths', () => {
     const result = computeContours(
       makeContourMesh(),

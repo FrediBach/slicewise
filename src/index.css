@@ -959,6 +959,17 @@ select {
   height: 25px;
   font-size: 9px;
 }
+.line-index-reverse {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #777c76;
+  font-size: 8px;
+  white-space: nowrap;
+}
+.line-index-reverse input {
+  margin: 0;
+}
 .line-index-color input[type='number'] {
   width: 53px;
   height: 25px;

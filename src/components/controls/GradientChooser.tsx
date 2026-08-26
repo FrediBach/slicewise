@@ -6,7 +6,13 @@ type GradientValue = [position: number, color: string];
 type GradientPreset = { name: string; stops: GradientValue[] };
 type GradientStop = { id: number; position: number; color: string };
 type LineIndexSeries = 'single' | 'even' | 'odd' | 'prime' | 'fibonacci' | 'tribonacci';
-type LineIndexColor = { id: number; index: number; color: string; series: LineIndexSeries };
+type LineIndexColor = {
+  id: number;
+  index: number;
+  color: string;
+  series: LineIndexSeries;
+  reverse: boolean;
+};
 
 let nextStopId = 0;
 const createStop = ([position, color]: GradientValue): GradientStop => ({
@@ -217,6 +223,7 @@ const createLineColor = (index: number, color: string): LineIndexColor => ({
   index,
   color,
   series: 'single',
+  reverse: false,
 });
 
 function LineIndexColorChooser() {
@@ -227,7 +234,14 @@ function LineIndexColorChooser() {
     rootRef.current?.dispatchEvent(
       new CustomEvent('lineindexcolorschange', {
         bubbles: true,
-        detail: { colors: colors.map(({ index, color, series }) => ({ index, color, series })) },
+        detail: {
+          colors: colors.map(({ index, color, series, reverse }) => ({
+            index,
+            color,
+            series,
+            reverse,
+          })),
+        },
       }),
     );
   }, [colors]);
@@ -235,14 +249,20 @@ function LineIndexColorChooser() {
   useEffect(() => {
     const restore = (
       event: CustomEvent<{
-        lineIndexColors?: Array<{ index: number; color: string; series?: LineIndexSeries }>;
+        lineIndexColors?: Array<{
+          index: number;
+          color: string;
+          series?: LineIndexSeries;
+          reverse?: boolean;
+        }>;
       }>,
     ) => {
       if (event.detail?.lineIndexColors?.length) {
         setColors(
-          event.detail.lineIndexColors.map(({ index, color, series }) => ({
+          event.detail.lineIndexColors.map(({ index, color, series, reverse }) => ({
             ...createLineColor(index, color),
             series: series || 'single',
+            reverse: Boolean(reverse),
           })),
         );
       }
@@ -260,7 +280,7 @@ function LineIndexColorChooser() {
     <div className="line-index-editor" id="lineIndexColorEditor" ref={rootRef}>
       <Checkbox id="lineIndexColorEnabled">Colour by line index</Checkbox>
       <div className="line-index-panel">
-        {colors.map(({ id, index, color, series }, position) => (
+        {colors.map(({ id, index, color, series, reverse }, position) => (
           <div className="line-index-color" key={id}>
             <div className="line-index-target">
               <select
@@ -293,7 +313,17 @@ function LineIndexColorChooser() {
                     })
                   }
                 />
-              ) : null}
+              ) : (
+                <label className="line-index-reverse">
+                  <input
+                    type="checkbox"
+                    checked={reverse}
+                    aria-label={`Reverse line target ${position + 1}`}
+                    onChange={(event) => update(id, { reverse: event.target.checked })}
+                  />
+                  Reverse
+                </label>
+              )}
             </div>
             <input
               type="color"
