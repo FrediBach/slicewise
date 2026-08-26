@@ -176,6 +176,8 @@ Make strongly nonlinear warps accurate in previews and plotter output instead of
 
 ## Session 3 — Hyperbolic Möbius transformation kernel
 
+**Status: completed.**
+
 ### Goal
 
 Implement pure, tested Poincaré-disk isometries before exposing controls.
@@ -193,6 +195,12 @@ Implement pure, tested Poincaré-disk isometries before exposing controls.
 - Add a continuous strength control that is neutral at zero. Interpolate transformation parameters, not final XY coordinates, so intermediate values remain disk-preserving.
 - Define behavior for points outside the disk. Preferred initial policy: reuse the existing safe radial normalization before transforming and restore overflow monotonically afterward; validate this visually before freezing it.
 - Add an optional circle-inversion primitive to the math module only if it shares the same domain/result contract. Its UI belongs to Session 11.
+
+### Decisions recorded
+
+- Translation uses bounded Cartesian disk parameters; strength scales both the translation vector and rotation angle from identity before evaluating the transform.
+- Points on or outside the disk are evaluated along a safe near-boundary direction, then have their original radius restored. They remain finite, preserve monotonic radial overflow, and report `clipped-at-domain`.
+- Circle inversion remains deferred to Session 11 because Session 3 does not need it for the Möbius isometry contract.
 
 ### Tests
 

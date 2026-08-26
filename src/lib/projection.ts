@@ -45,6 +45,20 @@ export interface ProjectedPointResult {
   point: Vec3;
 }
 
+export interface PoincareMobiusParameters {
+  /** Translation parameter inside the open unit disk. */
+  translation: Vec2;
+  /** Counter-clockwise rotation in radians. */
+  rotation: number;
+  /** Interpolates translation and rotation parameters from identity. */
+  strength?: number;
+}
+
+export interface DiskTransformResult {
+  status: ProjectionPointStatus;
+  point: Vec2;
+}
+
 export interface AdaptiveProjectionOptions {
   /** Maximum projected chord error in sheet units. */
   tolerance: number;
@@ -70,6 +84,127 @@ export interface AdaptiveProjectionResult {
 
 const clamp = (value: number, minimum: number, maximum: number): number =>
   Math.max(minimum, Math.min(maximum, value));
+
+const MAX_MOBIUS_TRANSLATION_RADIUS = 1 - 1e-9;
+const DISK_BOUNDARY_SAMPLE_RADIUS = 1 - 1e-12;
+
+interface ComplexPair {
+  re: number;
+  im: number;
+}
+
+const complexMultiply = (a: ComplexPair, b: ComplexPair): ComplexPair => ({
+  re: a.re * b.re - a.im * b.im,
+  im: a.re * b.im + a.im * b.re,
+});
+
+const complexDivide = (numerator: ComplexPair, denominator: ComplexPair): ComplexPair | null => {
+  const magnitude2 = denominator.re * denominator.re + denominator.im * denominator.im;
+  if (!Number.isFinite(magnitude2) || magnitude2 <= 0) return null;
+  return {
+    re: (numerator.re * denominator.re + numerator.im * denominator.im) / magnitude2,
+    im: (numerator.im * denominator.re - numerator.re * denominator.im) / magnitude2,
+  };
+};
+
+const resolveMobiusParameters = (
+  parameters: PoincareMobiusParameters,
+): { translation: ComplexPair; rotation: number } | null => {
+  const [translationX, translationY] = parameters.translation;
+  const strength = parameters.strength ?? 1;
+  if (![translationX, translationY, parameters.rotation, strength].every(Number.isFinite))
+    return null;
+  const translationRadius = Math.hypot(translationX, translationY);
+  const boundedScale =
+    translationRadius > MAX_MOBIUS_TRANSLATION_RADIUS
+      ? MAX_MOBIUS_TRANSLATION_RADIUS / translationRadius
+      : 1;
+  const interpolation = clamp(strength, 0, 1);
+  return {
+    translation: {
+      re: translationX * boundedScale * interpolation,
+      im: translationY * boundedScale * interpolation,
+    },
+    rotation: parameters.rotation * interpolation,
+  };
+};
+
+const applyMobiusInterior = (
+  point: ComplexPair,
+  translation: ComplexPair,
+  rotation: number,
+): ComplexPair | null => {
+  // exp(i theta) * (z - a) / (1 - conjugate(a) * z)
+  const quotient = complexDivide(
+    { re: point.re - translation.re, im: point.im - translation.im },
+    {
+      re: 1 - translation.re * point.re - translation.im * point.im,
+      im: translation.im * point.re - translation.re * point.im,
+    },
+  );
+  if (!quotient) return null;
+  return complexMultiply({ re: Math.cos(rotation), im: Math.sin(rotation) }, quotient);
+};
+
+const applyPoincareMobius = (
+  x: number,
+  y: number,
+  translation: ComplexPair,
+  rotation: number,
+): DiskTransformResult => {
+  if (![x, y].every(Number.isFinite)) return { status: 'invalid', point: [NaN, NaN] };
+  const radius = Math.hypot(x, y);
+  const outsideDisk = radius >= 1;
+  const inputScale = outsideDisk && radius > 0 ? DISK_BOUNDARY_SAMPLE_RADIUS / radius : 1;
+  const transformed = applyMobiusInterior(
+    { re: x * inputScale, im: y * inputScale },
+    translation,
+    rotation,
+  );
+  if (!transformed || ![transformed.re, transformed.im].every(Number.isFinite))
+    return { status: 'invalid', point: [NaN, NaN] };
+
+  if (!outsideDisk) return { status: 'valid', point: [transformed.re, transformed.im] };
+
+  // Möbius maps preserve the disk boundary. For source geometry outside the
+  // model disk, transform a safe near-boundary direction and then restore the
+  // original radius. This keeps overflow finite, radial, and monotonic.
+  const transformedRadius = Math.hypot(transformed.re, transformed.im);
+  if (!Number.isFinite(transformedRadius) || transformedRadius <= Number.EPSILON)
+    return { status: 'invalid', point: [NaN, NaN] };
+  const outputScale = radius / transformedRadius;
+  return {
+    status: 'clipped-at-domain',
+    point: [transformed.re * outputScale, transformed.im * outputScale],
+  };
+};
+
+/** Applies an orientation-preserving isometry of the Poincare disk. */
+export function transformPoincareDisk(
+  x: number,
+  y: number,
+  parameters: PoincareMobiusParameters,
+): DiskTransformResult {
+  const resolved = resolveMobiusParameters(parameters);
+  if (!resolved) return { status: 'invalid', point: [NaN, NaN] };
+  return applyPoincareMobius(x, y, resolved.translation, resolved.rotation);
+}
+
+/** Applies the exact inverse of the effective, strength-interpolated transform. */
+export function inverseTransformPoincareDisk(
+  x: number,
+  y: number,
+  parameters: PoincareMobiusParameters,
+): DiskTransformResult {
+  const resolved = resolveMobiusParameters(parameters);
+  if (!resolved) return { status: 'invalid', point: [NaN, NaN] };
+  const rotation = -resolved.rotation;
+  const inverseTranslation = complexMultiply(
+    { re: -resolved.translation.re, im: -resolved.translation.im },
+    { re: Math.cos(resolved.rotation), im: Math.sin(resolved.rotation) },
+  );
+  return applyPoincareMobius(x, y, inverseTranslation, rotation);
+}
 
 export function cameraBasis(azDeg: number, elDeg: number, rollDeg: number): CameraBasis {
   const az = (azDeg * Math.PI) / 180,

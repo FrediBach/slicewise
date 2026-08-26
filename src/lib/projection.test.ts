@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   cameraBasis,
   distortLens,
+  inverseTransformPoincareDisk,
   projectCameraPoint,
   projectCameraPointResult,
   projectMesh,
   projectPolylineAdaptive,
   projectWorldPoint,
   resolveLens,
+  transformPoincareDisk,
   warpKleinPoincare,
 } from './projection';
 
@@ -15,6 +17,12 @@ const expectPointCloseTo = (actual: readonly number[], expected: readonly number
   expect(actual).toHaveLength(expected.length);
   for (let index = 0; index < actual.length; index++)
     expect(actual[index]).toBeCloseTo(expected[index], 6);
+};
+
+const poincareDistance = (a: readonly number[], b: readonly number[]): number => {
+  const delta2 = (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+  const denominator = (1 - a[0] ** 2 - a[1] ** 2) * (1 - b[0] ** 2 - b[1] ** 2);
+  return Math.acosh(1 + (2 * delta2) / denominator);
 };
 
 describe('projection', () => {
@@ -48,6 +56,129 @@ describe('projection', () => {
     expectPointCloseTo(warpKleinPoincare(0.8, 0, 0), [0.8, 0]);
     expectPointCloseTo(warpKleinPoincare(0.8, 0, 50), [Math.sqrt(0.4), 0]);
     expectPointCloseTo(warpKleinPoincare(0.8, 0, 100), [0.5, 0]);
+  });
+
+  describe('Poincare disk Mobius transformations', () => {
+    it('is identity for neutral parameters and zero strength', () => {
+      const point: [number, number] = [0.35, -0.42];
+      expectPointCloseTo(
+        transformPoincareDisk(...point, { translation: [0, 0], rotation: 0 }).point,
+        point,
+      );
+      expectPointCloseTo(
+        transformPoincareDisk(...point, {
+          translation: [0.7, -0.4],
+          rotation: 1.3,
+          strength: 0,
+        }).point,
+        point,
+      );
+    });
+
+    it('keeps representative interior points strictly inside the disk', () => {
+      const parameters = { translation: [0.62, -0.31] as [number, number], rotation: 0.8 };
+      for (const point of [
+        [0, 0],
+        [0.2, -0.4],
+        [-0.7, 0.1],
+        [0.93, 0.2],
+      ] as const) {
+        const transformed = transformPoincareDisk(point[0], point[1], parameters);
+        expect(transformed.status).toBe('valid');
+        expect(Math.hypot(...transformed.point)).toBeLessThan(1);
+      }
+    });
+
+    it('restores representative points after applying the inverse', () => {
+      const parameters = {
+        translation: [0.48, 0.36] as [number, number],
+        rotation: -1.1,
+        strength: 0.65,
+      };
+      for (const point of [
+        [0, 0],
+        [0.25, 0.5],
+        [-0.82, 0.12],
+      ] as const) {
+        const transformed = transformPoincareDisk(point[0], point[1], parameters);
+        const restored = inverseTransformPoincareDisk(...transformed.point, parameters);
+        expect(restored.status).toBe('valid');
+        expectPointCloseTo(restored.point, point);
+      }
+    });
+
+    it('preserves hyperbolic distance for interior point pairs', () => {
+      const parameters = { translation: [-0.44, 0.23] as [number, number], rotation: 2.2 };
+      const pairs = [
+        [
+          [0.1, 0.2],
+          [-0.3, 0.5],
+        ],
+        [
+          [-0.72, -0.1],
+          [0.61, -0.32],
+        ],
+      ] as const;
+      for (const [a, b] of pairs) {
+        const transformedA = transformPoincareDisk(a[0], a[1], parameters).point;
+        const transformedB = transformPoincareDisk(b[0], b[1], parameters).point;
+        expect(poincareDistance(transformedA, transformedB)).toBeCloseTo(
+          poincareDistance(a, b),
+          10,
+        );
+      }
+    });
+
+    it('keeps near-boundary and overflow values finite and monotonic', () => {
+      const parameters = { translation: [0.92, 0.2] as [number, number], rotation: 0.35 };
+      const nearBoundary = transformPoincareDisk(1 - 1e-12, 0, parameters);
+      expect(nearBoundary.status).toBe('valid');
+      expect(nearBoundary.point.every(Number.isFinite)).toBe(true);
+      expect(Math.hypot(...nearBoundary.point)).toBeLessThan(1);
+
+      const boundary = transformPoincareDisk(1, 0, parameters);
+      const outside = transformPoincareDisk(1.4, 0, parameters);
+      expect(boundary.status).toBe('clipped-at-domain');
+      expect(outside.status).toBe('clipped-at-domain');
+      expect(boundary.point.every(Number.isFinite)).toBe(true);
+      expect(outside.point.every(Number.isFinite)).toBe(true);
+      expect(Math.hypot(...boundary.point)).toBeCloseTo(1, 10);
+      expect(Math.hypot(...outside.point)).toBeCloseTo(1.4, 10);
+    });
+
+    it('composes rotations and interpolates parameters instead of output points', () => {
+      const point: [number, number] = [0.3, -0.2];
+      const first = transformPoincareDisk(...point, { translation: [0, 0], rotation: 0.4 });
+      const composed = transformPoincareDisk(...first.point, {
+        translation: [0, 0],
+        rotation: 0.7,
+      });
+      const direct = transformPoincareDisk(...point, { translation: [0, 0], rotation: 1.1 });
+      expectPointCloseTo(composed.point, direct.point);
+
+      const target = { translation: [0.6, -0.2] as [number, number], rotation: 1.2 };
+      const halfway = transformPoincareDisk(...point, { ...target, strength: 0.5 });
+      const halfParameters = transformPoincareDisk(...point, {
+        translation: [0.3, -0.1],
+        rotation: 0.6,
+      });
+      expectPointCloseTo(halfway.point, halfParameters.point);
+    });
+
+    it('bounds translation parameters and rejects non-finite inputs', () => {
+      const bounded = transformPoincareDisk(0.1, 0.2, {
+        translation: [20, -10],
+        rotation: 0,
+      });
+      expect(bounded.status).toBe('valid');
+      expect(Math.hypot(...bounded.point)).toBeLessThan(1);
+      expect(transformPoincareDisk(NaN, 0, { translation: [0, 0], rotation: 0 }).status).toBe(
+        'invalid',
+      );
+      expect(transformPoincareDisk(0, 0, { translation: [Infinity, 0], rotation: 0 }).status).toBe(
+        'invalid',
+      );
+    });
   });
 
   it('records neutral, barrel, and pincushion distortion fixtures', () => {
