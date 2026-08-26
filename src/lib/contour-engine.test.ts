@@ -538,4 +538,111 @@ describe('computeContours', () => {
 
     expect(incompatible.toolpaths).toEqual(plain.toolpaths);
   });
+
+  it.each(['nearest', 'difference', 'voronoi'] as const)(
+    'renders deterministic finite two-source %s geodesic output',
+    (geodesicMode) => {
+      const mesh = makeContourMesh();
+      const settings = {
+        ...contourSettings,
+        axis: 'geodesic',
+        geodesicMode,
+        geodesicSeedAzimuth: 20,
+        geodesicSeedElevation: 65,
+        geodesicSeedBAzimuth: -155,
+        geodesicSeedBElevation: -55,
+        hide: false,
+        sil: false,
+        bg: false,
+      };
+      const result = computeContours(mesh, settings, false);
+      const repeated = computeContours(mesh, settings, false);
+      const gcode = generateGCode(
+        result.toolpaths,
+        { width: settings.pw, height: settings.ph },
+        { origin: 'bottom-left', clipToArtboard: true, optimizeTravel: false },
+      );
+
+      expect(result.paths).toBeGreaterThan(0);
+      expect(result.svg).toBe(repeated.svg);
+      expect(result.toolpaths).toEqual(repeated.toolpaths);
+      expect(result.svg).not.toMatch(/NaN|Infinity/);
+      expect(gcode).not.toMatch(/NaN|Infinity/);
+    },
+  );
+
+  it('keeps Voronoi geometry independent of source order and line count', () => {
+    const mesh = makeContourMesh();
+    const base = {
+      ...contourSettings,
+      axis: 'geodesic',
+      geodesicMode: 'voronoi' as const,
+      geodesicSeedAzimuth: 0,
+      geodesicSeedElevation: 90,
+      geodesicSeedBAzimuth: 0,
+      geodesicSeedBElevation: -90,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const first = computeContours(mesh, { ...base, lines: 2 }, false);
+    const swapped = computeContours(
+      mesh,
+      {
+        ...base,
+        geodesicSeedElevation: -90,
+        geodesicSeedBElevation: 90,
+        lines: 120,
+      },
+      false,
+    );
+
+    expect(first.toolpaths).toEqual(swapped.toolpaths);
+  });
+
+  it('restores missing multi-source settings to single-source behavior', () => {
+    const mesh = makeContourMesh();
+    const legacy = {
+      ...contourSettings,
+      axis: 'geodesic',
+      geodesicSeedAzimuth: 12,
+      geodesicSeedElevation: 48,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+
+    expect(computeContours(mesh, legacy, false).toolpaths).toEqual(
+      computeContours(mesh, { ...legacy, geodesicMode: 'single' }, false).toolpaths,
+    );
+  });
+
+  it('morphs exactly between second geodesic seed directions', () => {
+    const mesh = makeContourMesh();
+    const base = {
+      ...contourSettings,
+      axis: 'geodesic',
+      geodesicMode: 'nearest' as const,
+      geodesicSeedAzimuth: 15,
+      geodesicSeedElevation: 60,
+      geodesicSeedBAzimuth: -130,
+      geodesicSeedBElevation: -45,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const target = { geodesicSeedBAzimuth: 95, geodesicSeedBElevation: 5 };
+    const startResult = computeContours(mesh, base, false);
+    const targetResult = computeContours(mesh, { ...base, ...target }, false);
+    const morphResult = computeContours(
+      mesh,
+      { ...base, morphEnabled: true, morphSteps: 2, morphTargets: target },
+      false,
+    );
+
+    expect(morphResult.toolpaths[0].runs).toEqual([
+      ...startResult.toolpaths[0].runs,
+      ...targetResult.toolpaths[0].runs,
+    ]);
+  });
 });

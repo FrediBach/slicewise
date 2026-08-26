@@ -4,6 +4,12 @@ import { getMeshTopology, type MeshTopology, type TopologyMesh } from './mesh-to
 
 export type ModelDirection = readonly [x: number, y: number, z: number];
 
+export interface SurfaceGraphVoronoi {
+  distances: Float64Array;
+  /** Seed vertex responsible for each distance, or -1 when unreachable. */
+  labels: Int32Array;
+}
+
 class DistanceHeap {
   private readonly vertices: number[] = [];
   private readonly distances: number[] = [];
@@ -63,6 +69,69 @@ class DistanceHeap {
   }
 }
 
+class VoronoiHeap {
+  private readonly vertices: number[] = [];
+  private readonly distances: number[] = [];
+  private readonly labels: number[] = [];
+
+  get size(): number {
+    return this.vertices.length;
+  }
+
+  private before(left: number, right: number): boolean {
+    return (
+      this.distances[left] < this.distances[right] ||
+      (this.distances[left] === this.distances[right] &&
+        (this.labels[left] < this.labels[right] ||
+          (this.labels[left] === this.labels[right] && this.vertices[left] < this.vertices[right])))
+    );
+  }
+
+  private swap(left: number, right: number): void {
+    [this.vertices[left], this.vertices[right]] = [this.vertices[right], this.vertices[left]];
+    [this.distances[left], this.distances[right]] = [this.distances[right], this.distances[left]];
+    [this.labels[left], this.labels[right]] = [this.labels[right], this.labels[left]];
+  }
+
+  push(vertex: number, distance: number, label: number): void {
+    let index = this.vertices.length;
+    this.vertices.push(vertex);
+    this.distances.push(distance);
+    this.labels.push(label);
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (!this.before(index, parent)) break;
+      this.swap(index, parent);
+      index = parent;
+    }
+  }
+
+  pop(): readonly [vertex: number, distance: number, label: number] | null {
+    if (!this.vertices.length) return null;
+    const entry = [this.vertices[0], this.distances[0], this.labels[0]] as const;
+    const lastVertex = this.vertices.pop()!,
+      lastDistance = this.distances.pop()!,
+      lastLabel = this.labels.pop()!;
+    if (this.vertices.length) {
+      this.vertices[0] = lastVertex;
+      this.distances[0] = lastDistance;
+      this.labels[0] = lastLabel;
+      let index = 0;
+      for (;;) {
+        const left = index * 2 + 1,
+          right = left + 1;
+        let next = index;
+        if (left < this.vertices.length && this.before(left, next)) next = left;
+        if (right < this.vertices.length && this.before(right, next)) next = right;
+        if (next === index) break;
+        this.swap(index, next);
+        index = next;
+      }
+    }
+    return entry;
+  }
+}
+
 function solveSurfaceGraphDistances(
   topology: MeshTopology,
   seedVertices: Iterable<number>,
@@ -111,6 +180,60 @@ export function surfaceGraphDistances(
   seedVertices: Iterable<number>,
 ): Float64Array {
   return solveSurfaceGraphDistances(getMeshTopology(mesh), seedVertices);
+}
+
+/**
+ * Computes nearest-source graph distances and stable seed-vertex labels.
+ * Equal distances are assigned to the lower seed vertex regardless of input
+ * order. Vertices unreachable from every valid seed retain Infinity / -1.
+ */
+export function surfaceGraphVoronoi(
+  mesh: TopologyMesh,
+  seedVertices: Iterable<number>,
+): SurfaceGraphVoronoi {
+  const topology = getMeshTopology(mesh);
+  const distances = new Float64Array(topology.vertexCount);
+  distances.fill(Infinity);
+  const labels = new Int32Array(topology.vertexCount);
+  labels.fill(-1);
+  const seeds = Array.from(
+    new Set(
+      Array.from(seedVertices).filter(
+        (vertex) => Number.isInteger(vertex) && vertex >= 0 && vertex < topology.vertexCount,
+      ),
+    ),
+  ).sort((left, right) => left - right);
+  const heap = new VoronoiHeap();
+  for (const seed of seeds) {
+    distances[seed] = 0;
+    labels[seed] = seed;
+    heap.push(seed, 0, seed);
+  }
+
+  while (heap.size) {
+    const entry = heap.pop()!;
+    const vertex = entry[0],
+      distance = entry[1],
+      label = entry[2];
+    if (distance !== distances[vertex] || label !== labels[vertex]) continue;
+    for (
+      let adjacent = topology.adjacencyOffsets[vertex];
+      adjacent < topology.adjacencyOffsets[vertex + 1];
+      adjacent++
+    ) {
+      const neighbor = topology.adjacentVertices[adjacent];
+      const candidate = distance + topology.adjacentEdgeLengths[adjacent];
+      if (
+        candidate > distances[neighbor] ||
+        (candidate === distances[neighbor] && labels[neighbor] !== -1 && label >= labels[neighbor])
+      )
+        continue;
+      distances[neighbor] = candidate;
+      labels[neighbor] = label;
+      heap.push(neighbor, candidate, label);
+    }
+  }
+  return { distances, labels };
 }
 
 /**

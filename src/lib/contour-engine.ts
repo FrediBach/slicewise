@@ -21,9 +21,11 @@ import {
 import {
   createCylindricalScalarField,
   createGeodesicScalarField,
+  createMultiSourceGeodesicField,
   createPlanarScalarField,
   createSphericalScalarField,
   resolveScalarFieldFeatures,
+  type IntrinsicVoronoiData,
   type MeshScalarField,
   type ResolvedScalarFieldFeatures,
 } from './scalar-fields';
@@ -91,6 +93,9 @@ export interface ContourSettings extends GenerativeMaskSettings {
   cylinderElevation?: number;
   geodesicSeedAzimuth?: number;
   geodesicSeedElevation?: number;
+  geodesicMode?: 'single' | 'nearest' | 'difference' | 'voronoi';
+  geodesicSeedBAzimuth?: number;
+  geodesicSeedBElevation?: number;
   divergence: number;
   sliceLfo: boolean;
   sliceLfoAmplitude: number;
@@ -577,6 +582,69 @@ function chain(pts: NumericArray, segs: NumericArray): number[][] {
 
 const contourTopologyCache = new WeakMap<ContourMesh, Map<string, CachedSlice[]>>();
 
+/** Extracts one deterministic two-source Voronoi segment per crossed triangle. */
+export function extractGeodesicVoronoiBoundary(
+  mesh: ContourMesh,
+  voronoi: IntrinsicVoronoiData,
+): PointSegments {
+  const { V, T } = mesh;
+  const vertexCount = Math.floor(V.length / 3);
+  if (voronoi.labels.length < vertexCount || voronoi.differenceValues.length < vertexCount)
+    return { pts: [], segs: [] };
+  const pointsByEdge = new Map<number, number>();
+  const pts: number[] = [],
+    segs: number[] = [];
+  const pointOnEdge = (a: number, b: number): number | null => {
+    const key = a < b ? a * vertexCount + b : b * vertexCount + a;
+    const cached = pointsByEdge.get(key);
+    if (cached !== undefined) return cached;
+    const valueA = voronoi.differenceValues[a],
+      valueB = voronoi.differenceValues[b];
+    if (!Number.isFinite(valueA) || !Number.isFinite(valueB)) return null;
+    const denominator = valueA - valueB;
+    const t = Math.abs(denominator) > 1e-12 ? clamp(valueA / denominator, 0, 1) : 0.5;
+    const ai = a * 3,
+      bi = b * 3;
+    const point = [
+      V[ai] + (V[bi] - V[ai]) * t,
+      V[ai + 1] + (V[bi + 1] - V[ai + 1]) * t,
+      V[ai + 2] + (V[bi + 2] - V[ai + 2]) * t,
+    ];
+    if (!point.every(Number.isFinite)) return null;
+    const id = pts.length / 3;
+    pts.push(point[0], point[1], point[2]);
+    pointsByEdge.set(key, id);
+    return id;
+  };
+
+  for (let index = 0; index < T.length; index += 3) {
+    const a = T[index],
+      b = T[index + 1],
+      c = T[index + 2];
+    if (
+      ![a, b, c].every((vertex) => Number.isInteger(vertex) && vertex >= 0 && vertex < vertexCount)
+    )
+      continue;
+    const crossed = new Set<number>();
+    for (const [first, second] of [
+      [a, b],
+      [b, c],
+      [c, a],
+    ] as const) {
+      const firstLabel = voronoi.labels[first],
+        secondLabel = voronoi.labels[second];
+      if (firstLabel < 0 || secondLabel < 0 || firstLabel === secondLabel) continue;
+      const point = pointOnEdge(first, second);
+      if (point !== null) crossed.add(point);
+    }
+    if (crossed.size === 2) {
+      const points = Array.from(crossed);
+      segs.push(points[0], points[1]);
+    }
+  }
+  return { pts, segs };
+}
+
 interface SliceLfoField {
   values: Float32Array;
   evaluate: (x: number, y: number, z: number) => number;
@@ -691,6 +759,26 @@ function contourSlices(
   if (cached) return cached;
 
   const slices: CachedSlice[] = [];
+  if (field.levelMode === 'voronoi-boundary') {
+    const boundary = field.voronoi
+      ? extractGeodesicVoronoiBoundary(mesh, field.voronoi)
+      : { pts: [], segs: [] };
+    slices.push({
+      position: 0.5,
+      metadata: {},
+      worldPoints: boundary.pts,
+      polylines: boundary.segs.length ? chain(boundary.pts, boundary.segs) : [],
+    });
+    if (key) {
+      if (!cache) {
+        cache = new Map();
+        contourTopologyCache.set(mesh, cache);
+      }
+      if (cache.size >= 8) cache.delete(cache.keys().next().value!);
+      cache.set(key, slices);
+    }
+    return slices;
+  }
   const span = field.max - field.min;
   const vertexCount = mesh.V.length / 3;
   const baseDirection = field.constantDirection;
@@ -705,14 +793,19 @@ function contourSlices(
       : null;
   const fanTangent = divergence && baseDirection ? sliceFanTangent(baseDirection) : null;
   const fan = fanTangent ? sliceFanGeometry(mesh, field, fanTangent, divergence) : null;
-  for (let i = 0; i < count; i++) {
-    const position = easeLineGap(
-      (i + 0.5) / count,
-      settings.gapEase,
-      settings.easeStrength,
-      settings.easeCenter,
-      settings.easeCycles,
-    );
+  const sliceCount = field.levelMode === 'symmetric-zero' && count % 2 === 0 ? count + 1 : count;
+  for (let i = 0; i < sliceCount; i++) {
+    const basePosition = (i + 0.5) / sliceCount;
+    const position =
+      field.levelMode === 'symmetric-zero'
+        ? basePosition
+        : easeLineGap(
+            basePosition,
+            settings.gapEase,
+            settings.easeStrength,
+            settings.easeCenter,
+            settings.easeCycles,
+          );
     let level = field.min + span * position;
     let sliceField: MeshScalarField = parallelLfo
       ? {
@@ -1310,6 +1403,9 @@ function deterministicDrawingNumber(
       settings.cylinderElevation,
       settings.geodesicSeedAzimuth,
       settings.geodesicSeedElevation,
+      settings.geodesicMode,
+      settings.geodesicSeedBAzimuth,
+      settings.geodesicSeedBElevation,
       settings.sliceLfo,
       settings.sliceLfoAmplitude,
       settings.sliceLfoCycles,
@@ -1438,9 +1534,22 @@ function blueprintDocument(
         ? `${fmt(settings.lensWarpExponent ?? 0)}%K→P`
         : 'no-warp';
   const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(settings.lensPerspective ?? 0)}%persp,${warpFormula},${fmt(distortion)}%dist(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
+  const geodesicMode = settings.geodesicMode || 'single';
+  const geodesicFormula =
+    geodesicMode === 'nearest'
+      ? 'q(v) = min(d_A,d_B); '
+      : geodesicMode === 'difference'
+        ? 'q(v) = d_A−d_B; '
+        : geodesicMode === 'voronoi'
+          ? 'B_G: label_A(v) ≠ label_B(v)'
+          : 'q(v) = d_G(vₛ,v); ';
   const slicing = settings.spiral
     ? `Γₖ: ${lineCount}q(p) − atan2(v,u) = k + 0.5`
-    : `${settings.axis === 'geodesic' ? 'q(v) = d_G(vₛ,v); ' : ''}hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
+    : settings.axis === 'geodesic' && geodesicMode === 'voronoi'
+      ? geodesicFormula
+      : settings.axis === 'geodesic' && geodesicMode === 'difference'
+        ? `${geodesicFormula}hᵢ ∈ [${fieldMin.toFixed(3)}, 0, ${fieldMax.toFixed(3)}] · symmetric`
+        : `${settings.axis === 'geodesic' ? geodesicFormula : ''}hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
   const objectStats = `${vector ? `n̂_${axis} = [${vector}]` : '∇q = LOCAL / UNAVAILABLE'} · V=${Math.round(geometry.vertices || 0)} · F=${Math.round(geometry.triangles || 0)}`;
   const common = `fill="none" stroke="${ink}" vector-effect="non-scaling-stroke"`;
   const text = `fill="${ink}" stroke="none" font-family="DM Mono,ui-monospace,monospace"`;
@@ -2602,13 +2711,39 @@ function computeContourInstance(
     Math.cos(geodesicSeedElevation) * Math.sin(geodesicSeedAzimuth),
     Math.sin(geodesicSeedElevation),
   ];
+  const geodesicSeedBAzimuth =
+    (clamp(Number(settings.geodesicSeedBAzimuth) || 0, -180, 180) * Math.PI) / 180;
+  const geodesicSeedBElevation =
+    (clamp(
+      Number.isFinite(Number(settings.geodesicSeedBElevation))
+        ? Number(settings.geodesicSeedBElevation)
+        : -90,
+      -90,
+      90,
+    ) *
+      Math.PI) /
+    180;
+  const geodesicSeedBDirection: Vec3 = [
+    Math.cos(geodesicSeedBElevation) * Math.cos(geodesicSeedBAzimuth),
+    Math.cos(geodesicSeedBElevation) * Math.sin(geodesicSeedBAzimuth),
+    Math.sin(geodesicSeedBElevation),
+  ];
+  const geodesicMode = ['nearest', 'difference', 'voronoi'].includes(String(settings.geodesicMode))
+    ? (settings.geodesicMode as 'nearest' | 'difference' | 'voronoi')
+    : 'single';
   const field =
     settings.axis === 'spherical'
       ? createSphericalScalarField(mesh, { center: waveCenter })
       : settings.axis === 'cylindrical'
         ? createCylindricalScalarField(mesh, { center: waveCenter, axis: cylinderAxis })
         : settings.axis === 'geodesic'
-          ? createGeodesicScalarField(mesh, { direction: geodesicSeedDirection })
+          ? geodesicMode === 'single'
+            ? createGeodesicScalarField(mesh, { direction: geodesicSeedDirection })
+            : createMultiSourceGeodesicField(mesh, {
+                directionA: geodesicSeedDirection,
+                directionB: geodesicSeedBDirection,
+                mode: geodesicMode,
+              })
           : createPlanarScalarField(mesh, {
               axis: settings.axis,
               cutAz: settings.cutAz,

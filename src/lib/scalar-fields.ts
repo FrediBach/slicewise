@@ -4,7 +4,9 @@ import type { Vec3 } from './projection';
 import {
   selectDirectionalSeedVertex,
   surfaceGraphDistances,
+  surfaceGraphVoronoi,
   type ModelDirection,
+  type SurfaceGraphVoronoi,
 } from './mesh-geodesics';
 import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
@@ -26,12 +28,23 @@ export interface MeshScalarField {
   cacheKey: string;
   /** Development diagnostics for intrinsic fields with unreachable components. */
   intrinsicDiagnostics?: IntrinsicFieldDiagnostics;
+  /** Intrinsic modes may override ordinary eased scalar-level placement. */
+  levelMode?: 'symmetric-zero' | 'voronoi-boundary';
+  voronoi?: IntrinsicVoronoiData;
 }
 
 export interface IntrinsicFieldDiagnostics {
   seedVertex: number | null;
   reachableVertexCount: number;
   skippedComponentCount: number;
+  seedVertices?: readonly [number | null, number | null];
+}
+
+export interface IntrinsicVoronoiData {
+  labels: Int32Array;
+  /** Signed dA - dB values, finite only where both sources are reachable. */
+  differenceValues: Float64Array;
+  seedVertices: readonly [number, number];
 }
 
 export interface ScalarFieldMesh {
@@ -62,6 +75,14 @@ export interface CylindricalScalarFieldOptions extends SphericalScalarFieldOptio
 
 export interface GeodesicScalarFieldOptions {
   direction: ModelDirection;
+}
+
+export type MultiSourceGeodesicMode = 'nearest' | 'difference' | 'voronoi';
+
+export interface MultiSourceGeodesicFieldOptions {
+  directionA: ModelDirection;
+  directionB: ModelDirection;
+  mode: MultiSourceGeodesicMode;
 }
 
 export type SliceExplosionMode = 'constant-direction' | 'local-gradient' | 'none';
@@ -138,6 +159,7 @@ const sampleAnalyticField = (
 
 const GEODESIC_DISTANCE_CACHE_LIMIT = 8;
 const geodesicDistanceCache = new WeakMap<TopologyMesh, Map<number, Float64Array>>();
+const geodesicVoronoiCache = new WeakMap<TopologyMesh, Map<string, SurfaceGraphVoronoi>>();
 
 function cachedSurfaceGraphDistances(mesh: TopologyMesh, seedVertex: number): Float64Array {
   let cache = geodesicDistanceCache.get(mesh);
@@ -156,6 +178,51 @@ function cachedSurfaceGraphDistances(mesh: TopologyMesh, seedVertex: number): Fl
   if (cache.size >= GEODESIC_DISTANCE_CACHE_LIMIT) cache.delete(cache.keys().next().value!);
   cache.set(seedVertex, distances);
   return distances;
+}
+
+function cachedSurfaceGraphVoronoi(
+  mesh: TopologyMesh,
+  seedA: number,
+  seedB: number,
+): SurfaceGraphVoronoi {
+  let cache = geodesicVoronoiCache.get(mesh);
+  const key = seedA < seedB ? `${seedA},${seedB}` : `${seedB},${seedA}`;
+  const cached = cache?.get(key);
+  if (cached) {
+    cache!.delete(key);
+    cache!.set(key, cached);
+    return cached;
+  }
+  const result = surfaceGraphVoronoi(mesh, [seedA, seedB]);
+  if (!cache) {
+    cache = new Map();
+    geodesicVoronoiCache.set(mesh, cache);
+  }
+  if (cache.size >= GEODESIC_DISTANCE_CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+  cache.set(key, result);
+  return result;
+}
+
+function finiteRange(values: ArrayLike<number>): {
+  min: number;
+  max: number;
+  finiteCount: number;
+} {
+  let min = Infinity,
+    max = -Infinity,
+    finiteCount = 0;
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    if (!Number.isFinite(value)) continue;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+    finiteCount++;
+  }
+  return {
+    min: min === Infinity ? 0 : min,
+    max: max === -Infinity ? 0 : max,
+    finiteCount,
+  };
 }
 
 export function createPlanarScalarField(
@@ -305,6 +372,104 @@ export function createGeodesicScalarField(
       seedVertex,
       reachableVertexCount,
       skippedComponentCount: Math.max(0, topology.componentCount - 1),
+    },
+  };
+}
+
+/** Creates a deterministic two-source intrinsic field or Voronoi boundary payload. */
+export function createMultiSourceGeodesicField(
+  mesh: ScalarFieldMesh & TopologyMesh,
+  options: MultiSourceGeodesicFieldOptions,
+): MeshScalarField {
+  const seedA = selectDirectionalSeedVertex(mesh, options.directionA);
+  const seedB = selectDirectionalSeedVertex(mesh, options.directionB);
+  const topology = getMeshTopology(mesh);
+  if (seedA === null || seedB === null) {
+    return {
+      values: new Float64Array(Math.floor(mesh.V.length / 3)).fill(Infinity),
+      min: 0,
+      max: 0,
+      kind: 'intrinsic',
+      cacheKey: `intrinsic:geodesic:${options.mode}:none`,
+      levelMode: options.mode === 'voronoi' ? 'voronoi-boundary' : undefined,
+      intrinsicDiagnostics: {
+        seedVertex: seedA,
+        seedVertices: [seedA, seedB],
+        reachableVertexCount: 0,
+        skippedComponentCount: topology.componentCount,
+      },
+    };
+  }
+
+  const seededComponents = new Set([
+    topology.componentLabels[seedA],
+    topology.componentLabels[seedB],
+  ]).size;
+  const diagnosticsBase = {
+    seedVertex: seedA,
+    seedVertices: [seedA, seedB] as const,
+    skippedComponentCount: Math.max(0, topology.componentCount - seededComponents),
+  };
+
+  if (options.mode === 'nearest') {
+    const nearest = cachedSurfaceGraphVoronoi(mesh, seedA, seedB);
+    const range = finiteRange(nearest.distances);
+    return {
+      values: nearest.distances,
+      min: range.min,
+      max: range.max,
+      kind: 'intrinsic',
+      cacheKey: `intrinsic:geodesic:nearest:${Math.min(seedA, seedB)}:${Math.max(seedA, seedB)}`,
+      intrinsicDiagnostics: { ...diagnosticsBase, reachableVertexCount: range.finiteCount },
+    };
+  }
+
+  const distanceA = cachedSurfaceGraphDistances(mesh, seedA);
+  const distanceB = cachedSurfaceGraphDistances(mesh, seedB);
+  const differenceValues = new Float64Array(topology.vertexCount);
+  differenceValues.fill(Infinity);
+  for (let vertex = 0; vertex < topology.vertexCount; vertex++)
+    if (Number.isFinite(distanceA[vertex]) && Number.isFinite(distanceB[vertex]))
+      differenceValues[vertex] = distanceA[vertex] - distanceB[vertex];
+  const differenceRange = finiteRange(differenceValues);
+  const maxMagnitude = Math.max(Math.abs(differenceRange.min), Math.abs(differenceRange.max));
+  if (options.mode === 'difference') {
+    return {
+      values: differenceValues,
+      min: maxMagnitude ? -maxMagnitude : 0,
+      max: maxMagnitude,
+      kind: 'intrinsic',
+      cacheKey: `intrinsic:geodesic:difference:${seedA}:${seedB}`,
+      levelMode: 'symmetric-zero',
+      intrinsicDiagnostics: {
+        ...diagnosticsBase,
+        reachableVertexCount: differenceRange.finiteCount,
+        skippedComponentCount:
+          differenceRange.finiteCount > 0
+            ? diagnosticsBase.skippedComponentCount
+            : topology.componentCount,
+      },
+    };
+  }
+
+  const nearest = cachedSurfaceGraphVoronoi(mesh, seedA, seedB);
+  const nearestRange = finiteRange(nearest.distances);
+  const voronoi: IntrinsicVoronoiData = {
+    labels: nearest.labels,
+    differenceValues,
+    seedVertices: [seedA, seedB],
+  };
+  return {
+    values: nearest.distances,
+    min: nearestRange.min,
+    max: nearestRange.max,
+    kind: 'intrinsic',
+    cacheKey: `intrinsic:geodesic:voronoi:${seedA}:${seedB}`,
+    levelMode: 'voronoi-boundary',
+    voronoi,
+    intrinsicDiagnostics: {
+      ...diagnosticsBase,
+      reachableVertexCount: nearestRange.finiteCount,
     },
   };
 }

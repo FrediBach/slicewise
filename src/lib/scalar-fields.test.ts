@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { explodeScalarFieldPoints, extractScalarFieldLevel } from './contour-engine';
+import {
+  explodeScalarFieldPoints,
+  extractGeodesicVoronoiBoundary,
+  extractScalarFieldLevel,
+} from './contour-engine';
 import {
   createCylindricalScalarField,
   createGeodesicScalarField,
+  createMultiSourceGeodesicField,
   createPlanarScalarField,
   createSphericalScalarField,
   resolveScalarFieldFeatures,
@@ -79,6 +84,134 @@ describe('scalar fields', () => {
       });
     }
     const revisited = createGeodesicScalarField(radial, { direction: [1, 0, 0] });
+
+    expect(revisited.values).not.toBe(first.values);
+    expect(revisited.values).toEqual(first.values);
+  });
+
+  it('creates symmetric signed two-source differences and negates them when seeds swap', () => {
+    const strip = {
+      V: new Float32Array([-2, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0]),
+      T: new Uint32Array([0, 1, 2, 2, 3, 4]),
+    };
+    const forward = createMultiSourceGeodesicField(strip, {
+      directionA: [-1, 0, 0],
+      directionB: [1, 0, 0],
+      mode: 'difference',
+    });
+    const swapped = createMultiSourceGeodesicField(strip, {
+      directionA: [1, 0, 0],
+      directionB: [-1, 0, 0],
+      mode: 'difference',
+    });
+
+    expect(Array.from(forward.values)).toEqual([-4, -2, 0, 2, 4]);
+    expect(Array.from(swapped.values)).toEqual([4, 2, 0, -2, -4]);
+    expect(forward.min).toBe(-4);
+    expect(forward.max).toBe(4);
+    expect(forward.levelMode).toBe('symmetric-zero');
+  });
+
+  it('combines nearest distances and handles seeds on disconnected components', () => {
+    const disconnected = {
+      V: new Float32Array([0, 0, 1, 1, 0, 0, 0, 1, 0, 10, 0, -1, 11, 0, 0, 10, 1, 0]),
+      T: new Uint32Array([0, 1, 2, 3, 4, 5]),
+    };
+    const nearest = createMultiSourceGeodesicField(disconnected, {
+      directionA: [0, 0, 1],
+      directionB: [0, 0, -1],
+      mode: 'nearest',
+    });
+    const difference = createMultiSourceGeodesicField(disconnected, {
+      directionA: [0, 0, 1],
+      directionB: [0, 0, -1],
+      mode: 'difference',
+    });
+
+    expect(Array.from(nearest.values).every(Number.isFinite)).toBe(true);
+    expect(nearest.intrinsicDiagnostics?.skippedComponentCount).toBe(0);
+    expect(Array.from(difference.values).every((value) => value === Infinity)).toBe(true);
+    expect(difference.min).toBe(0);
+    expect(difference.max).toBe(0);
+  });
+
+  it('preserves the zero contour and Voronoi geometry when sources swap', () => {
+    const square = {
+      V: new Float32Array([-1, -1, 0, -1, 1, 0, 1, 1, 0, 1, -1, 0]),
+      T: new Uint32Array([0, 1, 2, 0, 2, 3]),
+    };
+    const options = {
+      directionA: [-1, 0, 0] as const,
+      directionB: [1, 0, 0] as const,
+    };
+    const forward = createMultiSourceGeodesicField(square, {
+      ...options,
+      mode: 'difference',
+    });
+    const swapped = createMultiSourceGeodesicField(square, {
+      directionA: options.directionB,
+      directionB: options.directionA,
+      mode: 'difference',
+    });
+    const forwardZero = extractScalarFieldLevel(square, forward, 0);
+    const swappedZero = extractScalarFieldLevel(square, swapped, 0);
+    const voronoi = createMultiSourceGeodesicField(square, { ...options, mode: 'voronoi' });
+    const swappedVoronoi = createMultiSourceGeodesicField(square, {
+      directionA: options.directionB,
+      directionB: options.directionA,
+      mode: 'voronoi',
+    });
+    const segmentCoordinates = (result: { pts: number[]; segs: number[] }): string[] => {
+      const point = (vertex: number): string =>
+        result.pts
+          .slice(vertex * 3, vertex * 3 + 3)
+          .map((value) => value.toFixed(8))
+          .join(',');
+      const segments: string[] = [];
+      for (let index = 0; index < result.segs.length; index += 2)
+        segments.push([point(result.segs[index]), point(result.segs[index + 1])].sort().join('|'));
+      return segments.sort();
+    };
+    const forwardVoronoi = extractGeodesicVoronoiBoundary(square, voronoi.voronoi!);
+    const reversedVoronoi = extractGeodesicVoronoiBoundary(square, swappedVoronoi.voronoi!);
+
+    expect(segmentCoordinates(forwardZero)).toEqual(segmentCoordinates(swappedZero));
+    expect(forwardZero.segs.length).toBe(4);
+    expect(segmentCoordinates(forwardVoronoi)).toEqual(segmentCoordinates(reversedVoronoi));
+    expect(forwardVoronoi.segs.length).toBe(4);
+  });
+
+  it('bounds two-source nearest caches per mesh', () => {
+    const sourceCount = 10;
+    const vertices = [0, 0, 0];
+    for (let index = 0; index < sourceCount; index++) {
+      const angle = (index / sourceCount) * Math.PI * 2;
+      vertices.push(Math.cos(angle), Math.sin(angle), 0);
+    }
+    const triangles: number[] = [];
+    for (let index = 0; index < sourceCount; index++)
+      triangles.push(0, index + 1, ((index + 1) % sourceCount) + 1);
+    const radial = { V: Float64Array.from(vertices), T: Uint32Array.from(triangles) };
+    const direction = (index: number): readonly [number, number, number] => {
+      const angle = (index / sourceCount) * Math.PI * 2;
+      return [Math.cos(angle), Math.sin(angle), 0];
+    };
+    const first = createMultiSourceGeodesicField(radial, {
+      directionA: direction(0),
+      directionB: direction(1),
+      mode: 'nearest',
+    });
+    for (let index = 2; index < sourceCount; index++)
+      createMultiSourceGeodesicField(radial, {
+        directionA: direction(0),
+        directionB: direction(index),
+        mode: 'nearest',
+      });
+    const revisited = createMultiSourceGeodesicField(radial, {
+      directionA: direction(0),
+      directionB: direction(1),
+      mode: 'nearest',
+    });
 
     expect(revisited.values).not.toBe(first.values);
     expect(revisited.values).toEqual(first.values);

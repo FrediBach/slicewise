@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { selectDirectionalSeedVertex, surfaceGraphDistances } from './mesh-geodesics';
+import {
+  selectDirectionalSeedVertex,
+  surfaceGraphDistances,
+  surfaceGraphVoronoi,
+} from './mesh-geodesics';
 
 describe('surface graph distances', () => {
   it('computes exact edge distances on a triangle', () => {
@@ -100,5 +104,31 @@ describe('directional mesh seeds', () => {
     expect(selectDirectionalSeedVertex(base, [0, 0, 0])).toBe(2);
     expect(selectDirectionalSeedVertex({ V: new Float32Array([NaN, 0, 0]) }, [1, 0, 0])).toBeNull();
     expect(selectDirectionalSeedVertex({ V: new Float32Array() }, [1, 0, 0])).toBeNull();
+  });
+});
+
+describe('surface graph Voronoi labels', () => {
+  it('assigns equal-distance ties to the lower seed vertex independent of seed order', () => {
+    const mesh = {
+      V: new Float32Array([-2, 0, 0, -1, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0]),
+      T: new Uint32Array([0, 1, 2, 2, 3, 4]),
+    };
+    const forward = surfaceGraphVoronoi(mesh, [0, 4]);
+    const reversed = surfaceGraphVoronoi(mesh, [4, 0]);
+
+    expect(forward).toEqual(reversed);
+    expect(Array.from(forward.distances)).toEqual([0, 1, 2, 1, 0]);
+    expect(Array.from(forward.labels)).toEqual([0, 0, 0, 4, 4]);
+  });
+
+  it('labels seeded disconnected components and leaves the rest unreachable', () => {
+    const mesh = {
+      V: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0, 10, 0, 0, 11, 0, 0, 10, 1, 0]),
+      T: new Uint32Array([0, 1, 2, 3, 4, 5]),
+    };
+    const result = surfaceGraphVoronoi(mesh, [0]);
+
+    expect(Array.from(result.labels)).toEqual([0, 0, 0, -1, -1, -1]);
+    expect(Array.from(result.distances).slice(3)).toEqual([Infinity, Infinity, Infinity]);
   });
 });

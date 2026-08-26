@@ -175,6 +175,9 @@ const state: AppState = {
   cylinderElevation: 90,
   geodesicSeedAzimuth: 0,
   geodesicSeedElevation: 90,
+  geodesicMode: 'single',
+  geodesicSeedBAzimuth: 0,
+  geodesicSeedBElevation: -90,
   divergence: 0,
   sliceLfo: false,
   sliceLfoAmplitude: 75,
@@ -355,6 +358,9 @@ if (typeof document !== 'undefined') {
       cylinderElevation,
       geodesicSeedAzimuth,
       geodesicSeedElevation,
+      geodesicMode,
+      geodesicSeedBAzimuth,
+      geodesicSeedBElevation,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -455,6 +461,9 @@ if (typeof document !== 'undefined') {
       cylinderElevation,
       geodesicSeedAzimuth,
       geodesicSeedElevation,
+      geodesicMode,
+      geodesicSeedBAzimuth,
+      geodesicSeedBElevation,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -1100,6 +1109,8 @@ if (typeof document !== 'undefined') {
   bindPair('cylinderElevation', 'cylinderElevation');
   bindPair('geodesicSeedAzimuth', 'geodesicSeedAzimuth');
   bindPair('geodesicSeedElevation', 'geodesicSeedElevation');
+  bindPair('geodesicSeedBAzimuth', 'geodesicSeedBAzimuth');
+  bindPair('geodesicSeedBElevation', 'geodesicSeedBElevation');
   bindPair('divergence', 'divergence', syncSliceConstruction);
   bindPair('sliceLfoAmplitude', 'sliceLfoAmplitude');
   bindPair('sliceLfoCycles', 'sliceLfoCycles');
@@ -1349,6 +1360,11 @@ if (typeof document !== 'undefined') {
     state.axis === 'spherical' || state.axis === 'cylindrical';
   const intrinsicSliceField = (): boolean => state.axis === 'geodesic';
   const nonPlanarSliceField = (): boolean => curvedSliceField() || intrinsicSliceField();
+  const multiSourceGeodesic = (): boolean =>
+    intrinsicSliceField() && state.geodesicMode !== 'single';
+  const fixedGeodesicSpacing = (): boolean =>
+    intrinsicSliceField() &&
+    (state.geodesicMode === 'difference' || state.geodesicMode === 'voronoi');
   function syncSliceFieldControls(): void {
     const curved = curvedSliceField();
     const intrinsic = intrinsicSliceField();
@@ -1357,6 +1373,7 @@ if (typeof document !== 'undefined') {
     $('wavefrontControls').hidden = !curved;
     $('cylinderAxisControls').hidden = state.axis !== 'cylindrical';
     $('geodesicControls').hidden = !intrinsic;
+    $('geodesicSecondSeedControls').hidden = !multiSourceGeodesic();
     for (const id of ['divergence']) {
       $(id).disabled = nonPlanar;
       $(id + 'N').disabled = nonPlanar;
@@ -1367,6 +1384,11 @@ if (typeof document !== 'undefined') {
     $('explodeAmount').disabled = intrinsic;
     $('explodeAmountN').disabled = intrinsic;
     $('explodeAmountControl').classList.toggle('is-disabled', intrinsic);
+    const voronoi = intrinsic && state.geodesicMode === 'voronoi';
+    $('lines').disabled = voronoi;
+    $('linesN').disabled = voronoi;
+    $('linesControl').classList.toggle('is-disabled', voronoi);
+    syncEaseCenter();
     syncSliceLfoControls();
     syncSliceConstruction();
   }
@@ -1375,11 +1397,25 @@ if (typeof document !== 'undefined') {
     syncSliceFieldControls();
     redraw(false);
   });
+  $('geodesicMode').addEventListener('change', (event) => {
+    state.geodesicMode = inputTarget(event).value as ContourSettings['geodesicMode'];
+    syncSliceFieldControls();
+    redraw(false);
+  });
   function syncEaseCenter(): void {
-    const enabled = state.gapEase.endsWith('-in-out') || state.gapEase.endsWith('-out-in');
-    $('easeCenter').disabled = !enabled;
-    $('easeCenterN').disabled = !enabled;
-    $('easeCenterControl').classList.toggle('is-disabled', !enabled);
+    const spacingDisabled = fixedGeodesicSpacing();
+    $('gapEase').disabled = spacingDisabled;
+    $('gapEaseControl').classList.toggle('is-disabled', spacingDisabled);
+    for (const id of ['easeStrength', 'easeCycles']) {
+      $(id).disabled = spacingDisabled;
+      $(id + 'N').disabled = spacingDisabled;
+      $(id + 'Control').classList.toggle('is-disabled', spacingDisabled);
+    }
+    const centerEnabled =
+      !spacingDisabled && (state.gapEase.endsWith('-in-out') || state.gapEase.endsWith('-out-in'));
+    $('easeCenter').disabled = !centerEnabled;
+    $('easeCenterN').disabled = !centerEnabled;
+    $('easeCenterControl').classList.toggle('is-disabled', !centerEnabled);
   }
   $('gapEase').addEventListener('change', (e) => {
     state.gapEase = inputTarget(e).value;
@@ -1871,6 +1907,8 @@ if (typeof document !== 'undefined') {
     ['cylinderElevation', 'cylinderElevation'],
     ['geodesicSeedAzimuth', 'geodesicSeedAzimuth'],
     ['geodesicSeedElevation', 'geodesicSeedElevation'],
+    ['geodesicSeedBAzimuth', 'geodesicSeedBAzimuth'],
+    ['geodesicSeedBElevation', 'geodesicSeedBElevation'],
     ['divergence', 'divergence'],
     ['sliceLfoAmplitude', 'sliceLfoAmplitude'],
     ['sliceLfoCycles', 'sliceLfoCycles'],
@@ -1912,6 +1950,7 @@ if (typeof document !== 'undefined') {
     'projectionWarpMode',
     'gapEase',
     'axis',
+    'geodesicMode',
     'sliceLfoWaveform',
     'sliceLfoModulationMode',
     'lineWeightMode',
@@ -2024,6 +2063,17 @@ if (typeof document !== 'undefined') {
     restored.geodesicSeedElevation = Number.isFinite(restored.geodesicSeedElevation)
       ? restored.geodesicSeedElevation
       : 90;
+    restored.geodesicMode = ['single', 'nearest', 'difference', 'voronoi'].includes(
+      String(restored.geodesicMode),
+    )
+      ? restored.geodesicMode
+      : 'single';
+    restored.geodesicSeedBAzimuth = Number.isFinite(restored.geodesicSeedBAzimuth)
+      ? restored.geodesicSeedBAzimuth
+      : 0;
+    restored.geodesicSeedBElevation = Number.isFinite(restored.geodesicSeedBElevation)
+      ? restored.geodesicSeedBElevation
+      : -90;
     restored.explodeAmount = Number.isFinite(restored.explodeAmount) ? restored.explodeAmount : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
@@ -2299,6 +2349,9 @@ if (typeof document !== 'undefined') {
     randomizePair('cylinderElevation', 'cylinderElevation', () => randomInt(-80, 80));
     randomizePair('geodesicSeedAzimuth', 'geodesicSeedAzimuth', () => randomInt(-180, 180));
     randomizePair('geodesicSeedElevation', 'geodesicSeedElevation', () => randomInt(-80, 80));
+    randomizeSelect('geodesicMode', 'geodesicMode', ['single', 'nearest', 'difference', 'voronoi']);
+    randomizePair('geodesicSeedBAzimuth', 'geodesicSeedBAzimuth', () => randomInt(-180, 180));
+    randomizePair('geodesicSeedBElevation', 'geodesicSeedBElevation', () => randomInt(-80, 80));
     randomizePair('divergence', 'divergence', () => (Math.random() < 0.6 ? 0 : randomInt(15, 110)));
     randomizePair('sliceLfoAmplitude', 'sliceLfoAmplitude', () => randomInt(35, 180));
     randomizePair('sliceLfoCycles', 'sliceLfoCycles', () => randomIn(0.75, 5));

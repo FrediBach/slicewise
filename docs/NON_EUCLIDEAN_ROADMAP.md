@@ -461,6 +461,8 @@ Direction-based seed selection is deterministic, snapshot-friendly, and works wi
 
 ## Session 9 — Multi-source geodesic fields
 
+**Status: completed.**
+
 ### Goal
 
 Extend intrinsic distance into artistically distinct wave-interference and region-boundary modes.
@@ -489,6 +491,23 @@ Start with two sources using independent azimuth/elevation controls. More source
 - Nearest-source and Voronoi ties are deterministic.
 - Seeds on disconnected components behave predictably.
 - All modes retain SVG/G-code parity.
+
+### Decisions recorded
+
+- `geodesicMode` is `single`, `nearest`, `difference`, or `voronoi`. Old snapshots default to `single`; Seed B defaults to azimuth 0° and elevation −90°, opposite Seed A's +90° elevation.
+- Multi-source Dijkstra labels vertices with the responsible seed vertex. Exact equal-distance ties select the lower seed vertex regardless of source input order; unreachable vertices retain distance `Infinity` and label `−1`.
+- Nearest mode uses `min(dA,dB)` over every component reached by either seed. Difference mode is finite only where both seeds are mutually reachable; seeds on separate components therefore produce no difference contours. Voronoi similarly emits no boundary between disconnected components.
+- Difference mode automatically normalizes to `[-max|dA−dB|,+max|dA−dB|]`, ignores Gap easing, and uses midpoint levels symmetric about zero. An even requested Line count is raised by one so zero and paired positive/negative levels are all present.
+- Voronoi mode uses stable nearest-source labels to identify crossed triangle edges, then interpolates boundary points with signed `dA−dB`. It emits one explicit boundary family, so Line count and Gap easing are disabled. Swapping A/B preserves boundary geometry.
+- Source identity does not survive into finished runs, so all modes retain existing gradient-by-level and line-index coloring rather than creating source-specific color groups.
+- Single-seed distance and two-seed nearest/label caches are independently capped at eight entries per mesh. All multi-source modes continue through the bounded contour-topology cache and normal visibility, clipping, SVG, and G-code composition.
+
+### Verification and performance observation
+
+- Tests cover signed symmetry, source swapping, zero-contour preservation, deterministic nearest ties, explicit Voronoi extraction, disconnected components, cache eviction, legacy defaults, second-seed morph endpoints, and finite deterministic SVG/G-code for every mode.
+- A sequential diagnostic on an 8,066-vertex welded ripple sphere measured Nearest at 32.45 ms cold / 0.80 ms cached, Difference at 8.46 ms additional cold / 2.38 ms cached, and Voronoi at 2.27 ms additional cold / 0.44 ms cached. Nearest included topology construction; later modes reused topology and previously computed buffers.
+- The full format, React Doctor, lint, typecheck, 209-test, and production-build sequence passed. React Doctor retains only the known large-component maintainability warning for `ContoursPanel`.
+- Live browser checks could not run because no browser backend was available. Visual comparison of nearest collisions, signed bands, and Voronoi boundaries on a torus, rounded cube, gyroid, and disconnected/open mesh remains recommended before release.
 
 ## Session 10 — Curvature contours
 

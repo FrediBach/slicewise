@@ -20,6 +20,7 @@ export function ContoursPanel() {
           defaultValue="linear"
           randomizable
           rowClassName="select-row"
+          controlId="gapEaseControl"
         >
           <option value="linear">Linear</option>
           <optgroup label="Sine">
@@ -153,9 +154,22 @@ export function ContoursPanel() {
           </p>
         </div>
         <div id="geodesicControls" hidden>
+          <SelectControl
+            id="geodesicMode"
+            label="Geodesic mode"
+            defaultValue="single"
+            randomizable
+            rowClassName="select-row"
+            controlId="geodesicModeControl"
+          >
+            <option value="single">Single source</option>
+            <option value="nearest">Nearest of two sources</option>
+            <option value="difference">Distance difference</option>
+            <option value="voronoi">Voronoi boundary</option>
+          </SelectControl>
           <ValueControl
             id="geodesicSeedAzimuth"
-            label="Seed azimuth"
+            label="Seed A azimuth"
             min="-180"
             max="180"
             step="1"
@@ -164,16 +178,36 @@ export function ContoursPanel() {
           />
           <ValueControl
             id="geodesicSeedElevation"
-            label="Seed elevation"
+            label="Seed A elevation"
             min="-90"
             max="90"
             step="1"
             value="90"
             unit="°"
           />
+          <div id="geodesicSecondSeedControls" hidden>
+            <ValueControl
+              id="geodesicSeedBAzimuth"
+              label="Seed B azimuth"
+              min="-180"
+              max="180"
+              step="1"
+              value="0"
+              unit="°"
+            />
+            <ValueControl
+              id="geodesicSeedBElevation"
+              label="Seed B elevation"
+              min="-90"
+              max="90"
+              step="1"
+              value="-90"
+              unit="°"
+            />
+          </div>
           <p className="gradient-note blueprint-note">
-            The directional extreme selects a mesh vertex. Distances follow mesh edges across its
-            connected surface.
+            Directional extremes select mesh vertices. Distances follow mesh edges; difference mode
+            uses symmetric levels and always includes zero.
           </p>
         </div>
         <ValueControl

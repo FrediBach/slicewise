@@ -32,10 +32,18 @@ describe('ContoursPanel slice-field controls', () => {
       screen.getByLabelText('Cylinder elevation', { selector: 'input[type="range"]' }),
     ).toHaveValue('90');
     expect(
-      screen.getByLabelText('Seed azimuth', { selector: 'input[type="range"]' }),
+      screen.getByLabelText('Seed A azimuth', { selector: 'input[type="range"]' }),
     ).toHaveAttribute('min', '-180');
     expect(
-      screen.getByLabelText('Seed elevation', { selector: 'input[type="range"]' }),
+      screen.getByLabelText('Seed A elevation', { selector: 'input[type="range"]' }),
     ).toHaveValue('90');
+    expect(screen.getByLabelText('Geodesic mode')).toHaveValue('single');
+    expect(screen.getByLabelText('Geodesic mode')).toHaveTextContent('Voronoi boundary');
+    expect(
+      screen.getByLabelText('Seed B azimuth', { selector: 'input[type="range"]' }),
+    ).toHaveAttribute('max', '180');
+    expect(
+      screen.getByLabelText('Seed B elevation', { selector: 'input[type="range"]' }),
+    ).toHaveValue('-90');
   });
 });
