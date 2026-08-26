@@ -586,7 +586,7 @@ button {
 
 .control-row {
   display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
+  grid-template-columns: 130px minmax(0, 1fr);
   align-items: center;
   min-height: 31px;
   gap: 10px;
@@ -596,7 +596,7 @@ button {
   opacity: 0.45;
 }
 .select-info {
-  margin: 0 0 7px 110px;
+  margin: 0 0 7px 140px;
   padding: 7px 9px;
   border-left: 2px solid #aeb9aa;
   border-radius: 0 4px 4px 0;
@@ -616,6 +616,8 @@ button {
   flex: 1;
   color: #6f746e;
   font-size: 10.5px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 #humanizerAmountControl .control-label > label {
   max-width: 34px;
