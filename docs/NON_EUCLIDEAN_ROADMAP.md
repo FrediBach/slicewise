@@ -359,6 +359,8 @@ Use actual min/max vertex values for contour levels. At analytic singularities, 
 
 ## Session 7 — Mesh topology cache and geodesic solver
 
+**Status: completed.**
+
 ### Goal
 
 Build a reusable intrinsic-geometry foundation without exposing unfinished UI.
@@ -386,6 +388,24 @@ The first version computes shortest paths along mesh edges. Call it **surface gr
 - Boundaries and non-manifold input do not crash.
 - Repeated calls reuse topology but return independent distance buffers.
 - Runtime and memory benchmarks on representative low-, medium-, and high-resolution meshes are recorded in the session notes or PR.
+
+### Decisions recorded
+
+- Cached topology uses compact typed arrays for lexicographically ordered unique edges, Euclidean weights, bidirectional adjacency, face incidence, component labels/sizes, boundary and non-manifold edge pairs, and isolated vertices. The `WeakMap` key is the installed mesh object, whose geometry is treated as immutable.
+- Repeated triangle-edge occurrences collapse to one graph edge. `duplicateEdgeCount` reports occurrences after the first—including ordinary two-face manifold sharing—while distinct face incidence determines boundary (`1`) and non-manifold (`>2`) classification.
+- Invalid-index triangles are skipped. Non-finite and zero-length edges are diagnosed and omitted from adjacency; disconnected and isolated vertices remain represented as components. This prevents unusable weights from entering the solver without hiding malformed input.
+- Multi-source Dijkstra deduplicates and sorts valid seeds, orders equal-distance heap entries by vertex index, ignores invalid seeds, returns `Infinity` for unreachable vertices, and creates a new `Float64Array` for every solve while reusing topology.
+- Directional seeds use the finite bounding-box centre and the projection of each centred vertex onto a normalized model-space direction, divided by the common model radius. Maximum score wins and exact ties retain the lower vertex index. Invalid or zero directions fall back to model Z.
+
+### Benchmark baseline
+
+Single-process Vitest measurements on the development machine (26 August 2026) used deterministic welded ripple spheres. Times are diagnostic, not test gates; retained memory counts cached typed-array payloads rather than transient construction objects.
+
+| Fixture | Vertices | Triangles |  Edges | Cold topology | One distance solve | Retained arrays |
+| ------- | -------: | --------: | -----: | ------------: | -----------------: | --------------: |
+| Low     |      266 |       528 |    792 |       1.19 ms |            0.71 ms |        36.1 KiB |
+| Medium  |    2,522 |     5,040 |  7,560 |       6.13 ms |            2.66 ms |       344.6 KiB |
+| High    |   12,642 |    25,280 | 37,920 |      19.62 ms |            2.03 ms |     1,728.1 KiB |
 
 ## Session 8 — Single-source geodesic contours
 
