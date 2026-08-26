@@ -34,6 +34,7 @@ export interface LineIndexColor {
   /** Human-facing, one-based contour/run index. */
   index: number;
   color: string;
+  series?: 'single' | 'even' | 'odd' | 'prime' | 'fibonacci' | 'tribonacci';
 }
 
 export interface ContourSettings extends GenerativeMaskSettings {
@@ -1230,8 +1231,7 @@ function colorPlan(settings: ContourSettings): {
   const indexedPalette = new Map<number, number>();
   if (!settings.lineIndexColorEnabled) return { palette, indexedPalette, gradientCount };
   for (const rule of settings.lineIndexColors || []) {
-    const index = Math.round(Number(rule.index)) - 1;
-    if (index < 0 || !/^#[0-9a-f]{6}$/i.test(rule.color)) continue;
+    if (!/^#[0-9a-f]{6}$/i.test(rule.color)) continue;
     let paletteIndex = palette.findIndex(
       (color) => color.toLowerCase() === rule.color.toLowerCase(),
     );
@@ -1239,9 +1239,55 @@ function colorPlan(settings: ContourSettings): {
       paletteIndex = palette.length;
       palette.push(rule.color);
     }
-    indexedPalette.set(index, paletteIndex);
+    const series = rule.series || 'single';
+    if (series === 'single') {
+      const index = Math.round(Number(rule.index)) - 1;
+      if (index >= 0 && index < 9999) indexedPalette.set(index, paletteIndex);
+      continue;
+    }
+    for (let oneBasedIndex = 1; oneBasedIndex <= 9999; oneBasedIndex++) {
+      if (lineIndexMatchesSeries(oneBasedIndex, series))
+        indexedPalette.set(oneBasedIndex - 1, paletteIndex);
+    }
   }
   return { palette, indexedPalette, gradientCount };
+}
+
+const fibonacciLineIndexes = (() => {
+  const values = new Set<number>([1, 2]);
+  let a = 1,
+    b = 2;
+  while (a + b <= 9999) {
+    [a, b] = [b, a + b];
+    values.add(b);
+  }
+  return values;
+})();
+
+const tribonacciLineIndexes = (() => {
+  const values = new Set<number>([1, 2, 4]);
+  let a = 1,
+    b = 2,
+    c = 4;
+  while (a + b + c <= 9999) {
+    [a, b, c] = [b, c, a + b + c];
+    values.add(c);
+  }
+  return values;
+})();
+
+function lineIndexMatchesSeries(
+  index: number,
+  series: Exclude<NonNullable<LineIndexColor['series']>, 'single'>,
+): boolean {
+  if (series === 'even') return index % 2 === 0;
+  if (series === 'odd') return index % 2 === 1;
+  if (series === 'fibonacci') return fibonacciLineIndexes.has(index);
+  if (series === 'tribonacci') return tribonacciLineIndexes.has(index);
+  if (index < 2) return false;
+  for (let divisor = 2; divisor * divisor <= index; divisor++)
+    if (index % divisor === 0) return false;
+  return true;
 }
 
 function deterministicDrawingNumber(

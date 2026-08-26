@@ -944,16 +944,23 @@ select {
 }
 .line-index-color {
   display: grid;
-  grid-template-columns: auto minmax(54px, 1fr) 27px 24px;
+  grid-template-columns: minmax(0, 1fr) 27px 24px;
   align-items: center;
   gap: 6px;
 }
-.line-index-color label {
-  color: #777c76;
+.line-index-target {
+  display: flex;
+  min-width: 0;
+  gap: 5px;
+}
+.line-index-target select {
+  min-width: 0;
+  flex: 1;
+  height: 25px;
   font-size: 9px;
 }
 .line-index-color input[type='number'] {
-  min-width: 0;
+  width: 53px;
   height: 25px;
 }
 .line-index-color input[type='color'] {

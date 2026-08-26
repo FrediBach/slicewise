@@ -118,6 +118,32 @@ describe('contour output effects', () => {
     ).toBeGreaterThan(0);
   });
 
+  it('colours number series in rule order', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        lines: 8,
+        hide: false,
+        sil: false,
+        lineIndexColorEnabled: true,
+        lineIndexColors: [
+          { index: 1, series: 'even', color: '#ff00aa' },
+          { index: 1, series: 'prime', color: '#00aa55' },
+          { index: 1, series: 'tribonacci', color: '#2255ee' },
+        ],
+      },
+      false,
+    );
+
+    for (const color of ['#ff00aa', '#00aa55', '#2255ee']) {
+      expect(result.svg).toContain(`stroke="${color}"`);
+      expect(result.toolpaths.find((group) => group.color === color)?.runs.length).toBeGreaterThan(
+        0,
+      );
+    }
+  });
+
   it('renders chromatic aberration as three screen-blended paths', () => {
     const result = computeContours(
       makeContourMesh(),

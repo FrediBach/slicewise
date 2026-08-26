@@ -95,8 +95,23 @@ describe('GradientChooser', () => {
 
     await waitFor(() => {
       const event = onChange.mock.calls.at(-1)?.[0] as CustomEvent;
-      expect(event.detail.colors).toContainEqual({ index: 7, color: '#336699' });
+      expect(event.detail.colors).toContainEqual({
+        index: 7,
+        color: '#336699',
+        series: 'single',
+      });
     });
+
+    await user.selectOptions(screen.getByLabelText('Line target 2'), 'prime');
+    await waitFor(() => {
+      const event = onChange.mock.calls.at(-1)?.[0] as CustomEvent;
+      expect(event.detail.colors).toContainEqual({
+        index: 7,
+        color: '#336699',
+        series: 'prime',
+      });
+    });
+    expect(screen.queryByLabelText('Line index 2')).not.toBeInTheDocument();
 
     document.dispatchEvent(
       new CustomEvent('restoreparameters', {
@@ -105,6 +120,7 @@ describe('GradientChooser', () => {
     );
     await waitFor(() => expect(screen.getByLabelText('Line index 1')).toHaveValue(12));
     expect(screen.getByLabelText('Line index 1 colour')).toHaveValue('#abcdef');
+    expect(screen.getByLabelText('Line target 1')).toHaveValue('single');
     document.removeEventListener('lineindexcolorschange', onChange);
   });
 });

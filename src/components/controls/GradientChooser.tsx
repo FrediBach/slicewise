@@ -5,7 +5,8 @@ import { Checkbox, ValueControl } from './FormControls';
 type GradientValue = [position: number, color: string];
 type GradientPreset = { name: string; stops: GradientValue[] };
 type GradientStop = { id: number; position: number; color: string };
-type LineIndexColor = { id: number; index: number; color: string };
+type LineIndexSeries = 'single' | 'even' | 'odd' | 'prime' | 'fibonacci' | 'tribonacci';
+type LineIndexColor = { id: number; index: number; color: string; series: LineIndexSeries };
 
 let nextStopId = 0;
 const createStop = ([position, color]: GradientValue): GradientStop => ({
@@ -215,6 +216,7 @@ const createLineColor = (index: number, color: string): LineIndexColor => ({
   id: nextLineColorId++,
   index,
   color,
+  series: 'single',
 });
 
 function LineIndexColorChooser() {
@@ -225,18 +227,23 @@ function LineIndexColorChooser() {
     rootRef.current?.dispatchEvent(
       new CustomEvent('lineindexcolorschange', {
         bubbles: true,
-        detail: { colors: colors.map(({ index, color }) => ({ index, color })) },
+        detail: { colors: colors.map(({ index, color, series }) => ({ index, color, series })) },
       }),
     );
   }, [colors]);
 
   useEffect(() => {
     const restore = (
-      event: CustomEvent<{ lineIndexColors?: Array<{ index: number; color: string }> }>,
+      event: CustomEvent<{
+        lineIndexColors?: Array<{ index: number; color: string; series?: LineIndexSeries }>;
+      }>,
     ) => {
       if (event.detail?.lineIndexColors?.length) {
         setColors(
-          event.detail.lineIndexColors.map(({ index, color }) => createLineColor(index, color)),
+          event.detail.lineIndexColors.map(({ index, color, series }) => ({
+            ...createLineColor(index, color),
+            series: series || 'single',
+          })),
         );
       }
     };
@@ -253,23 +260,41 @@ function LineIndexColorChooser() {
     <div className="line-index-editor" id="lineIndexColorEditor" ref={rootRef}>
       <Checkbox id="lineIndexColorEnabled">Colour by line index</Checkbox>
       <div className="line-index-panel">
-        {colors.map(({ id, index, color }, position) => (
+        {colors.map(({ id, index, color, series }, position) => (
           <div className="line-index-color" key={id}>
-            <label htmlFor={`lineIndexColor-${id}`}>Line</label>
-            <input
-              id={`lineIndexColor-${id}`}
-              type="number"
-              min="1"
-              max="9999"
-              step="1"
-              value={index}
-              aria-label={`Line index ${position + 1}`}
-              onChange={(event) =>
-                update(id, {
-                  index: Math.min(9999, Math.max(1, Math.round(Number(event.target.value) || 1))),
-                })
-              }
-            />
+            <div className="line-index-target">
+              <select
+                value={series}
+                aria-label={`Line target ${position + 1}`}
+                onChange={(event) => update(id, { series: event.target.value as LineIndexSeries })}
+              >
+                <option value="single">Specific line</option>
+                <option value="even">Even numbers</option>
+                <option value="odd">Odd numbers</option>
+                <option value="prime">Prime numbers</option>
+                <option value="fibonacci">Fibonacci</option>
+                <option value="tribonacci">Tribonacci</option>
+              </select>
+              {series === 'single' ? (
+                <input
+                  id={`lineIndexColor-${id}`}
+                  type="number"
+                  min="1"
+                  max="9999"
+                  step="1"
+                  value={index}
+                  aria-label={`Line index ${position + 1}`}
+                  onChange={(event) =>
+                    update(id, {
+                      index: Math.min(
+                        9999,
+                        Math.max(1, Math.round(Number(event.target.value) || 1)),
+                      ),
+                    })
+                  }
+                />
+              ) : null}
+            </div>
             <input
               type="color"
               value={color}
@@ -302,7 +327,7 @@ function LineIndexColorChooser() {
           <Plus size={12} /> Add line colour
         </button>
         <p className="gradient-note">
-          Line numbers start at 1; repeated indexes use the last entry.
+          Sequences use one-based line numbers; later matching rules win.
         </p>
       </div>
     </div>
