@@ -205,6 +205,13 @@ function RandomLockActions() {
   );
 }
 
+const compactUnits: Record<string, string> = {
+  '% gap': '%GAP',
+  '% radius': '%R',
+  iterations: 'ITER',
+  percentile: 'PCTL',
+};
+
 function ValueControl({
   id,
   label,
@@ -217,6 +224,7 @@ function ValueControl({
   morphable = true,
   randomizable = morphable,
 }: ValueControlProps) {
+  const displayedUnit = unit ? (compactUnits[unit] ?? unit) : '';
   const [morphMode, setMorphMode] = useState(0);
   const [morphValue, setMorphValue] = useState(Number(value));
   const [morphValueY, setMorphValueY] = useState(Number(value));
@@ -322,8 +330,8 @@ function ValueControl({
           aria-label={`${label} morph ${dimension === 1 ? 'X' : 'Y'} target${unit ? ` in ${unit}` : ''}`}
           onChange={(event) => changeMorphValue(dimension, event.target.value)}
         />
-        <span className="unit" aria-hidden="true">
-          {unit || ''}
+        <span className="unit" aria-hidden="true" title={unit}>
+          {displayedUnit}
         </span>
       </span>
     </div>
@@ -373,8 +381,8 @@ function ValueControl({
               disabled={disabled}
               aria-label={`${label}${unit ? ` in ${unit}` : ''}`}
             />
-            <span className="unit" aria-hidden="true">
-              {unit || ''}
+            <span className="unit" aria-hidden="true" title={unit}>
+              {displayedUnit}
             </span>
           </span>
         </div>

@@ -66,6 +66,25 @@ describe('randomization locks', () => {
 });
 
 describe('ValueControl morph contract', () => {
+  it('keeps an enabled number field compact next to a long unit', () => {
+    const { container } = render(
+      <ValueControl
+        id="centre"
+        label="Centre X"
+        min="-100"
+        max="100"
+        step="1"
+        value="0"
+        unit="% radius"
+      />,
+    );
+
+    expect(screen.getByRole('slider', { name: 'Centre X' })).toBeEnabled();
+    expect(screen.getByRole('spinbutton', { name: 'Centre X in % radius' })).toBeEnabled();
+    expect(container.querySelector('.value-field')).toHaveTextContent('%R');
+    expect(container.querySelector('.unit')).toHaveAttribute('title', '% radius');
+  });
+
   it('cycles through X and Y targets and publishes clamped values', async () => {
     const user = userEvent.setup();
     const onMorph = vi.fn();

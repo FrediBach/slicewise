@@ -26,6 +26,7 @@ import {
   previewMorphSteps,
 } from './preview-detail';
 import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
+import { setDisabledPair } from './control-state';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -289,6 +290,10 @@ const state: AppState = {
 const dynamicState = state as unknown as Record<string, unknown>;
 
 if (typeof document !== 'undefined') {
+  function setControlPairDisabled(id: string, disabled: boolean): void {
+    setDisabledPair($<HTMLInputElement>(id), $<HTMLInputElement>(id + 'N'), disabled);
+  }
+
   function fitBed(W: number, H: number): void {
     const wrap = $('bedwrap'),
       bed = $('bed');
@@ -1124,6 +1129,7 @@ if (typeof document !== 'undefined') {
     morphKeyById.set(id, key);
     const s = $(id),
       n = $(id + 'N');
+    setDisabledPair(s, n, s.disabled);
     const apply = (v: string, from: 's' | 'n'): void => {
       const next = clamp(parseFloat(v), parseFloat(n.min), parseFloat(n.max));
       if (Number.isNaN(next)) return;
@@ -1141,6 +1147,7 @@ if (typeof document !== 'undefined') {
   function bindExportPair(id: string, key: string): void {
     const slider = $(id),
       number = $(id + 'N');
+    setDisabledPair(slider, number, slider.disabled);
     const apply = (value: string, from: 's' | 'n'): void => {
       const next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
       if (Number.isNaN(next)) return;
@@ -1243,8 +1250,7 @@ if (typeof document !== 'undefined') {
     );
     const inversionEnabled = state.projectionWarpMode === 'inversion';
     for (const id of ['lensWarpExponent']) {
-      $(id).disabled = !kleinEnabled;
-      $(id + 'N').disabled = !kleinEnabled;
+      setControlPairDisabled(id, !kleinEnabled);
       $(id + 'Control').classList.toggle('is-disabled', !kleinEnabled);
     }
     for (const id of [
@@ -1253,13 +1259,11 @@ if (typeof document !== 'undefined') {
       'mobiusRotation',
       'mobiusStrength',
     ]) {
-      $(id).disabled = !mobiusEnabled;
-      $(id + 'N').disabled = !mobiusEnabled;
+      setControlPairDisabled(id, !mobiusEnabled);
       $(id + 'Control').classList.toggle('is-disabled', !mobiusEnabled);
     }
     for (const id of ['sphericalStrength']) {
-      $(id).disabled = !sphericalEnabled;
-      $(id + 'N').disabled = !sphericalEnabled;
+      setControlPairDisabled(id, !sphericalEnabled);
       $(id + 'Control').classList.toggle('is-disabled', !sphericalEnabled);
     }
     for (const id of [
@@ -1268,8 +1272,7 @@ if (typeof document !== 'undefined') {
       'inversionRadius',
       'inversionStrength',
     ]) {
-      $(id).disabled = !inversionEnabled;
-      $(id + 'N').disabled = !inversionEnabled;
+      setControlPairDisabled(id, !inversionEnabled);
       $(id + 'Control').classList.toggle('is-disabled', !inversionEnabled);
     }
   }
@@ -1283,6 +1286,7 @@ if (typeof document !== 'undefined') {
   function bindGenerativePair(id: string, key: keyof Omit<GenerativeParams, 'genField'>): void {
     const slider = $(id),
       number = $(id + 'N');
+    setDisabledPair(slider, number, slider.disabled);
     const apply = (value: string, from: 's' | 'n', final = false): void => {
       let next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
       if (Number.isNaN(next)) return;
@@ -1305,6 +1309,7 @@ if (typeof document !== 'undefined') {
   function bindTilingInteger(id: 'tilingP' | 'tilingQ' | 'tilingDepth'): void {
     const slider = $(id),
       number = $(id + 'N');
+    setDisabledPair(slider, number, slider.disabled);
     const apply = (value: string, from: 's' | 'n'): void => {
       const next = Math.round(
         clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max)),
@@ -1339,13 +1344,11 @@ if (typeof document !== 'undefined') {
   });
   function syncMorphControls(): void {
     $('morphSettings').classList.toggle('is-disabled', !state.morphEnabled);
-    $('morphSteps').disabled = !state.morphEnabled;
-    $('morphStepsN').disabled = !state.morphEnabled;
+    setControlPairDisabled('morphSteps', !state.morphEnabled);
     $('morphSecondEnabled').disabled = !state.morphEnabled;
     const secondActive = state.morphEnabled && state.morphSecondEnabled;
     $('morphSecondSettings').classList.toggle('is-disabled', !secondActive);
-    $('morphStepsY').disabled = !secondActive;
-    $('morphStepsYN').disabled = !secondActive;
+    setControlPairDisabled('morphStepsY', !secondActive);
   }
   $('morphEnabled').addEventListener('change', (event) => {
     state.morphEnabled = inputTarget(event).checked;
@@ -1394,6 +1397,7 @@ if (typeof document !== 'undefined') {
   function bindSVGPair(id: string, key: string): void {
     const slider = $(id),
       number = $(id + 'N');
+    setDisabledPair(slider, number, slider.disabled);
     const apply = (value: string, from: 's' | 'n', final = false): void => {
       const next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
       if (Number.isNaN(next)) return;
@@ -1420,8 +1424,7 @@ if (typeof document !== 'undefined') {
     $('svgExtrusionControls').hidden = centerline;
     $('svgCenterlineControls').hidden = !centerline;
     const roundnessActive = active && !centerline && state.svgRounded;
-    $('svgRoundness').disabled = !roundnessActive;
-    $('svgRoundnessN').disabled = !roundnessActive;
+    setControlPairDisabled('svgRoundness', !roundnessActive);
     $('svgRoundnessControl').classList.toggle('is-disabled', !roundnessActive);
   }
   function syncSourceControls(): void {
@@ -1491,8 +1494,7 @@ if (typeof document !== 'undefined') {
     updateExportSize();
   });
   function syncTravelOptimization(): void {
-    $('mergeTolerance').disabled = !state.optimizeTravel;
-    $('mergeToleranceN').disabled = !state.optimizeTravel;
+    setControlPairDisabled('mergeTolerance', !state.optimizeTravel);
     $('mergeToleranceControl').classList.toggle('is-disabled', !state.optimizeTravel);
   }
   $('optimizeTravel').addEventListener('change', (event) => {
@@ -1523,18 +1525,15 @@ if (typeof document !== 'undefined') {
     $('curvatureControls').hidden = state.axis !== 'curvature';
     $('geodesicSecondSeedControls').hidden = !multiSourceGeodesic();
     for (const id of ['divergence']) {
-      $(id).disabled = nonPlanar;
-      $(id + 'N').disabled = nonPlanar;
+      setControlPairDisabled(id, nonPlanar);
       $(id + 'Control').classList.toggle('is-disabled', nonPlanar);
     }
     $('sliceLfo').disabled = nonPlanar;
     $('sliceLfo').closest('.checkbox-control')?.classList.toggle('is-disabled', nonPlanar);
-    $('explodeAmount').disabled = intrinsic;
-    $('explodeAmountN').disabled = intrinsic;
+    setControlPairDisabled('explodeAmount', intrinsic);
     $('explodeAmountControl').classList.toggle('is-disabled', intrinsic);
     const voronoi = state.axis === 'geodesic' && state.geodesicMode === 'voronoi';
-    $('lines').disabled = voronoi;
-    $('linesN').disabled = voronoi;
+    setControlPairDisabled('lines', voronoi);
     $('linesControl').classList.toggle('is-disabled', voronoi);
     syncEaseCenter();
     syncSliceLfoControls();
@@ -1563,14 +1562,12 @@ if (typeof document !== 'undefined') {
     $('gapEase').disabled = spacingDisabled;
     $('gapEaseControl').classList.toggle('is-disabled', spacingDisabled);
     for (const id of ['easeStrength', 'easeCycles']) {
-      $(id).disabled = spacingDisabled;
-      $(id + 'N').disabled = spacingDisabled;
+      setControlPairDisabled(id, spacingDisabled);
       $(id + 'Control').classList.toggle('is-disabled', spacingDisabled);
     }
     const centerEnabled =
       !spacingDisabled && (state.gapEase.endsWith('-in-out') || state.gapEase.endsWith('-out-in'));
-    $('easeCenter').disabled = !centerEnabled;
-    $('easeCenterN').disabled = !centerEnabled;
+    setControlPairDisabled('easeCenter', !centerEnabled);
     $('easeCenterControl').classList.toggle('is-disabled', !centerEnabled);
   }
   $('gapEase').addEventListener('change', (e) => {
@@ -1595,8 +1592,7 @@ if (typeof document !== 'undefined') {
   function syncSliceLfoControls(): void {
     const disabled = nonPlanarSliceField() || !state.sliceLfo;
     for (const id of ['sliceLfoAmplitude', 'sliceLfoCycles', 'sliceLfoAngle', 'sliceLfoPhase']) {
-      $(id).disabled = disabled;
-      $(id + 'N').disabled = disabled;
+      setControlPairDisabled(id, disabled);
       $(id + 'Control').classList.toggle('is-disabled', disabled);
     }
     $('sliceLfoWaveform').disabled = disabled;
@@ -1609,8 +1605,7 @@ if (typeof document !== 'undefined') {
       'sliceLfoModulationCycles',
       'sliceLfoModulationPhase',
     ]) {
-      $(id).disabled = modulationDisabled;
-      $(id + 'N').disabled = modulationDisabled;
+      setControlPairDisabled(id, modulationDisabled);
       $(id + 'Control').classList.toggle('is-disabled', modulationDisabled);
     }
     $('sliceLfoModulationMode').disabled = modulationDisabled;
@@ -1647,8 +1642,7 @@ if (typeof document !== 'undefined') {
     const intervalEnabled = state.lineWeightMode === 'index' || state.lineWeightMode === 'wave';
     for (const id of ['lineWeightInterval', 'lineWeightAmount']) {
       const controlEnabled = id === 'lineWeightInterval' ? intervalEnabled : enabled;
-      $(id).disabled = !controlEnabled;
-      $(id + 'N').disabled = !controlEnabled;
+      setControlPairDisabled(id, !controlEnabled);
       $(id + 'Control').classList.toggle('is-disabled', !controlEnabled);
     }
   }
@@ -1696,8 +1690,7 @@ if (typeof document !== 'undefined') {
       .closest('.checkbox-control')
       ?.classList.toggle('is-disabled', !state.maskEnabled);
     for (const id of maskControlIds) {
-      $(id).disabled = !state.maskEnabled;
-      $(id + 'N').disabled = !state.maskEnabled;
+      setControlPairDisabled(id, !state.maskEnabled);
       $(id + 'Control').classList.toggle('is-disabled', !state.maskEnabled);
     }
   }
@@ -1713,25 +1706,21 @@ if (typeof document !== 'undefined') {
   syncMaskControls();
   function syncHalftoneControls(): void {
     for (const id of ['halftoneSize', 'halftoneContrast', 'halftoneCycles']) {
-      $(id).disabled = !state.halftone;
-      $(id + 'N').disabled = !state.halftone;
+      setControlPairDisabled(id, !state.halftone);
       $(id + 'Control').classList.toggle('is-disabled', !state.halftone);
     }
   }
   function syncChromaAmount(): void {
-    $('chromaAmount').disabled = !state.chroma;
-    $('chromaAmountN').disabled = !state.chroma;
+    setControlPairDisabled('chromaAmount', !state.chroma);
     $('chromaAmountControl').classList.toggle('is-disabled', !state.chroma);
   }
   function syncHumanizerControls(): void {
-    $('humanizerAmount').disabled = !state.humanizer;
-    $('humanizerAmountN').disabled = !state.humanizer;
+    setControlPairDisabled('humanizerAmount', !state.humanizer);
     $('humanizerAmountControl').classList.toggle('is-disabled', !state.humanizer);
   }
   function syncYarnCurlControls(): void {
     for (const id of ['yarnCutPercent', 'yarnCurlSize']) {
-      $(id).disabled = !state.yarnCurl;
-      $(id + 'N').disabled = !state.yarnCurl;
+      setControlPairDisabled(id, !state.yarnCurl);
       $(id + 'Control').classList.toggle('is-disabled', !state.yarnCurl);
     }
   }
