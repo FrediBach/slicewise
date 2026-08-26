@@ -438,6 +438,18 @@ button {
   padding-left: 8px;
   border-left: 1px solid #d8dbd6;
 }
+.effect-controls .control-row {
+  grid-template-columns: 115px minmax(0, 1fr);
+}
+.effect-controls .select-info {
+  margin-left: 125px;
+}
+.effect-controls .effect-controls .control-row {
+  grid-template-columns: 100px minmax(0, 1fr);
+}
+.effect-controls .effect-controls .select-info {
+  margin-left: 110px;
+}
 .blueprint-note {
   margin: 5px 5px 2px 0;
   line-height: 1.45;
@@ -722,6 +734,9 @@ button {
   padding-left: 8px;
   border-left: 1px solid #d8dbd6;
   transition: opacity 0.16s ease;
+}
+.morph-second-settings .control-row {
+  grid-template-columns: 114px minmax(0, 1fr);
 }
 .morph-second-settings.is-disabled {
   opacity: 0.45;
@@ -1528,6 +1543,21 @@ button:focus-visible,
   }
   .select-info {
     margin-left: 82px;
+  }
+  .effect-controls .control-row {
+    grid-template-columns: 57px minmax(0, 1fr);
+  }
+  .effect-controls .select-info {
+    margin-left: 67px;
+  }
+  .effect-controls .effect-controls .control-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+  .effect-controls .effect-controls .select-info {
+    margin-left: 52px;
+  }
+  .morph-second-settings .control-row {
+    grid-template-columns: 56px minmax(0, 1fr);
   }
   .line-index-info {
     margin-left: 0;
