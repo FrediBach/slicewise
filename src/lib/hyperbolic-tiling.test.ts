@@ -59,4 +59,14 @@ describe('hyperbolic tiling generation', () => {
     });
     expect(new Set(keys).size).toBe(keys.length);
   });
+
+  it('keeps every permitted high-order pair finite at maximum UI depth', () => {
+    for (let p = 3; p <= 12; p++)
+      for (let q = 3; q <= 12; q++) {
+        if (!isHyperbolicPair(p, q)) continue;
+        const tiling = generateHyperbolicTiling({ p, q, depth: 6, maxEdges: 12_000 });
+        expect(tiling.edges.length, `{${p},${q}}`).toBeLessThanOrEqual(12_000);
+        expect(Array.from(tiling.points).every(Number.isFinite), `{${p},${q}}`).toBe(true);
+      }
+  });
 });

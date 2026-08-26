@@ -129,6 +129,17 @@ At the Klein ↔ Poincaré 100% endpoint the disk-model relation is `p = k / (1 
 
 **Distance difference** uses the symmetric range `[-max(|dA − dB|), +max(|dA − dB|)]`, ignores Gap easing, and always includes the meaningful zero contour. When Line count is even, one additional level is emitted so the family remains paired around zero. **Voronoi boundary** emits one explicit boundary family, so Line count and Gap easing are disabled. Equal-distance nearest-source ties belong to the lower seed vertex. Components unreachable from both seeds are omitted; difference and Voronoi output is empty when the seeds do not share a connected component. Curvature fields mask open-boundary, isolated, degenerate, and non-manifold samples. Their displayed values are dimensionless after robust normalization; raw Gaussian and mean curvature still obey inverse-square and inverse-length scale laws respectively.
 
+### Compatibility summary
+
+| Feature family                     | Mesh contours    | SVG centreline / hyperbolic tiling | Projection warps                 | Slice explode                  | Divergence / slice LFO / spiral                      |
+| ---------------------------------- | ---------------- | ---------------------------------- | -------------------------------- | ------------------------------ | ---------------------------------------------------- |
+| Planar fields                      | Yes              | Bypassed                           | Yes                              | Constant field direction       | Yes, subject to each control's ordinary restrictions |
+| Spherical / cylindrical wavefronts | Yes              | Bypassed                           | Yes                              | Analytic local gradient        | No                                                   |
+| Geodesic / curvature fields        | Yes              | Bypassed                           | Yes                              | No reliable gradient; disabled | No                                                   |
+| Generated hyperbolic tiling        | Not a mesh field | Direct centreline source           | Yes, including Möbius navigation | Not applicable                 | Not applicable                                       |
+
+Quick preview can reduce contour density, curve precision, and morph-grid dimensions. Exact SVG and G-code always use the full requested settings and the same finished centreline runs. Camera orbit, roll, pan, zoom, projection warps, styling, Humanizer, Yarn cut & curl, artboard/mask clipping, gradients, indexed colours, and topographic annotations apply after field extraction and therefore compose with every emitted mesh contour family. Blueprint furniture and SVG dash styling remain SVG-only as documented; base geometry and plotter annotations retain SVG/G-code parity.
+
 ### Path construction
 
 | Parameter (ID)               | Type and default | What it does                                                                                                                                                                                                                                                                                                               |

@@ -46,6 +46,8 @@ Prioritize observable contracts and failure-prone transformations:
 
 Avoid snapshots of entire panels. They are noisy and do not prove that controls remain connected to the imperative runtime. Prefer assertions about accessible controls, event payloads, and exported data.
 
+`non-euclidean-integration.test.ts` is the release compatibility matrix. It combines every new projection/field family with quick and exact rendering, camera transforms, X/Y morphs, gradients and indexed colours, Humanizer, Yarn cut & curl, artboard and mask clipping, blueprint/topographic output, SVG centreline projection, generated tiling line art, and both G-code origins. Keep focused kernel tests as the primary numerical specification; extend this matrix when a new feature family must share the complete composition pipeline.
+
 When fixing a bug, first add the smallest test that reproduces it at the closest stable boundary. Add broader integration coverage only when the bug crosses module boundaries.
 
 ## Coverage

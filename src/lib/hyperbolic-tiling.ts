@@ -78,10 +78,13 @@ export function poincareGeodesic(a: DiskPoint, b: DiskPoint): PoincareGeodesic {
   const db = (b[0] * b[0] + b[1] * b[1] + 1) * 0.5;
   const cx = (da * b[1] - a[1] * db) / determinant;
   const cy = (a[0] * db - da * b[0]) / determinant;
-  const radiusSquared = cx * cx + cy * cy - 1;
-  if (!(radiusSquared > 0) || !Number.isFinite(radiusSquared))
+  // Using |centre|² − 1 loses the tiny positive radius to cancellation when
+  // reflected edges approach the disk boundary. Endpoint distance is the
+  // equivalent circle radius and stays stable in that limit.
+  const radius = Math.hypot(a[0] - cx, a[1] - cy);
+  if (!(radius > 0) || !Number.isFinite(radius) || !Number.isFinite(cx) || !Number.isFinite(cy))
     throw new Error('Could not construct a finite Poincaré geodesic');
-  return { kind: 'circle', center: [cx, cy], radius: Math.sqrt(radiusSquared) };
+  return { kind: 'circle', center: [cx, cy], radius };
 }
 
 function reflectPoint(point: DiskPoint, geodesic: PoincareGeodesic): DiskPoint {

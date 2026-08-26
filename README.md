@@ -8,8 +8,9 @@ All geometry processing happens in the browser. Uploaded artwork and models are 
 
 - Import binary or ASCII STL, OBJ, ASCII or binary PLY, and filled SVG artwork.
 - Extrude SVG artwork with proportional depth and optional rounded edges.
-- Start from built-in demo meshes or generate implicit-surface meshes.
-- Slice by model height, camera depth, width, depth, or a custom plane.
+- Start from built-in demo meshes, generate implicit-surface meshes, or create `{p,q}` hyperbolic tiling line art.
+- Slice by planar, spherical/cylindrical wavefront, surface-graph distance, or Gaussian/mean-curvature fields.
+- Apply Möbius navigation, spherical map projections, circle inversion, and optical distortion through one projection pipeline.
 - Create discrete contours or continuous helicoidal paths.
 - Remove hidden lines and add silhouettes.
 - Morph selected parameters across one- or two-dimensional instance grids.
@@ -58,6 +59,9 @@ src/
 │   └── ui/                    Small visual primitives
 ├── lib/
 │   ├── contour-engine.ts      DOM-free mesh-to-SVG contour pipeline
+│   ├── projection.ts          Projection warps and adaptive nonlinear paths
+│   ├── scalar-fields.ts       Planar, curved, geodesic, and curvature fields
+│   ├── hyperbolic-tiling.ts   Poincaré-disk tiling line-art generator
 │   ├── demo-meshes/           Built-in procedural mesh generators
 │   ├── mesh.ts                Mesh parsers, normalization, and normals
 │   ├── slicer.ts              Browser state, bindings, history, and export flow
@@ -76,6 +80,7 @@ src/
 - [Architecture](./docs/ARCHITECTURE.md) describes runtime data flow, module boundaries, worker behavior, and extension guidance.
 - [Parameter reference](./docs/PARAMETERS.md) documents user-facing controls, defaults, ranges, and export behavior.
 - [Testing guide](./docs/TESTING.md) covers test conventions, fixtures, coverage, and verification commands.
+- [Non-Euclidean recipes](./docs/NON_EUCLIDEAN_RECIPES.md) gives starting settings for Möbius, wavefront, intrinsic, curvature, and tiling studies.
 
 Contributor and coding-agent guidance lives in [AGENTS.md](./AGENTS.md).
 

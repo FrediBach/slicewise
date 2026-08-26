@@ -649,6 +649,8 @@ Only accept hyperbolic pairs satisfying `(p - 2) * (q - 2) > 4`.
 
 ## Session 13 — Cross-feature hardening and release documentation
 
+**Status: completed.**
+
 ### Goal
 
 Resolve interactions that are easy to miss while individual features are developed.
@@ -704,6 +706,16 @@ npm run build
 ```
 
 Then manually test at least one uploaded STL/OBJ/PLY, one filled SVG extrusion, and one SVG centreline source.
+
+### Release audit recorded
+
+- A cross-feature integration matrix now covers all shipped projection and field families with quick/exact output, camera transforms, X/Y morphing, gradients and indexed colours, line-weight/easing choices, Humanizer, Yarn cut & curl, artboard and generative-mask clipping, topographic/blueprint composition, SVG centreline input, generated tiling line art, and both G-code origins.
+- Existing render-disposition tests confirm stale exact results and results for replaced meshes never commit. Existing cache tests confirm the eight-entry single/two-source geodesic LRU bounds; slice topology is capped at eight keys per mesh, curvature smoothing is clamped to the UI's 0–20 range, and source replacement is weak-keyed.
+- The 312-vertex/576-triangle release fixture at 24 contours and quality 7 measured approximately 9–46 ms cold exact, 5–12 ms warm exact, and 2–13 ms reduced quick renders on the audit machine. Spherical wavefront extraction was the slowest representative cold case. These are comparative development measurements, not device guarantees; browser timing remains available through the documented Performance API measures.
+- Sweeping every valid integer `{p,q}` pair from 3–12 at maximum UI depth found a worst sampled result of 12,000 edges and 29,436 nodes (`{11,12}`, capped) generated in about 18 ms on the audit machine. The depth-6 `{7,3}` recipe produced 7,511 edges and 16,249 sampled nodes in about 7 ms. Depth 6, two geodesic sources, and curvature smoothing 20 therefore remain the practical UI limits.
+- The maximum installed tiling uses about 0.72 MiB of typed point/normal/offset storage in each of the main thread and contour worker. Generator queues and deduplication maps are temporary. Moving topology-derived arrays into mesh-install messages was rejected for this release because measured warm intrinsic renders already reuse worker-local topology and the added protocol ownership would not improve the dominant spherical-wavefront case.
+- The high-order tiling sweep exposed and fixed near-boundary cancellation in orthogonal-circle radius calculation. Radius now uses the equivalent endpoint-to-centre distance, and every permitted pair is regression-tested at depth 6.
+- Exact parameter terminology, compatibility rules, cache/runtime boundaries, coverage scope, and five guided examples are documented in `PARAMETERS.md`, `ARCHITECTURE.md`, `TESTING.md`, and `NON_EUCLIDEAN_RECIPES.md`.
 
 ## Decisions intentionally deferred
 
