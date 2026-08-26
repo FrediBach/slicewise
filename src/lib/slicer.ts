@@ -159,6 +159,11 @@ const state: AppState = {
   mobiusDisplacement: 0,
   mobiusRotation: 0,
   mobiusStrength: 100,
+  sphericalStrength: 100,
+  inversionCenterX: 0,
+  inversionCenterY: 0,
+  inversionRadius: 50,
+  inversionStrength: 100,
   lines: 40,
   gapEase: 'linear',
   easeStrength: 100,
@@ -347,6 +352,11 @@ if (typeof document !== 'undefined') {
       mobiusDisplacement,
       mobiusRotation,
       mobiusStrength,
+      sphericalStrength,
+      inversionCenterX,
+      inversionCenterY,
+      inversionRadius,
+      inversionStrength,
       lines,
       gapEase,
       easeStrength,
@@ -455,6 +465,11 @@ if (typeof document !== 'undefined') {
       mobiusDisplacement,
       mobiusRotation,
       mobiusStrength,
+      sphericalStrength,
+      inversionCenterX,
+      inversionCenterY,
+      inversionRadius,
+      inversionStrength,
       lines,
       gapEase,
       easeStrength,
@@ -1084,6 +1099,11 @@ if (typeof document !== 'undefined') {
   bindPair('mobiusDisplacement', 'mobiusDisplacement');
   bindPair('mobiusRotation', 'mobiusRotation');
   bindPair('mobiusStrength', 'mobiusStrength');
+  bindPair('sphericalStrength', 'sphericalStrength');
+  bindPair('inversionCenterX', 'inversionCenterX');
+  bindPair('inversionCenterY', 'inversionCenterY');
+  bindPair('inversionRadius', 'inversionRadius');
+  bindPair('inversionStrength', 'inversionStrength');
   bindPair('lensDistortion', 'lensDistortion');
   bindPair('lines', 'lines');
   bindPair('easeStrength', 'easeStrength');
@@ -1151,6 +1171,10 @@ if (typeof document !== 'undefined') {
   function syncProjectionWarpControls(): void {
     const kleinEnabled = state.projectionWarpMode === 'klein-poincare';
     const mobiusEnabled = state.projectionWarpMode === 'mobius';
+    const sphericalEnabled = ['stereographic', 'gnomonic', 'lambert'].includes(
+      state.projectionWarpMode || '',
+    );
+    const inversionEnabled = state.projectionWarpMode === 'inversion';
     for (const id of ['lensWarpExponent']) {
       $(id).disabled = !kleinEnabled;
       $(id + 'N').disabled = !kleinEnabled;
@@ -1165,6 +1189,21 @@ if (typeof document !== 'undefined') {
       $(id).disabled = !mobiusEnabled;
       $(id + 'N').disabled = !mobiusEnabled;
       $(id + 'Control').classList.toggle('is-disabled', !mobiusEnabled);
+    }
+    for (const id of ['sphericalStrength']) {
+      $(id).disabled = !sphericalEnabled;
+      $(id + 'N').disabled = !sphericalEnabled;
+      $(id + 'Control').classList.toggle('is-disabled', !sphericalEnabled);
+    }
+    for (const id of [
+      'inversionCenterX',
+      'inversionCenterY',
+      'inversionRadius',
+      'inversionStrength',
+    ]) {
+      $(id).disabled = !inversionEnabled;
+      $(id + 'N').disabled = !inversionEnabled;
+      $(id + 'Control').classList.toggle('is-disabled', !inversionEnabled);
     }
   }
   $('projectionWarpMode').addEventListener('change', (event) => {
@@ -1920,6 +1959,11 @@ if (typeof document !== 'undefined') {
     ['mobiusDisplacement', 'mobiusDisplacement'],
     ['mobiusRotation', 'mobiusRotation'],
     ['mobiusStrength', 'mobiusStrength'],
+    ['sphericalStrength', 'sphericalStrength'],
+    ['inversionCenterX', 'inversionCenterX'],
+    ['inversionCenterY', 'inversionCenterY'],
+    ['inversionRadius', 'inversionRadius'],
+    ['inversionStrength', 'inversionStrength'],
     ['lensDistortion', 'lensDistortion'],
     ['lines', 'lines'],
     ['quality', 'quality'],
@@ -2062,9 +2106,15 @@ if (typeof document !== 'undefined') {
     restored.lensWarpExponent = Number.isFinite(restored.lensWarpExponent)
       ? restored.lensWarpExponent
       : 0;
-    restored.projectionWarpMode = ['none', 'klein-poincare', 'mobius'].includes(
-      String(restored.projectionWarpMode),
-    )
+    restored.projectionWarpMode = [
+      'none',
+      'klein-poincare',
+      'mobius',
+      'stereographic',
+      'gnomonic',
+      'lambert',
+      'inversion',
+    ].includes(String(restored.projectionWarpMode))
       ? restored.projectionWarpMode
       : restored.lensWarpExponent !== 0
         ? 'klein-poincare'
@@ -2080,6 +2130,21 @@ if (typeof document !== 'undefined') {
       : 0;
     restored.mobiusStrength = Number.isFinite(restored.mobiusStrength)
       ? restored.mobiusStrength
+      : 100;
+    restored.sphericalStrength = Number.isFinite(restored.sphericalStrength)
+      ? restored.sphericalStrength
+      : 100;
+    restored.inversionCenterX = Number.isFinite(restored.inversionCenterX)
+      ? restored.inversionCenterX
+      : 0;
+    restored.inversionCenterY = Number.isFinite(restored.inversionCenterY)
+      ? restored.inversionCenterY
+      : 0;
+    restored.inversionRadius = Number.isFinite(restored.inversionRadius)
+      ? restored.inversionRadius
+      : 50;
+    restored.inversionStrength = Number.isFinite(restored.inversionStrength)
+      ? restored.inversionStrength
       : 100;
     restored.waveCenterX = Number.isFinite(restored.waveCenterX) ? restored.waveCenterX : 0;
     restored.waveCenterY = Number.isFinite(restored.waveCenterY) ? restored.waveCenterY : 0;
@@ -2274,6 +2339,11 @@ if (typeof document !== 'undefined') {
           'mobiusDisplacement',
           'mobiusRotation',
           'mobiusStrength',
+          'sphericalStrength',
+          'inversionCenterX',
+          'inversionCenterY',
+          'inversionRadius',
+          'inversionStrength',
         ]
       : locks;
     document.dispatchEvent(new CustomEvent('randomlockbulk', { detail: { locks: migratedLocks } }));
@@ -2344,12 +2414,21 @@ if (typeof document !== 'undefined') {
       'none',
       'klein-poincare',
       'mobius',
+      'stereographic',
+      'gnomonic',
+      'lambert',
+      'inversion',
     ]);
     randomizePair('lensWarpExponent', 'lensWarpExponent', () => randomInt(0, 100));
     randomizePair('mobiusDirection', 'mobiusDirection', () => randomInt(-180, 180));
     randomizePair('mobiusDisplacement', 'mobiusDisplacement', () => randomInt(10, 82));
     randomizePair('mobiusRotation', 'mobiusRotation', () => randomInt(-180, 180));
     randomizePair('mobiusStrength', 'mobiusStrength', () => randomInt(35, 100));
+    randomizePair('sphericalStrength', 'sphericalStrength', () => randomInt(35, 100));
+    randomizePair('inversionCenterX', 'inversionCenterX', () => randomInt(-65, 65));
+    randomizePair('inversionCenterY', 'inversionCenterY', () => randomInt(-65, 65));
+    randomizePair('inversionRadius', 'inversionRadius', () => randomInt(20, 120));
+    randomizePair('inversionStrength', 'inversionStrength', () => randomInt(35, 100));
     randomizePair('lensDistortion', 'lensDistortion', () => randomInt(-70, 55));
     syncProjectionWarpControls();
 

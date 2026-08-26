@@ -555,6 +555,8 @@ Ship Gaussian and mean curvature first. Treat shape index as optional within thi
 
 ## Session 11 — Spherical projections and circle inversion
 
+**Status: completed.**
+
 ### Goal
 
 Add a coherent family of projection warps using the nonlinear path and domain contract from Session 2.
@@ -586,6 +588,15 @@ Orthographic already exists as a camera projection and should be described in th
 - Lambert projection preserves small-area ratios within tolerance.
 - Inverted lines/circles satisfy their expected circle/line relations.
 - Horizon crossings split into bounded finite runs.
+
+### Decisions recorded
+
+- Camera-plane radius lifts by the sphere exponential map `ρ = πr/2`. The normalized model circle `r = 1` is the spherical horizon. Stereographic and Lambert are scaled to radius one there; gnomonic retains its exact tangent-plane scale and front-hemisphere domain.
+- Camera azimuth/elevation/roll supplies all useful orientation, so no second spherical centre/orientation control is exposed. One shared spherical strength blends final normalized XY from identity to the exact selected projection.
+- Gnomonic rejects the horizon and back hemisphere. Stereographic and Lambert reject the antipode and the sphere lift rejects radii at or beyond the antipodal limit. A normalized output-radius guard bounds work near every singularity.
+- Circle inversion exposes normalized centre X/Y, radius, and output-space strength. Its centre and over-limit samples are invalid, causing the adaptive projector to split runs instead of drawing a chord across infinity.
+- Hidden-line depth faces are adaptively subdivided for spherical and inversion modes to a depth-pixel tolerance, with recursion capped at four. Invalid horizon/singularity subfaces are omitted safely.
+- Existing camera orientation, projection warp, and optical distortion order remains unchanged. Exact SVG and G-code reuse the same adaptively projected runs.
 
 ## Session 12 — Hyperbolic tiling generator
 

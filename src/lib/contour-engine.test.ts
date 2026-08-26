@@ -226,6 +226,103 @@ describe('computeContours', () => {
     }
   });
 
+  it.each(['stereographic', 'gnomonic', 'lambert'] as const)(
+    'renders deterministic finite %s spherical projection output',
+    (projectionWarpMode) => {
+      const mesh = makeContourMesh();
+      const settings = {
+        ...contourSettings,
+        projectionWarpMode,
+        sphericalStrength: 80,
+        hide: true,
+        sil: false,
+        bg: false,
+        clipToArtboard: true,
+        quality: 7,
+      };
+      const result = computeContours(mesh, settings, false);
+      const repeated = computeContours(mesh, settings, false);
+      const gcode = generateGCode(
+        result.toolpaths,
+        { width: settings.pw, height: settings.ph },
+        { origin: 'bottom-left', clipToArtboard: true, optimizeTravel: false },
+      );
+
+      expect(result.paths).toBeGreaterThan(0);
+      expect(result.svg).toBe(repeated.svg);
+      expect(result.toolpaths).toEqual(repeated.toolpaths);
+      expect(result.svg).not.toMatch(/NaN|Infinity/);
+      expect(gcode).not.toMatch(/NaN|Infinity/);
+    },
+  );
+
+  it('renders circle inversion as split finite SVG and plotter runs', () => {
+    const settings = {
+      ...contourSettings,
+      projectionWarpMode: 'inversion' as const,
+      inversionCenterX: 18,
+      inversionCenterY: -12,
+      inversionRadius: 55,
+      inversionStrength: 100,
+      hide: true,
+      sil: false,
+      bg: false,
+      quality: 8,
+    };
+    const result = computeContours(makeContourMesh(), settings, false);
+    const gcode = generateGCode(
+      result.toolpaths,
+      { width: settings.pw, height: settings.ph },
+      { origin: 'bottom-left', clipToArtboard: true, optimizeTravel: false },
+    );
+
+    expect(result.paths).toBeGreaterThan(0);
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+    expect(gcode).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('keeps new projection modes neutral at zero strength and morphs exact endpoints', () => {
+    const mesh = makeContourMesh();
+    const neutral = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const original = computeContours(mesh, neutral, false);
+    for (const projectionWarpMode of ['stereographic', 'gnomonic', 'lambert'] as const) {
+      expect(
+        computeContours(mesh, { ...neutral, projectionWarpMode, sphericalStrength: 0 }, false)
+          .toolpaths,
+      ).toEqual(original.toolpaths);
+    }
+    expect(
+      computeContours(
+        mesh,
+        { ...neutral, projectionWarpMode: 'inversion', inversionStrength: 0 },
+        false,
+      ).toolpaths,
+    ).toEqual(original.toolpaths);
+
+    const base = {
+      ...neutral,
+      projectionWarpMode: 'stereographic' as const,
+      sphericalStrength: 20,
+    };
+    const target = { sphericalStrength: 85 };
+    const start = computeContours(mesh, base, false);
+    const end = computeContours(mesh, { ...base, ...target }, false);
+    const morphed = computeContours(
+      mesh,
+      { ...base, morphEnabled: true, morphSteps: 2, morphTargets: target },
+      false,
+    );
+    expect(morphed.toolpaths[0].runs).toEqual([
+      ...start.toolpaths[0].runs,
+      ...end.toolpaths[0].runs,
+    ]);
+  });
+
   it('renders exact Mobius morph endpoints from interpolated transform parameters', () => {
     const mesh = {
       V: new Float32Array([0, -0.55, 0.15, 0, 0.55, 0.15]),

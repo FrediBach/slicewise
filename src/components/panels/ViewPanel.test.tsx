@@ -29,6 +29,10 @@ describe('ViewPanel lens and projection controls', () => {
     expect(mode).toHaveTextContent('None');
     expect(mode).toHaveTextContent('Klein ↔ Poincaré');
     expect(mode).toHaveTextContent('Hyperbolic Möbius');
+    expect(mode).toHaveTextContent('Spherical · stereographic');
+    expect(mode).toHaveTextContent('Spherical · gnomonic');
+    expect(mode).toHaveTextContent('Spherical · Lambert equal-area');
+    expect(mode).toHaveTextContent('Circle inversion');
 
     expect(screen.getByRole('slider', { name: 'Hyperbolic direction' })).toHaveAttribute(
       'min',
@@ -45,6 +49,17 @@ describe('ViewPanel lens and projection controls', () => {
     expect(screen.getByRole('slider', { name: 'Hyperbolic displacement' })).toHaveValue('0');
     expect(screen.getByRole('slider', { name: 'Hyperbolic rotation' })).toHaveValue('0');
     expect(screen.getByRole('slider', { name: 'Warp strength' })).toHaveValue('100');
+    expect(screen.getByRole('slider', { name: 'Spherical strength' })).toHaveValue('100');
+    expect(screen.getByRole('slider', { name: 'Inversion centre X' })).toHaveAttribute(
+      'min',
+      '-100',
+    );
+    expect(screen.getByRole('slider', { name: 'Inversion centre Y' })).toHaveAttribute(
+      'max',
+      '100',
+    );
+    expect(screen.getByRole('slider', { name: 'Inversion radius' })).toHaveValue('50');
+    expect(screen.getByRole('slider', { name: 'Inversion strength' })).toHaveValue('100');
   });
 
   it('allows sub-degree orientation for accurate axonometric views', () => {

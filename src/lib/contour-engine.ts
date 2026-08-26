@@ -7,9 +7,11 @@ import {
   cameraBasis,
   projectMesh as project,
   projectPolylineAdaptive,
+  projectWorldPoint,
   resolveLens,
   resolveProjectionWarpMode,
   type Projection,
+  type ProjectedPointResult,
   type ProjectionWarpMode,
 } from './projection';
 import {
@@ -75,6 +77,11 @@ export interface ContourSettings extends GenerativeMaskSettings {
   mobiusDisplacement?: number;
   mobiusRotation?: number;
   mobiusStrength?: number;
+  sphericalStrength?: number;
+  inversionCenterX?: number;
+  inversionCenterY?: number;
+  inversionRadius?: number;
+  inversionStrength?: number;
   /** Legacy preset fields retained for stored snapshots and callers. */
   lens?: string;
   lensAmount?: number;
@@ -994,7 +1001,7 @@ function sliceFanTangent(direction: Vec3): Vec3 {
 /* ------------------------------------------------------- depth buffer */
 function buildDepth(
   P: Projection,
-  T: NumericArray,
+  mesh: ContourMesh,
   W: number,
   H: number,
   res: number,
@@ -1003,28 +1010,24 @@ function buildDepth(
   const rh = Math.max(32, Math.round(res * (H >= W ? 1 : H / W)));
   const k = rw / W;
   const buf = new Float32Array(rw * rh).fill(Infinity);
-  const { sx, sy, sd } = P;
-  for (let i = 0; i < T.length; i += 3) {
-    const a = T[i],
-      b = T[i + 1],
-      c = T[i + 2];
-    const x0 = sx[a] * k,
-      y0 = sy[a] * k,
-      x1 = sx[b] * k,
-      y1 = sy[b] * k,
-      x2 = sx[c] * k,
-      y2 = sy[c] * k;
+  const rasterize = (first: Vec3, second: Vec3, third: Vec3): void => {
+    const x0 = first[0] * k,
+      y0 = first[1] * k,
+      x1 = second[0] * k,
+      y1 = second[1] * k,
+      x2 = third[0] * k,
+      y2 = third[1] * k;
     const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
-    if (area === 0 || !isFinite(area)) continue;
+    if (area === 0 || !isFinite(area)) return;
     const inv = 1 / area;
     const lo = Math.max(0, Math.floor(Math.min(x0, x1, x2)));
     const hi = Math.min(rw - 1, Math.ceil(Math.max(x0, x1, x2)));
     const to = Math.max(0, Math.floor(Math.min(y0, y1, y2)));
     const bo = Math.min(rh - 1, Math.ceil(Math.max(y0, y1, y2)));
-    if (lo > hi || to > bo) continue;
-    const d0 = sd[a],
-      d1 = sd[b],
-      d2 = sd[c];
+    if (lo > hi || to > bo) return;
+    const d0 = first[2],
+      d1 = second[2],
+      d2 = third[2];
     for (let y = to; y <= bo; y++) {
       const py = y + 0.5,
         row = y * rw;
@@ -1038,6 +1041,78 @@ function buildDepth(
         const o = row + x;
         if (d < buf[o]) buf[o] = d;
       }
+    }
+  };
+
+  const nonlinearFaces = ['stereographic', 'gnomonic', 'lambert', 'inversion'].includes(
+    P.projectionWarpMode,
+  );
+  const worldPoint = (vertex: number): Vec3 => {
+    const offset = vertex * 3;
+    return [mesh.V[offset], mesh.V[offset + 1], mesh.V[offset + 2]];
+  };
+  const midpoint = (a: Vec3, b: Vec3): Vec3 => [
+    (a[0] + b[0]) * 0.5,
+    (a[1] + b[1]) * 0.5,
+    (a[2] + b[2]) * 0.5,
+  ];
+  const midpointError = (middle: Vec3, a: Vec3, b: Vec3): number =>
+    Math.hypot(middle[0] - (a[0] + b[0]) * 0.5, middle[1] - (a[1] + b[1]) * 0.5);
+  const projectFacePoint = (point: Vec3): ProjectedPointResult =>
+    projectWorldPoint(point[0], point[1], point[2], P);
+  const tessellate = (
+    a: Vec3,
+    b: Vec3,
+    c: Vec3,
+    pa: ProjectedPointResult,
+    pb: ProjectedPointResult,
+    pc: ProjectedPointResult,
+    depth: number,
+  ): void => {
+    const ab = midpoint(a, b),
+      bc = midpoint(b, c),
+      ca = midpoint(c, a);
+    const pab = projectFacePoint(ab),
+      pbc = projectFacePoint(bc),
+      pca = projectFacePoint(ca);
+    const samples = [pa, pb, pc, pab, pbc, pca];
+    const allValid = samples.every((sample) => sample.status !== 'invalid');
+    const tolerance = Math.max(W / rw, H / rh) * 0.35;
+    const error = allValid
+      ? Math.max(
+          midpointError(pab.point, pa.point, pb.point),
+          midpointError(pbc.point, pb.point, pc.point),
+          midpointError(pca.point, pc.point, pa.point),
+        )
+      : Infinity;
+    if (depth < 4 && (!allValid || error > tolerance)) {
+      tessellate(a, ab, ca, pa, pab, pca, depth + 1);
+      tessellate(ab, b, bc, pab, pb, pbc, depth + 1);
+      tessellate(ca, bc, c, pca, pbc, pc, depth + 1);
+      tessellate(ab, bc, ca, pab, pbc, pca, depth + 1);
+      return;
+    }
+    if (pa.status !== 'invalid' && pb.status !== 'invalid' && pc.status !== 'invalid')
+      rasterize(pa.point, pb.point, pc.point);
+  };
+
+  const { sx, sy, sd } = P;
+  const vertexCount = Math.floor(mesh.V.length / 3);
+  for (let i = 0; i < mesh.T.length; i += 3) {
+    const a = mesh.T[i],
+      b = mesh.T[i + 1],
+      c = mesh.T[i + 2];
+    if (
+      ![a, b, c].every((vertex) => Number.isInteger(vertex) && vertex >= 0 && vertex < vertexCount)
+    )
+      continue;
+    if (nonlinearFaces) {
+      const wa = worldPoint(a),
+        wb = worldPoint(b),
+        wc = worldPoint(c);
+      tessellate(wa, wb, wc, projectFacePoint(wa), projectFacePoint(wb), projectFacePoint(wc), 0);
+    } else {
+      rasterize([sx[a], sy[a], sd[a]], [sx[b], sy[b], sd[b]], [sx[c], sy[c], sd[c]]);
     }
   }
   return { buf, rw, rh, k };
@@ -1389,6 +1464,11 @@ function deterministicDrawingNumber(
       settings.mobiusDisplacement,
       settings.mobiusRotation,
       settings.mobiusStrength,
+      settings.sphericalStrength,
+      settings.inversionCenterX,
+      settings.inversionCenterY,
+      settings.inversionRadius,
+      settings.inversionStrength,
       settings.lens,
       settings.lensAmount,
     ],
@@ -1543,7 +1623,11 @@ function blueprintDocument(
       ? `Möb_${fmt(settings.mobiusDirection ?? 0)}°/${fmt(settings.mobiusDisplacement ?? 0)}%/${fmt(settings.mobiusRotation ?? 0)}°@${fmt(settings.mobiusStrength ?? 100)}%`
       : warpMode === 'klein-poincare'
         ? `${fmt(settings.lensWarpExponent ?? 0)}%K→P`
-        : 'no-warp';
+        : warpMode === 'stereographic' || warpMode === 'gnomonic' || warpMode === 'lambert'
+          ? `${warpMode === 'stereographic' ? 'Stereo' : warpMode === 'gnomonic' ? 'Gnom' : 'Lambert'}@${fmt(settings.sphericalStrength ?? 100)}%`
+          : warpMode === 'inversion'
+            ? `Inv_[${fmt(settings.inversionCenterX ?? 0)},${fmt(settings.inversionCenterY ?? 0)}],r${fmt(settings.inversionRadius ?? 50)}@${fmt(settings.inversionStrength ?? 100)}%`
+            : 'no-warp';
   const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(settings.lensPerspective ?? 0)}%persp,${warpFormula},${fmt(distortion)}%dist(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
   const geodesicMode = settings.geodesicMode || 'single';
   const geodesicFormula =
@@ -2480,6 +2564,11 @@ function computeLineArtInstance(
       mobiusDisplacement: settings.mobiusDisplacement,
       mobiusRotation: settings.mobiusRotation,
       mobiusStrength: settings.mobiusStrength,
+      sphericalStrength: settings.sphericalStrength,
+      inversionCenterX: settings.inversionCenterX,
+      inversionCenterY: settings.inversionCenterY,
+      inversionRadius: settings.inversionRadius,
+      inversionStrength: settings.inversionStrength,
     },
   );
   const offsets = mesh.lineArt!.offsets;
@@ -2684,6 +2773,11 @@ function computeContourInstance(
       mobiusDisplacement: settings.mobiusDisplacement,
       mobiusRotation: settings.mobiusRotation,
       mobiusStrength: settings.mobiusStrength,
+      sphericalStrength: settings.sphericalStrength,
+      inversionCenterX: settings.inversionCenterX,
+      inversionCenterY: settings.inversionCenterY,
+      inversionRadius: settings.inversionRadius,
+      inversionStrength: settings.inversionStrength,
     },
   );
   const waveCenter: Vec3 = [
@@ -2805,7 +2899,7 @@ function computeContourInstance(
     step = 0.6;
   if (settings.hide) {
     const res = quick ? 320 : 1100;
-    const D = buildDepth(P, mesh.T, W, H, res);
+    const D = buildDepth(P, mesh, W, H, res);
     const depthRange = P.dmax - P.dmin || 1;
     vis = makeVisibleTest(D, depthRange * 0.006 + 1e-6, 1);
     // outlines sit exactly on the depth cliff, so they need a wider, kinder test

@@ -2,16 +2,20 @@ import { describe, expect, it } from 'vitest';
 import {
   cameraBasis,
   distortLens,
+  invertCircle,
   inverseTransformPoincareDisk,
+  liftCameraPlaneToSphere,
   projectCameraPoint,
   projectCameraPointResult,
   projectMesh,
   projectPolylineAdaptive,
+  projectSphereAzimuthal,
   projectWorldPoint,
   resolveLens,
   resolveProjectionWarpMode,
   transformPoincareDisk,
   warpKleinPoincare,
+  warpSphericalProjection,
 } from './projection';
 
 const expectPointCloseTo = (actual: readonly number[], expected: readonly number[]): void => {
@@ -27,6 +31,107 @@ const poincareDistance = (a: readonly number[], b: readonly number[]): number =>
 };
 
 describe('projection', () => {
+  describe('spherical azimuthal projections', () => {
+    it('lifts camera radius to angular distance and matches known projection points', () => {
+      expectPointCloseTo(liftCameraPlaneToSphere(0.5, 0).point, [Math.SQRT1_2, 0, Math.SQRT1_2]);
+      const point = [Math.SQRT1_2, 0, Math.SQRT1_2] as const;
+      expectPointCloseTo(projectSphereAzimuthal(...point, 'stereographic').point, [
+        Math.SQRT1_2 / (1 + Math.SQRT1_2),
+        0,
+      ]);
+      expectPointCloseTo(projectSphereAzimuthal(...point, 'gnomonic').point, [1, 0]);
+      expectPointCloseTo(projectSphereAzimuthal(...point, 'lambert').point, [
+        Math.SQRT1_2 / Math.sqrt(1 + Math.SQRT1_2),
+        0,
+      ]);
+      expectPointCloseTo(warpSphericalProjection(0.5, 0, 'gnomonic', 0).point, [0.5, 0]);
+      expectPointCloseTo(warpSphericalProjection(0.5, 0, 'gnomonic', 100).point, [1, 0]);
+    });
+
+    it('is locally conformal under stereographic projection', () => {
+      const center = [0.36, -0.48, 0.8] as const;
+      const tangentA = [0.8, 0, -0.36] as const;
+      const tangentALength = Math.hypot(...tangentA);
+      const unitA = tangentA.map((value) => value / tangentALength);
+      const unitB = [
+        center[1] * unitA[2] - center[2] * unitA[1],
+        center[2] * unitA[0] - center[0] * unitA[2],
+        center[0] * unitA[1] - center[1] * unitA[0],
+      ];
+      const epsilon = 1e-5;
+      const base = projectSphereAzimuthal(...center, 'stereographic').point;
+      const sample = (direction: readonly number[]) => {
+        const sphere = center.map((value, index) => value + direction[index] * epsilon);
+        const length = Math.hypot(...sphere);
+        return projectSphereAzimuthal(
+          sphere[0] / length,
+          sphere[1] / length,
+          sphere[2] / length,
+          'stereographic',
+        ).point;
+      };
+      const a = sample(unitA),
+        b = sample(unitB);
+      const da = [a[0] - base[0], a[1] - base[1]],
+        db = [b[0] - base[0], b[1] - base[1]];
+      expect(Math.hypot(...da) / Math.hypot(...db)).toBeCloseTo(1, 4);
+      expect(da[0] * db[0] + da[1] * db[1]).toBeCloseTo(0, 9);
+    });
+
+    it('maps representative great-circle samples to a gnomonic line', () => {
+      const samples = [
+        [0.2, -0.1],
+        [-0.35, 0.175],
+        [0.5, -0.25],
+      ].map(([x, y]) => {
+        const z = 1;
+        const length = Math.hypot(x, y, z);
+        return projectSphereAzimuthal(x / length, y / length, z / length, 'gnomonic').point;
+      });
+      for (const [x, y] of samples) expect(2 * y + x).toBeCloseTo(0, 8);
+    });
+
+    it('preserves Lambert small-area ratios across latitude', () => {
+      const jacobianRatio = (theta: number, longitude: number): number => {
+        const epsilon = 1e-5;
+        const map = (t: number, l: number) =>
+          projectSphereAzimuthal(
+            Math.sin(t) * Math.cos(l),
+            Math.sin(t) * Math.sin(l),
+            Math.cos(t),
+            'lambert',
+          ).point;
+        const center = map(theta, longitude),
+          t = map(theta + epsilon, longitude),
+          l = map(theta, longitude + epsilon);
+        const determinant =
+          ((t[0] - center[0]) * (l[1] - center[1]) - (t[1] - center[1]) * (l[0] - center[0])) /
+          (epsilon * epsilon);
+        return Math.abs(determinant) / Math.sin(theta);
+      };
+      expect(jacobianRatio(0.35, 0.2)).toBeCloseTo(jacobianRatio(1.1, -0.7), 4);
+      expect(jacobianRatio(0.7, 1.4)).toBeCloseTo(0.5, 4);
+    });
+  });
+
+  describe('circle inversion', () => {
+    it('maps a line not through the centre onto its expected circle', () => {
+      for (const x of [-2, -0.5, 0, 0.75, 3]) {
+        const [ix, iy] = invertCircle(x, 1, [0, 0], 2).point;
+        expect(ix * ix + (iy - 2) * (iy - 2)).toBeCloseTo(4, 8);
+      }
+    });
+
+    it('maps a circle through the centre onto a line and has a neutral strength', () => {
+      for (const angle of [-1.2, -0.4, 0.5, 1.3]) {
+        const x = 1 + Math.cos(angle),
+          y = Math.sin(angle);
+        expect(invertCircle(x, y, [0, 0], 1).point[0]).toBeCloseTo(0.5, 8);
+      }
+      expectPointCloseTo(invertCircle(0.2, -0.4, [0.1, 0.2], 0.7, 0).point, [0.2, -0.4]);
+    });
+  });
+
   it('builds a stable camera basis through orientation and roll', () => {
     const basis = cameraBasis(0, 0, 0);
     expectPointCloseTo(basis.f, [-1, 0, 0]);
@@ -188,6 +293,10 @@ describe('projection', () => {
       expect(resolveProjectionWarpMode(undefined, 65)).toBe('klein-poincare');
       expect(resolveProjectionWarpMode('none', 65)).toBe('none');
       expect(resolveProjectionWarpMode('mobius', 65)).toBe('mobius');
+      expect(resolveProjectionWarpMode('stereographic', 65)).toBe('stereographic');
+      expect(resolveProjectionWarpMode('gnomonic', 65)).toBe('gnomonic');
+      expect(resolveProjectionWarpMode('lambert', 65)).toBe('lambert');
+      expect(resolveProjectionWarpMode('inversion', 65)).toBe('inversion');
     });
 
     it('applies Mobius navigation after perspective and before optical distortion', () => {
@@ -396,5 +505,81 @@ describe('projection', () => {
     });
     expect(bounded.runs[0].points.length / 3).toBeLessThanOrEqual(8);
     expect(bounded.truncated).toBe(true);
+  });
+
+  it.each([
+    ['gnomonic horizon', { mode: 'gnomonic' as const, sphericalStrength: 100 }],
+    [
+      'inversion centre',
+      {
+        mode: 'inversion' as const,
+        inversionCenterX: 0,
+        inversionCenterY: 0,
+        inversionRadius: 50,
+        inversionStrength: 100,
+      },
+    ],
+  ])('splits bounded finite runs at the %s', (_name, warp) => {
+    const points = new Float64Array([0, -1.2, 0, 0, 1.2, 0]);
+    const projection = projectMesh(
+      { V: points },
+      cameraBasis(0, 0, 0),
+      120,
+      100,
+      10,
+      1,
+      0,
+      0,
+      50,
+      0,
+      0,
+      0,
+      warp,
+    );
+    const result = projectPolylineAdaptive(points, [0, 1], projection, {
+      tolerance: 0.03,
+      maxDepth: 10,
+      maxNodes: 4096,
+    });
+    const emitted = result.runs.flatMap((run) => run.points);
+    expect(result.invalidSamples).toBeGreaterThan(0);
+    expect(result.runs.length).toBeGreaterThanOrEqual(1);
+    expect(emitted.every(Number.isFinite)).toBe(true);
+    expect(emitted.every((value) => Math.abs(value) < 10000)).toBe(true);
+  });
+
+  it('does not join across an off-midpoint inversion singularity', () => {
+    const points = new Float64Array([0, -1, 0, 0, 2, 0]);
+    const projection = projectMesh(
+      { V: points },
+      cameraBasis(0, 0, 0),
+      120,
+      100,
+      10,
+      1,
+      0,
+      0,
+      50,
+      0,
+      0,
+      0,
+      {
+        mode: 'inversion',
+        inversionCenterX: 0,
+        inversionCenterY: 0,
+        inversionRadius: 50,
+        inversionStrength: 100,
+      },
+    );
+    const result = projectPolylineAdaptive(points, [0, 1], projection, {
+      tolerance: 0.03,
+      maxDepth: 8,
+    });
+
+    expect(result.runs).toHaveLength(2);
+    for (const run of result.runs) {
+      const xs = run.points.filter((_, index) => index % 3 === 0);
+      expect(xs.every((x) => x < projection.ox) || xs.every((x) => x > projection.ox)).toBe(true);
+    }
   });
 });

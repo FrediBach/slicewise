@@ -32,6 +32,11 @@ export interface Projection extends CameraBasis {
   mobiusDisplacement: number;
   mobiusRotation: number;
   mobiusStrength: number;
+  sphericalStrength: number;
+  inversionCenterX: number;
+  inversionCenterY: number;
+  inversionRadius: number;
+  inversionStrength: number;
 }
 
 export interface LensSettings {
@@ -42,7 +47,9 @@ export interface LensSettings {
   lensAmount?: number;
 }
 
-export type ProjectionWarpMode = 'none' | 'klein-poincare' | 'mobius';
+export type SphericalProjectionMode = 'stereographic' | 'gnomonic' | 'lambert';
+export type ProjectionWarpMode =
+  'none' | 'klein-poincare' | 'mobius' | SphericalProjectionMode | 'inversion';
 
 export interface ProjectionWarpSettings {
   mode?: ProjectionWarpMode;
@@ -54,6 +61,15 @@ export interface ProjectionWarpSettings {
   mobiusRotation?: number;
   /** Parameter-space interpolation from identity, as a percentage. */
   mobiusStrength?: number;
+  /** Neutral-to-exact spherical projection blend, as a percentage. */
+  sphericalStrength?: number;
+  /** Circle-inversion centre coordinates, as percentages of model radius. */
+  inversionCenterX?: number;
+  inversionCenterY?: number;
+  /** Circle-inversion radius, as a percentage of model radius. */
+  inversionRadius?: number;
+  /** Neutral-to-exact inversion blend, as a percentage. */
+  inversionStrength?: number;
 }
 
 export type ProjectionPointStatus = 'valid' | 'clipped-at-domain' | 'invalid';
@@ -106,6 +122,7 @@ const clamp = (value: number, minimum: number, maximum: number): number =>
 
 const MAX_MOBIUS_TRANSLATION_RADIUS = 1 - 1e-9;
 const DISK_BOUNDARY_SAMPLE_RADIUS = 1 - 1e-12;
+const MAX_SINGULAR_WARP_RADIUS = 64;
 
 interface ComplexPair {
   re: number;
@@ -288,11 +305,125 @@ export function warpKleinPoincare(x: number, y: number, exponentPercent: number)
   return [x * factor, y * factor];
 }
 
+export interface SpherePointResult {
+  status: ProjectionPointStatus;
+  point: Vec3;
+}
+
+/**
+ * Lifts normalized camera-plane coordinates through the sphere's exponential
+ * map. Radius one is the horizon and radius two approaches the antipode.
+ */
+export function liftCameraPlaneToSphere(x: number, y: number): SpherePointResult {
+  if (![x, y].every(Number.isFinite)) return { status: 'invalid', point: [NaN, NaN, NaN] };
+  const radius = Math.hypot(x, y);
+  if (radius > 2 - 1e-9) return { status: 'invalid', point: [NaN, NaN, NaN] };
+  if (radius < 1e-12) return { status: 'valid', point: [0, 0, 1] };
+  const angularRadius = (Math.PI * radius) / 2;
+  const radialScale = Math.sin(angularRadius) / radius;
+  const point: Vec3 = [x * radialScale, y * radialScale, Math.cos(angularRadius)];
+  return {
+    status: radius >= 1 ? 'clipped-at-domain' : 'valid',
+    point: point.every(Number.isFinite) ? point : [NaN, NaN, NaN],
+  };
+}
+
+/** Projects a unit-sphere point with horizon-normalized azimuthal formulas. */
+export function projectSphereAzimuthal(
+  x: number,
+  y: number,
+  z: number,
+  mode: SphericalProjectionMode,
+): DiskTransformResult {
+  if (![x, y, z].every(Number.isFinite)) return { status: 'invalid', point: [NaN, NaN] };
+  const length = Math.hypot(x, y, z);
+  if (!(length > 1e-12)) return { status: 'invalid', point: [NaN, NaN] };
+  x /= length;
+  y /= length;
+  z /= length;
+  let point: Vec2;
+  if (mode === 'gnomonic') {
+    if (z <= 1e-9) return { status: 'invalid', point: [NaN, NaN] };
+    point = [x / z, y / z];
+  } else if (mode === 'stereographic') {
+    const denominator = 1 + z;
+    if (denominator <= 1e-9) return { status: 'invalid', point: [NaN, NaN] };
+    point = [x / denominator, y / denominator];
+  } else {
+    const denominator = Math.sqrt(Math.max(0, 1 + z));
+    if (denominator <= 1e-9) return { status: 'invalid', point: [NaN, NaN] };
+    point = [x / denominator, y / denominator];
+  }
+  if (!point.every(Number.isFinite) || Math.hypot(point[0], point[1]) > MAX_SINGULAR_WARP_RADIUS)
+    return { status: 'invalid', point: [NaN, NaN] };
+  return { status: z < 0 ? 'clipped-at-domain' : 'valid', point };
+}
+
+export function warpSphericalProjection(
+  x: number,
+  y: number,
+  mode: SphericalProjectionMode,
+  strengthPercent: number,
+): DiskTransformResult {
+  const strength = clamp(strengthPercent / 100, 0, 1);
+  if (!strength) return { status: 'valid', point: [x, y] };
+  const lifted = liftCameraPlaneToSphere(x, y);
+  if (lifted.status === 'invalid') return { status: 'invalid', point: [NaN, NaN] };
+  const endpoint = projectSphereAzimuthal(...lifted.point, mode);
+  if (endpoint.status === 'invalid') return endpoint;
+  const point: Vec2 = [
+    x + (endpoint.point[0] - x) * strength,
+    y + (endpoint.point[1] - y) * strength,
+  ];
+  return {
+    status:
+      lifted.status === 'clipped-at-domain' || endpoint.status === 'clipped-at-domain'
+        ? 'clipped-at-domain'
+        : 'valid',
+    point: point.every(Number.isFinite) ? point : [NaN, NaN],
+  };
+}
+
+/** Applies circle inversion, blended from the identity in output space. */
+export function invertCircle(
+  x: number,
+  y: number,
+  center: Vec2,
+  radius: number,
+  strengthPercent = 100,
+): DiskTransformResult {
+  if (![x, y, center[0], center[1], radius, strengthPercent].every(Number.isFinite))
+    return { status: 'invalid', point: [NaN, NaN] };
+  const strength = clamp(strengthPercent / 100, 0, 1);
+  if (!strength) return { status: 'valid', point: [x, y] };
+  const boundedRadius = clamp(Math.abs(radius), 0.01, 2);
+  const dx = x - center[0],
+    dy = y - center[1];
+  const distance2 = dx * dx + dy * dy;
+  if (distance2 <= 1e-10) return { status: 'invalid', point: [NaN, NaN] };
+  const factor = (boundedRadius * boundedRadius) / distance2;
+  const invertedX = center[0] + dx * factor,
+    invertedY = center[1] + dy * factor;
+  const point: Vec2 = [x + (invertedX - x) * strength, y + (invertedY - y) * strength];
+  if (!point.every(Number.isFinite) || Math.hypot(point[0], point[1]) > MAX_SINGULAR_WARP_RADIUS)
+    return { status: 'invalid', point: [NaN, NaN] };
+  return { status: 'valid', point };
+}
+
 export function resolveProjectionWarpMode(
   mode: ProjectionWarpMode | undefined,
   legacyWarpExponent: number,
 ): ProjectionWarpMode {
-  if (mode === 'none' || mode === 'klein-poincare' || mode === 'mobius') return mode;
+  if (
+    mode === 'none' ||
+    mode === 'klein-poincare' ||
+    mode === 'mobius' ||
+    mode === 'stereographic' ||
+    mode === 'gnomonic' ||
+    mode === 'lambert' ||
+    mode === 'inversion'
+  )
+    return mode;
   return Number.isFinite(legacyWarpExponent) && legacyWarpExponent !== 0
     ? 'klein-poincare'
     : 'none';
@@ -377,6 +508,30 @@ export function projectCameraPointResult(
     if (mobius.status === 'invalid') return { status: 'invalid', point: [NaN, NaN, depth] };
     projectionWarpStatus = mobius.status;
     projectionWarpPoint = mobius.point;
+  } else if (warpMode === 'stereographic' || warpMode === 'gnomonic' || warpMode === 'lambert') {
+    const spherical = warpSphericalProjection(
+      perspectiveX,
+      perspectiveY,
+      warpMode,
+      projectionWarp?.sphericalStrength ?? 100,
+    );
+    if (spherical.status === 'invalid') return { status: 'invalid', point: [NaN, NaN, depth] };
+    projectionWarpStatus = spherical.status;
+    projectionWarpPoint = spherical.point;
+  } else if (warpMode === 'inversion') {
+    const inversion = invertCircle(
+      perspectiveX,
+      perspectiveY,
+      [
+        clamp((projectionWarp?.inversionCenterX ?? 0) / 100, -1, 1),
+        clamp((projectionWarp?.inversionCenterY ?? 0) / 100, -1, 1),
+      ],
+      clamp((projectionWarp?.inversionRadius ?? 50) / 100, 0.01, 2),
+      projectionWarp?.inversionStrength ?? 100,
+    );
+    if (inversion.status === 'invalid') return { status: 'invalid', point: [NaN, NaN, depth] };
+    projectionWarpStatus = inversion.status;
+    projectionWarpPoint = inversion.point;
   } else projectionWarpPoint = [perspectiveX, perspectiveY];
   const warped = distortLens(projectionWarpPoint[0], projectionWarpPoint[1], distortion);
   const point: Vec3 = [ox + warped[0] * scale, oy - warped[1] * scale, depth];
@@ -411,6 +566,11 @@ export function projectWorldPoint(
       mobiusDisplacement: projection.mobiusDisplacement,
       mobiusRotation: projection.mobiusRotation,
       mobiusStrength: projection.mobiusStrength,
+      sphericalStrength: projection.sphericalStrength,
+      inversionCenterX: projection.inversionCenterX,
+      inversionCenterY: projection.inversionCenterY,
+      inversionRadius: projection.inversionRadius,
+      inversionStrength: projection.inversionStrength,
     },
   );
 }
@@ -471,13 +631,78 @@ export function projectPolylineAdaptive(
     (a[1] + b[1]) * 0.5,
     (a[2] + b[2]) * 0.5,
   ];
+  const interpolatePoint = (a: Vec3, b: Vec3, t: number): Vec3 => [
+    a[0] + (b[0] - a[0]) * t,
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+  ];
+  const perspectivePlanePoint = (world: Vec3): Vec2 | null => {
+    const depth =
+      world[0] * projection.f[0] + world[1] * projection.f[1] + world[2] * projection.f[2];
+    const x = world[0] * projection.r[0] + world[1] * projection.r[1] + world[2] * projection.r[2];
+    const y = world[0] * projection.u[0] + world[1] * projection.u[1] + world[2] * projection.u[2];
+    const cameraDistance = 1.25 + projection.lensFocalLength / 24;
+    const strength = clamp(projection.lensPerspective / 100, 0, 1);
+    const denominator = cameraDistance - depth;
+    if (strength > 0 && denominator <= 1e-12) return null;
+    const physical = strength ? cameraDistance / denominator : 1;
+    const factor = 1 + (physical - 1) * strength;
+    const point: Vec2 = [x * factor, y * factor];
+    return point.every(Number.isFinite) ? point : null;
+  };
+  const inversionSingularityParameter = (a: Vec3, b: Vec3): number | null => {
+    if (projection.projectionWarpMode !== 'inversion' || projection.inversionStrength <= 0)
+      return null;
+    const center: Vec2 = [projection.inversionCenterX / 100, projection.inversionCenterY / 100];
+    const first = perspectivePlanePoint(a),
+      second = perspectivePlanePoint(b);
+    if (!first || !second) return null;
+    const dx = second[0] - first[0],
+      dy = second[1] - first[1];
+    const length2 = dx * dx + dy * dy;
+    if (!(length2 > 1e-18)) return null;
+    const chordT = clamp(
+      ((center[0] - first[0]) * dx + (center[1] - first[1]) * dy) / length2,
+      0,
+      1,
+    );
+    const chordDistance = Math.hypot(
+      first[0] + dx * chordT - center[0],
+      first[1] + dy * chordT - center[1],
+    );
+    if (chordDistance > 0.02) return null;
+    let lower = Math.max(0, chordT - 0.25),
+      upper = Math.min(1, chordT + 0.25);
+    const distance2At = (t: number): number => {
+      const point = perspectivePlanePoint(interpolatePoint(a, b, t));
+      return point ? (point[0] - center[0]) ** 2 + (point[1] - center[1]) ** 2 : Infinity;
+    };
+    for (let iteration = 0; iteration < 24; iteration++) {
+      const left = lower + (upper - lower) / 3,
+        right = upper - (upper - lower) / 3;
+      if (distance2At(left) <= distance2At(right)) upper = right;
+      else lower = left;
+    }
+    const t = (lower + upper) * 0.5;
+    return t > 1e-7 && t < 1 - 1e-7 && distance2At(t) < 1e-12 ? t : null;
+  };
   const samples: AdaptiveSample[] = [];
   const appendSegment = (a: AdaptiveSample, b: AdaptiveSample, depth: number): void => {
     if (samples.length >= maxNodes - 1) {
       truncated = true;
       return;
     }
-    const middle = sample(midpoint(a.world, b.world), midpoint(a.outputWorld, b.outputWorld));
+    const singularityT =
+      a.projected.status !== 'invalid' && b.projected.status !== 'invalid'
+        ? inversionSingularityParameter(a.world, b.world)
+        : null;
+    const middle =
+      singularityT === null
+        ? sample(midpoint(a.world, b.world), midpoint(a.outputWorld, b.outputWorld))
+        : sample(
+            interpolatePoint(a.world, b.world, singularityT),
+            interpolatePoint(a.outputWorld, b.outputWorld, singularityT),
+          );
     const invalid =
       a.projected.status === 'invalid' ||
       b.projected.status === 'invalid' ||
@@ -607,5 +832,10 @@ export function projectMesh(
     mobiusDisplacement: projectionWarp?.mobiusDisplacement ?? 0,
     mobiusRotation: projectionWarp?.mobiusRotation ?? 0,
     mobiusStrength: projectionWarp?.mobiusStrength ?? 100,
+    sphericalStrength: projectionWarp?.sphericalStrength ?? 100,
+    inversionCenterX: projectionWarp?.inversionCenterX ?? 0,
+    inversionCenterY: projectionWarp?.inversionCenterY ?? 0,
+    inversionRadius: projectionWarp?.inversionRadius ?? 50,
+    inversionStrength: projectionWarp?.inversionStrength ?? 100,
   };
 }

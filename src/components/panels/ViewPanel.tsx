@@ -65,6 +65,10 @@ export function ViewPanel() {
           <option value="none">None</option>
           <option value="klein-poincare">Klein ↔ Poincaré</option>
           <option value="mobius">Hyperbolic Möbius</option>
+          <option value="stereographic">Spherical · stereographic</option>
+          <option value="gnomonic">Spherical · gnomonic</option>
+          <option value="lambert">Spherical · Lambert equal-area</option>
+          <option value="inversion">Circle inversion</option>
         </SelectControl>
         <ValueControl
           id="lensWarpExponent"
@@ -116,6 +120,60 @@ export function ViewPanel() {
           unit="%"
           disabled
         />
+        <ValueControl
+          id="sphericalStrength"
+          label="Spherical strength"
+          min="0"
+          max="100"
+          step="1"
+          value="100"
+          unit="%"
+          disabled
+        />
+        <ValueControl
+          id="inversionCenterX"
+          label="Inversion centre X"
+          min="-100"
+          max="100"
+          step="1"
+          value="0"
+          unit="% radius"
+          disabled
+        />
+        <ValueControl
+          id="inversionCenterY"
+          label="Inversion centre Y"
+          min="-100"
+          max="100"
+          step="1"
+          value="0"
+          unit="% radius"
+          disabled
+        />
+        <ValueControl
+          id="inversionRadius"
+          label="Inversion radius"
+          min="1"
+          max="200"
+          step="1"
+          value="50"
+          unit="% radius"
+          disabled
+        />
+        <ValueControl
+          id="inversionStrength"
+          label="Inversion strength"
+          min="0"
+          max="100"
+          step="1"
+          value="100"
+          unit="%"
+          disabled
+        />
+        <p className="gradient-note blueprint-note">
+          Spherical modes lift camera-plane radius to angular distance; radius 100% is the spherical
+          horizon. Orthographic projection is the neutral None mode.
+        </p>
       </FieldGroup>
       <FieldGroup title="Optical finish">
         <ValueControl
