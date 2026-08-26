@@ -218,6 +218,8 @@ Implement pure, tested Poincaré-disk isometries before exposing controls.
 
 ## Session 4 — Möbius navigation vertical slice
 
+**Status: completed.**
+
 ### Goal
 
 Expose asymmetric hyperbolic navigation as a complete creative control with preview and export parity.
@@ -241,6 +243,12 @@ Prefer polar displacement controls because they guarantee a valid disk parameter
 - Keep old `lensWarpExponent` snapshots visually equivalent.
 - Define precedence: only one projection-warp mode is active, followed by existing optical distortion.
 - Ensure source SVG centrelines receive the transform.
+
+### Decisions recorded
+
+- Projection warp is an exclusive `none` / `klein-poincare` / `mobius` mode. A missing mode retains legacy behavior by selecting Klein↔Poincaré only when the stored exponent is nonzero.
+- Möbius uses polar direction and displacement controls, plus independent rotation and strength. Displacement is capped at 95% of the disk radius; strength defaults to 100% and remains useful as a single neutral-to-active morph parameter.
+- Perspective runs before the selected projection warp, and existing signed optical distortion runs afterward. Preview, exact SVG, and G-code consume the same adaptively projected runs.
 
 ### Tests
 

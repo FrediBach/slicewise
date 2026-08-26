@@ -8,7 +8,9 @@ import {
   projectMesh as project,
   projectPolylineAdaptive,
   resolveLens,
+  resolveProjectionWarpMode,
   type Projection,
+  type ProjectionWarpMode,
 } from './projection';
 import {
   clipRunToGenerativeMask,
@@ -56,6 +58,11 @@ export interface ContourSettings extends GenerativeMaskSettings {
   lensPerspective?: number;
   lensWarpExponent?: number;
   lensDistortion?: number;
+  projectionWarpMode?: ProjectionWarpMode;
+  mobiusDirection?: number;
+  mobiusDisplacement?: number;
+  mobiusRotation?: number;
+  mobiusStrength?: number;
   /** Legacy preset fields retained for stored snapshots and callers. */
   lens?: string;
   lensAmount?: number;
@@ -1204,6 +1211,11 @@ function deterministicDrawingNumber(
       settings.lensPerspective,
       settings.lensWarpExponent,
       settings.lensDistortion,
+      settings.projectionWarpMode,
+      settings.mobiusDirection,
+      settings.mobiusDisplacement,
+      settings.mobiusRotation,
+      settings.mobiusStrength,
       settings.lens,
       settings.lensAmount,
     ],
@@ -1336,7 +1348,17 @@ function blueprintDocument(
   const fieldSpan = fieldMax - fieldMin;
   const lineCount = Math.max(1, Math.round(settings.lines || 1));
   const [focalLength, distortion] = resolveLens(settings);
-  const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(settings.lensPerspective ?? 0)}%persp,${fmt(settings.lensWarpExponent ?? 0)}%K→P,${fmt(distortion)}%dist(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
+  const warpMode = resolveProjectionWarpMode(
+    settings.projectionWarpMode,
+    settings.lensWarpExponent ?? 0,
+  );
+  const warpFormula =
+    warpMode === 'mobius'
+      ? `Möb_${fmt(settings.mobiusDirection ?? 0)}°/${fmt(settings.mobiusDisplacement ?? 0)}%/${fmt(settings.mobiusRotation ?? 0)}°@${fmt(settings.mobiusStrength ?? 100)}%`
+      : warpMode === 'klein-poincare'
+        ? `${fmt(settings.lensWarpExponent ?? 0)}%K→P`
+        : 'no-warp';
+  const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(settings.lensPerspective ?? 0)}%persp,${warpFormula},${fmt(distortion)}%dist(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
   const slicing = settings.spiral
     ? `Γₖ: ${lineCount}q(p) − atan2(v,u) = k + 0.5`
     : `hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
@@ -2293,6 +2315,13 @@ function computeLineArtInstance(
     perspective,
     warpExponent,
     distortion,
+    {
+      mode: settings.projectionWarpMode,
+      mobiusDirection: settings.mobiusDirection,
+      mobiusDisplacement: settings.mobiusDisplacement,
+      mobiusRotation: settings.mobiusRotation,
+      mobiusStrength: settings.mobiusStrength,
+    },
   );
   const offsets = mesh.lineArt!.offsets;
   const quality = quick
@@ -2490,6 +2519,13 @@ function computeContourInstance(
     perspective,
     warpExponent,
     distortion,
+    {
+      mode: settings.projectionWarpMode,
+      mobiusDirection: settings.mobiusDirection,
+      mobiusDisplacement: settings.mobiusDisplacement,
+      mobiusRotation: settings.mobiusRotation,
+      mobiusStrength: settings.mobiusStrength,
+    },
   );
   const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);
   const blueprintGeometry = {

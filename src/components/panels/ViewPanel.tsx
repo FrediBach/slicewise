@@ -1,5 +1,5 @@
 import { Section } from '../ui/section';
-import { FieldGroup, ValueControl } from '../controls/FormControls';
+import { FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
 
 export function ViewPanel() {
   return (
@@ -59,6 +59,13 @@ export function ViewPanel() {
           value="0"
           unit="%"
         />
+      </FieldGroup>
+      <FieldGroup title="Projection warp">
+        <SelectControl id="projectionWarpMode" label="Projection warp" randomizable>
+          <option value="none">None</option>
+          <option value="klein-poincare">Klein ↔ Poincaré</option>
+          <option value="mobius">Hyperbolic Möbius</option>
+        </SelectControl>
         <ValueControl
           id="lensWarpExponent"
           label="Klein ↔ Poincaré"
@@ -67,7 +74,50 @@ export function ViewPanel() {
           step="1"
           value="0"
           unit="%"
+          disabled
         />
+        <ValueControl
+          id="mobiusDirection"
+          label="Hyperbolic direction"
+          min="-180"
+          max="180"
+          step="1"
+          value="0"
+          unit="°"
+          disabled
+        />
+        <ValueControl
+          id="mobiusDisplacement"
+          label="Hyperbolic displacement"
+          min="0"
+          max="95"
+          step="1"
+          value="0"
+          unit="%"
+          disabled
+        />
+        <ValueControl
+          id="mobiusRotation"
+          label="Hyperbolic rotation"
+          min="-180"
+          max="180"
+          step="1"
+          value="0"
+          unit="°"
+          disabled
+        />
+        <ValueControl
+          id="mobiusStrength"
+          label="Warp strength"
+          min="0"
+          max="100"
+          step="1"
+          value="100"
+          unit="%"
+          disabled
+        />
+      </FieldGroup>
+      <FieldGroup title="Optical finish">
         <ValueControl
           id="lensDistortion"
           label="Lens distortion"

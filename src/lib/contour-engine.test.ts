@@ -155,6 +155,119 @@ describe('computeContours', () => {
     expect(run.at(-1)).toBeCloseTo(expected.sy[1], 5);
   });
 
+  it('applies asymmetric Mobius navigation equally to SVG and plotter centreline geometry', () => {
+    const mesh = {
+      V: new Float32Array([0, -0.65, 0, 0, 0.65, 0]),
+      T: new Uint32Array(),
+      N: new Float32Array(6),
+      lineArt: { offsets: new Uint32Array([0, 2]) },
+    };
+    const settings = {
+      ...contourSettings,
+      az: 0,
+      el: 0,
+      roll: 0,
+      quality: 8,
+      projectionWarpMode: 'mobius' as const,
+      mobiusDirection: 25,
+      mobiusDisplacement: 72,
+      mobiusRotation: -35,
+      mobiusStrength: 90,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const result = computeContours(mesh, settings, false);
+    const repeated = computeContours(mesh, settings, false);
+    const expected = projectMesh(
+      mesh,
+      cameraBasis(0, 0, 0),
+      settings.pw,
+      settings.ph,
+      settings.margin,
+      settings.zoom,
+      settings.panX,
+      settings.panY,
+      settings.lensFocalLength,
+      settings.lensPerspective,
+      settings.lensWarpExponent,
+      settings.lensDistortion,
+      {
+        mode: settings.projectionWarpMode,
+        mobiusDirection: settings.mobiusDirection,
+        mobiusDisplacement: settings.mobiusDisplacement,
+        mobiusRotation: settings.mobiusRotation,
+        mobiusStrength: settings.mobiusStrength,
+      },
+    );
+    const run = result.toolpaths[0].runs[0];
+    const midpointX = (run[0] + run.at(-2)!) * 0.5;
+    const sheetCenterX = settings.pw * 0.5;
+
+    expect(run[0]).toBeCloseTo(expected.sx[0], 5);
+    expect(run[1]).toBeCloseTo(expected.sy[0], 5);
+    expect(run.at(-2)).toBeCloseTo(expected.sx[1], 5);
+    expect(run.at(-1)).toBeCloseTo(expected.sy[1], 5);
+    expect(midpointX).not.toBeCloseTo(sheetCenterX, 2);
+    expect(repeated.svg).toBe(result.svg);
+    expect(repeated.toolpaths).toEqual(result.toolpaths);
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+
+    const gcode = generateGCode(
+      result.toolpaths,
+      { width: settings.pw, height: settings.ph },
+      { origin: 'bottom-left', clipToArtboard: true, optimizeTravel: false },
+    );
+    expect(gcode).not.toMatch(/NaN|Infinity/);
+    for (const match of gcode.matchAll(/[XY](-?\d+(?:\.\d+)?)/g)) {
+      const coordinate = Number(match[1]);
+      expect(coordinate).toBeGreaterThanOrEqual(0);
+      expect(coordinate).toBeLessThanOrEqual(Math.max(settings.pw, settings.ph));
+    }
+  });
+
+  it('renders exact Mobius morph endpoints from interpolated transform parameters', () => {
+    const mesh = {
+      V: new Float32Array([0, -0.55, 0.15, 0, 0.55, 0.15]),
+      T: new Uint32Array(),
+      N: new Float32Array(6),
+      lineArt: { offsets: new Uint32Array([0, 2]) },
+    };
+    const base = {
+      ...contourSettings,
+      az: 0,
+      el: 0,
+      roll: 0,
+      projectionWarpMode: 'mobius' as const,
+      mobiusDirection: -20,
+      mobiusDisplacement: 10,
+      mobiusRotation: 5,
+      mobiusStrength: 100,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const target = { mobiusDisplacement: 68, mobiusRotation: 75 };
+    const startResult = computeContours(mesh, base, false);
+    const targetResult = computeContours(mesh, { ...base, ...target }, false);
+    const morphResult = computeContours(
+      mesh,
+      {
+        ...base,
+        morphEnabled: true,
+        morphSteps: 2,
+        morphTargets: target,
+      },
+      false,
+    );
+
+    expect(morphResult.toolpaths[0].runs).toHaveLength(2);
+    expect(morphResult.toolpaths[0].runs[0]).toEqual(startResult.toolpaths[0].runs[0]);
+    expect(morphResult.toolpaths[0].runs[1]).toEqual(targetResult.toolpaths[0].runs[0]);
+    expect(morphResult.svg).toContain('data-morph-x="0"');
+    expect(morphResult.svg).toContain('data-morph-x="1"');
+  });
+
   it('retains nonlinear projection curvature in exact SVG and plotter runs', () => {
     const mesh = {
       V: new Float32Array([0, -0.8, 0.5, 0, 0.8, 0.5]),
@@ -200,5 +313,56 @@ describe('computeContours', () => {
     expect(gcode).toContain(`G1 X${gcodeLastX} Y${gcodeLastY}`);
     expect(exact.svg).not.toMatch(/NaN|Infinity/);
     expect(run.every(Number.isFinite)).toBe(true);
+  });
+
+  it('keeps an explicit neutral projection mode equivalent despite stale legacy values', () => {
+    const neutral = computeContours(
+      makeContourMesh(),
+      { ...contourSettings, lensWarpExponent: 0, hide: false, sil: false },
+      false,
+    );
+    const explicitNone = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        projectionWarpMode: 'none',
+        lensWarpExponent: 100,
+        mobiusDisplacement: 90,
+        mobiusRotation: 120,
+        hide: false,
+        sil: false,
+      },
+      false,
+    );
+
+    expect(explicitNone.svg).toBe(neutral.svg);
+    expect(explicitNone.toolpaths).toEqual(neutral.toolpaths);
+  });
+
+  it('keeps hidden-line output finite near the Mobius displacement boundary', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        projectionWarpMode: 'mobius',
+        mobiusDirection: 170,
+        mobiusDisplacement: 95,
+        mobiusRotation: -165,
+        mobiusStrength: 100,
+        quality: 8,
+        hide: true,
+        sil: true,
+      },
+      false,
+    );
+
+    expect(result.paths).toBeGreaterThan(0);
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+    expect(
+      result.toolpaths
+        .flatMap((group) => group.runs)
+        .flat()
+        .every(Number.isFinite),
+    ).toBe(true);
   });
 });

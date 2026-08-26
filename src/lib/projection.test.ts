@@ -9,6 +9,7 @@ import {
   projectPolylineAdaptive,
   projectWorldPoint,
   resolveLens,
+  resolveProjectionWarpMode,
   transformPoincareDisk,
   warpKleinPoincare,
 } from './projection';
@@ -178,6 +179,46 @@ describe('projection', () => {
       expect(transformPoincareDisk(0, 0, { translation: [Infinity, 0], rotation: 0 }).status).toBe(
         'invalid',
       );
+    });
+  });
+
+  describe('projection warp selection', () => {
+    it('resolves old snapshots from the legacy exponent and honors an explicit mode', () => {
+      expect(resolveProjectionWarpMode(undefined, 0)).toBe('none');
+      expect(resolveProjectionWarpMode(undefined, 65)).toBe('klein-poincare');
+      expect(resolveProjectionWarpMode('none', 65)).toBe('none');
+      expect(resolveProjectionWarpMode('mobius', 65)).toBe('mobius');
+    });
+
+    it('applies Mobius navigation after perspective and before optical distortion', () => {
+      const projected = projectCameraPointResult(0.4, 0.2, 0, 40, 60, 50, 50, 0, 0, 30, {
+        mode: 'mobius',
+        mobiusDirection: 30,
+        mobiusDisplacement: 45,
+        mobiusRotation: -20,
+        mobiusStrength: 70,
+      });
+      const direction = (30 * Math.PI) / 180;
+      const mobius = transformPoincareDisk(0.4, 0.2, {
+        translation: [Math.cos(direction) * 0.45, Math.sin(direction) * 0.45],
+        rotation: (-20 * Math.PI) / 180,
+        strength: 0.7,
+      });
+      const distorted = distortLens(mobius.point[0], mobius.point[1], 30);
+
+      expect(projected.status).toBe('valid');
+      expectPointCloseTo(projected.point.slice(0, 2), [
+        60 + distorted[0] * 40,
+        50 - distorted[1] * 40,
+      ]);
+    });
+
+    it('keeps explicit none neutral even when a legacy exponent remains stored', () => {
+      const neutral = projectCameraPoint(0.6, -0.25, 0.4, 40, 60, 50, 50, 0, 0, 0);
+      const explicitNone = projectCameraPoint(0.6, -0.25, 0.4, 40, 60, 50, 50, 0, 100, 0, {
+        mode: 'none',
+      });
+      expectPointCloseTo(explicitNone, neutral);
     });
   });
 

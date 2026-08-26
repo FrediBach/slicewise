@@ -154,6 +154,11 @@ const state: AppState = {
   lensPerspective: 0,
   lensWarpExponent: 0,
   lensDistortion: 0,
+  projectionWarpMode: 'none',
+  mobiusDirection: 0,
+  mobiusDisplacement: 0,
+  mobiusRotation: 0,
+  mobiusStrength: 100,
   lines: 40,
   gapEase: 'linear',
   easeStrength: 100,
@@ -322,6 +327,11 @@ if (typeof document !== 'undefined') {
       lensPerspective,
       lensWarpExponent,
       lensDistortion,
+      projectionWarpMode,
+      mobiusDirection,
+      mobiusDisplacement,
+      mobiusRotation,
+      mobiusStrength,
       lines,
       gapEase,
       easeStrength,
@@ -410,6 +420,11 @@ if (typeof document !== 'undefined') {
       lensPerspective,
       lensWarpExponent,
       lensDistortion,
+      projectionWarpMode,
+      mobiusDirection,
+      mobiusDisplacement,
+      mobiusRotation,
+      mobiusStrength,
       lines,
       gapEase,
       easeStrength,
@@ -1020,6 +1035,10 @@ if (typeof document !== 'undefined') {
   bindPair('lensFocalLength', 'lensFocalLength');
   bindPair('lensPerspective', 'lensPerspective');
   bindPair('lensWarpExponent', 'lensWarpExponent');
+  bindPair('mobiusDirection', 'mobiusDirection');
+  bindPair('mobiusDisplacement', 'mobiusDisplacement');
+  bindPair('mobiusRotation', 'mobiusRotation');
+  bindPair('mobiusStrength', 'mobiusStrength');
   bindPair('lensDistortion', 'lensDistortion');
   bindPair('lines', 'lines');
   bindPair('easeStrength', 'easeStrength');
@@ -1071,6 +1090,32 @@ if (typeof document !== 'undefined') {
   bindExportPair('penDown', 'penDown');
   bindExportPair('zFeed', 'zFeed');
   morphKeyById.set('color', 'color');
+
+  function syncProjectionWarpControls(): void {
+    const kleinEnabled = state.projectionWarpMode === 'klein-poincare';
+    const mobiusEnabled = state.projectionWarpMode === 'mobius';
+    for (const id of ['lensWarpExponent']) {
+      $(id).disabled = !kleinEnabled;
+      $(id + 'N').disabled = !kleinEnabled;
+      $(id + 'Control').classList.toggle('is-disabled', !kleinEnabled);
+    }
+    for (const id of [
+      'mobiusDirection',
+      'mobiusDisplacement',
+      'mobiusRotation',
+      'mobiusStrength',
+    ]) {
+      $(id).disabled = !mobiusEnabled;
+      $(id + 'N').disabled = !mobiusEnabled;
+      $(id + 'Control').classList.toggle('is-disabled', !mobiusEnabled);
+    }
+  }
+  $('projectionWarpMode').addEventListener('change', (event) => {
+    state.projectionWarpMode = inputTarget(event).value as ContourSettings['projectionWarpMode'];
+    syncProjectionWarpControls();
+    redraw(false);
+  });
+  syncProjectionWarpControls();
 
   function bindGenerativePair(id: string, key: keyof Omit<GenerativeParams, 'genField'>): void {
     const slider = $(id),
@@ -1752,6 +1797,10 @@ if (typeof document !== 'undefined') {
     ['lensFocalLength', 'lensFocalLength'],
     ['lensPerspective', 'lensPerspective'],
     ['lensWarpExponent', 'lensWarpExponent'],
+    ['mobiusDirection', 'mobiusDirection'],
+    ['mobiusDisplacement', 'mobiusDisplacement'],
+    ['mobiusRotation', 'mobiusRotation'],
+    ['mobiusStrength', 'mobiusStrength'],
     ['lensDistortion', 'lensDistortion'],
     ['lines', 'lines'],
     ['quality', 'quality'],
@@ -1798,6 +1847,7 @@ if (typeof document !== 'undefined') {
     ['morphStepsY', 'morphStepsY'],
   ];
   const historySelects: Array<keyof ContourSettings> = [
+    'projectionWarpMode',
     'gapEase',
     'axis',
     'sliceLfoWaveform',
@@ -1878,6 +1928,25 @@ if (typeof document !== 'undefined') {
     restored.lensWarpExponent = Number.isFinite(restored.lensWarpExponent)
       ? restored.lensWarpExponent
       : 0;
+    restored.projectionWarpMode = ['none', 'klein-poincare', 'mobius'].includes(
+      String(restored.projectionWarpMode),
+    )
+      ? restored.projectionWarpMode
+      : restored.lensWarpExponent !== 0
+        ? 'klein-poincare'
+        : 'none';
+    restored.mobiusDirection = Number.isFinite(restored.mobiusDirection)
+      ? restored.mobiusDirection
+      : 0;
+    restored.mobiusDisplacement = Number.isFinite(restored.mobiusDisplacement)
+      ? restored.mobiusDisplacement
+      : 0;
+    restored.mobiusRotation = Number.isFinite(restored.mobiusRotation)
+      ? restored.mobiusRotation
+      : 0;
+    restored.mobiusStrength = Number.isFinite(restored.mobiusStrength)
+      ? restored.mobiusStrength
+      : 100;
     restored.explodeAmount = Number.isFinite(restored.explodeAmount) ? restored.explodeAmount : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
@@ -1913,6 +1982,7 @@ if (typeof document !== 'undefined') {
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
     $('lineIndexColorEditor').classList.toggle('enabled', state.lineIndexColorEnabled);
     syncEaseCenter();
+    syncProjectionWarpControls();
     syncSliceConstruction();
     syncSliceLfoControls();
     syncLineWeightControls();
@@ -2026,6 +2096,11 @@ if (typeof document !== 'undefined') {
           'lensPerspective',
           'lensWarpExponent',
           'lensDistortion',
+          'projectionWarpMode',
+          'mobiusDirection',
+          'mobiusDisplacement',
+          'mobiusRotation',
+          'mobiusStrength',
         ]
       : locks;
     document.dispatchEvent(new CustomEvent('randomlockbulk', { detail: { locks: migratedLocks } }));
@@ -2091,8 +2166,19 @@ if (typeof document !== 'undefined') {
 
     randomizePair('lensFocalLength', 'lensFocalLength', () => randomInt(16, 135));
     randomizePair('lensPerspective', 'lensPerspective', () => randomInt(0, 100));
+    randomizeSelect('projectionWarpMode', 'projectionWarpMode', [
+      'none',
+      'none',
+      'klein-poincare',
+      'mobius',
+    ]);
     randomizePair('lensWarpExponent', 'lensWarpExponent', () => randomInt(0, 100));
+    randomizePair('mobiusDirection', 'mobiusDirection', () => randomInt(-180, 180));
+    randomizePair('mobiusDisplacement', 'mobiusDisplacement', () => randomInt(10, 82));
+    randomizePair('mobiusRotation', 'mobiusRotation', () => randomInt(-180, 180));
+    randomizePair('mobiusStrength', 'mobiusStrength', () => randomInt(35, 100));
     randomizePair('lensDistortion', 'lensDistortion', () => randomInt(-70, 55));
+    syncProjectionWarpControls();
 
     randomizePair('lines', 'lines', () => randomInt(22, 84));
     randomizePair('quality', 'quality', () => randomInt(5, 9));

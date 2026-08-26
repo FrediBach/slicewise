@@ -27,6 +27,11 @@ export interface Projection extends CameraBasis {
   lensPerspective: number;
   lensWarpExponent: number;
   lensDistortion: number;
+  projectionWarpMode: ProjectionWarpMode;
+  mobiusDirection: number;
+  mobiusDisplacement: number;
+  mobiusRotation: number;
+  mobiusStrength: number;
 }
 
 export interface LensSettings {
@@ -35,6 +40,20 @@ export interface LensSettings {
   /** Legacy preset fields retained for stored snapshots and callers. */
   lens?: string;
   lensAmount?: number;
+}
+
+export type ProjectionWarpMode = 'none' | 'klein-poincare' | 'mobius';
+
+export interface ProjectionWarpSettings {
+  mode?: ProjectionWarpMode;
+  /** Translation direction in degrees. */
+  mobiusDirection?: number;
+  /** Translation magnitude as a percentage of the disk radius. */
+  mobiusDisplacement?: number;
+  /** Counter-clockwise disk rotation in degrees. */
+  mobiusRotation?: number;
+  /** Parameter-space interpolation from identity, as a percentage. */
+  mobiusStrength?: number;
 }
 
 export type ProjectionPointStatus = 'valid' | 'clipped-at-domain' | 'invalid';
@@ -269,6 +288,16 @@ export function warpKleinPoincare(x: number, y: number, exponentPercent: number)
   return [x * factor, y * factor];
 }
 
+export function resolveProjectionWarpMode(
+  mode: ProjectionWarpMode | undefined,
+  legacyWarpExponent: number,
+): ProjectionWarpMode {
+  if (mode === 'none' || mode === 'klein-poincare' || mode === 'mobius') return mode;
+  return Number.isFinite(legacyWarpExponent) && legacyWarpExponent !== 0
+    ? 'klein-poincare'
+    : 'none';
+}
+
 export function projectCameraPoint(
   x: number,
   y: number,
@@ -280,6 +309,7 @@ export function projectCameraPoint(
   perspectiveAmount: number,
   warpExponent: number,
   distortion: number,
+  projectionWarp?: ProjectionWarpSettings,
 ): Vec2 {
   const result = projectCameraPointResult(
     x,
@@ -292,6 +322,7 @@ export function projectCameraPoint(
     perspectiveAmount,
     warpExponent,
     distortion,
+    projectionWarp,
   );
   return [result.point[0], result.point[1]];
 }
@@ -307,6 +338,7 @@ export function projectCameraPointResult(
   perspectiveAmount: number,
   warpExponent: number,
   distortion: number,
+  projectionWarp?: ProjectionWarpSettings,
 ): ProjectedPointResult {
   if (
     ![x, y, depth, scale, ox, oy, focalLength, perspectiveAmount, warpExponent, distortion].every(
@@ -325,16 +357,31 @@ export function projectCameraPointResult(
   const perspective = 1 + (physicalPerspective - 1) * perspectiveStrength;
   const perspectiveX = x * perspective,
     perspectiveY = y * perspective;
-  const clippedAtDomain = warpExponent > 0 && Math.hypot(perspectiveX, perspectiveY) >= 1;
-  const hyperbolic = warpKleinPoincare(perspectiveX, perspectiveY, warpExponent);
-  const warped = distortLens(hyperbolic[0], hyperbolic[1], distortion);
+  const warpMode = resolveProjectionWarpMode(projectionWarp?.mode, warpExponent);
+  let projectionWarpStatus: ProjectionPointStatus = 'valid';
+  let projectionWarpPoint: Vec2;
+  if (warpMode === 'klein-poincare') {
+    projectionWarpStatus =
+      warpExponent > 0 && Math.hypot(perspectiveX, perspectiveY) >= 1
+        ? 'clipped-at-domain'
+        : 'valid';
+    projectionWarpPoint = warpKleinPoincare(perspectiveX, perspectiveY, warpExponent);
+  } else if (warpMode === 'mobius') {
+    const direction = ((projectionWarp?.mobiusDirection ?? 0) * Math.PI) / 180;
+    const displacement = clamp((projectionWarp?.mobiusDisplacement ?? 0) / 100, 0, 0.95);
+    const mobius = transformPoincareDisk(perspectiveX, perspectiveY, {
+      translation: [Math.cos(direction) * displacement, Math.sin(direction) * displacement],
+      rotation: ((projectionWarp?.mobiusRotation ?? 0) * Math.PI) / 180,
+      strength: clamp((projectionWarp?.mobiusStrength ?? 100) / 100, 0, 1),
+    });
+    if (mobius.status === 'invalid') return { status: 'invalid', point: [NaN, NaN, depth] };
+    projectionWarpStatus = mobius.status;
+    projectionWarpPoint = mobius.point;
+  } else projectionWarpPoint = [perspectiveX, perspectiveY];
+  const warped = distortLens(projectionWarpPoint[0], projectionWarpPoint[1], distortion);
   const point: Vec3 = [ox + warped[0] * scale, oy - warped[1] * scale, depth];
   return {
-    status: point.every(Number.isFinite)
-      ? clippedAtDomain
-        ? 'clipped-at-domain'
-        : 'valid'
-      : 'invalid',
+    status: point.every(Number.isFinite) ? projectionWarpStatus : 'invalid',
     point,
   };
 }
@@ -358,6 +405,13 @@ export function projectWorldPoint(
     projection.lensPerspective,
     projection.lensWarpExponent,
     projection.lensDistortion,
+    {
+      mode: projection.projectionWarpMode,
+      mobiusDirection: projection.mobiusDirection,
+      mobiusDisplacement: projection.mobiusDisplacement,
+      mobiusRotation: projection.mobiusRotation,
+      mobiusStrength: projection.mobiusStrength,
+    },
   );
 }
 
@@ -495,6 +549,7 @@ export function projectMesh(
   lensPerspective: number,
   lensWarpExponent: number,
   lensDistortion: number,
+  projectionWarp?: ProjectionWarpSettings,
 ): Projection {
   const { V } = mesh;
   const n = V.length / 3;
@@ -523,6 +578,7 @@ export function projectMesh(
       lensPerspective,
       lensWarpExponent,
       lensDistortion,
+      projectionWarp,
     );
     sx[vertex] = screen[0];
     sy[vertex] = screen[1];
@@ -546,5 +602,10 @@ export function projectMesh(
     lensPerspective,
     lensWarpExponent,
     lensDistortion,
+    projectionWarpMode: resolveProjectionWarpMode(projectionWarp?.mode, lensWarpExponent),
+    mobiusDirection: projectionWarp?.mobiusDirection ?? 0,
+    mobiusDisplacement: projectionWarp?.mobiusDisplacement ?? 0,
+    mobiusRotation: projectionWarp?.mobiusRotation ?? 0,
+    mobiusStrength: projectionWarp?.mobiusStrength ?? 100,
   };
 }

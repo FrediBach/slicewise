@@ -4,7 +4,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { ViewPanel } from './ViewPanel';
 
-describe('ViewPanel lens controls', () => {
+describe('ViewPanel lens and projection controls', () => {
   it('exposes continuous focal-length and signed-distortion sliders', () => {
     render(<ViewPanel />);
 
@@ -19,6 +19,32 @@ describe('ViewPanel lens controls', () => {
     expect(screen.getByRole('slider', { name: 'Klein ↔ Poincaré' })).toHaveValue('0');
     expect(screen.getByRole('slider', { name: 'Lens distortion' })).toHaveAttribute('min', '-100');
     expect(screen.getByRole('slider', { name: 'Lens distortion' })).toHaveAttribute('max', '100');
+  });
+
+  it('exposes projection modes and bounded Mobius parameters with neutral defaults', () => {
+    render(<ViewPanel />);
+
+    const mode = screen.getByRole('combobox', { name: 'Projection warp' });
+    expect(mode).toHaveValue('none');
+    expect(mode).toHaveTextContent('None');
+    expect(mode).toHaveTextContent('Klein ↔ Poincaré');
+    expect(mode).toHaveTextContent('Hyperbolic Möbius');
+
+    expect(screen.getByRole('slider', { name: 'Hyperbolic direction' })).toHaveAttribute(
+      'min',
+      '-180',
+    );
+    expect(screen.getByRole('slider', { name: 'Hyperbolic direction' })).toHaveAttribute(
+      'max',
+      '180',
+    );
+    expect(screen.getByRole('slider', { name: 'Hyperbolic displacement' })).toHaveAttribute(
+      'max',
+      '95',
+    );
+    expect(screen.getByRole('slider', { name: 'Hyperbolic displacement' })).toHaveValue('0');
+    expect(screen.getByRole('slider', { name: 'Hyperbolic rotation' })).toHaveValue('0');
+    expect(screen.getByRole('slider', { name: 'Warp strength' })).toHaveValue('100');
   });
 
   it('allows sub-degree orientation for accurate axonometric views', () => {
