@@ -110,6 +110,8 @@ Sessions 3–4 and 5–7 may be developed independently after Session 2, but eac
 
 ## Session 1 — Baseline fixtures and projection extraction
 
+**Status: completed.**
+
 ### Goal
 
 Create stable seams for projection work without changing rendered output.

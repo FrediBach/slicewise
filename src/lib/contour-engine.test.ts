@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
 import { computeContours } from './contour-engine';
+import { cameraBasis, projectMesh } from './projection';
 
 describe('computeContours', () => {
   it('turns a normalized mesh into finite SVG and grouped toolpaths', () => {
@@ -103,5 +104,53 @@ describe('computeContours', () => {
     expect(result.toolpaths[0].label).toBe('SVG centreline');
     expect(result.toolpaths[0].runs[0]).toHaveLength(4);
     expect(result.svg).not.toMatch(/NaN|Infinity/);
+  });
+
+  it.each([
+    ['orthographic', { lensPerspective: 0, lensWarpExponent: 0, lensDistortion: 0 }],
+    ['perspective', { lensPerspective: 100, lensWarpExponent: 0, lensDistortion: 0 }],
+    ['Klein to Poincare', { lensPerspective: 0, lensWarpExponent: 100, lensDistortion: 0 }],
+    ['barrel distortion', { lensPerspective: 0, lensWarpExponent: 0, lensDistortion: -60 }],
+    ['pincushion distortion', { lensPerspective: 0, lensWarpExponent: 0, lensDistortion: 60 }],
+  ])('uses the shared %s projection for SVG centreline runs', (_name, lens) => {
+    const mesh = {
+      V: new Float32Array([0.2, -0.5, -0.25, -0.4, 0.75, 0.5]),
+      T: new Uint32Array(),
+      N: new Float32Array(6),
+      lineArt: { offsets: new Uint32Array([0, 2]) },
+    };
+    const settings = {
+      ...contourSettings,
+      ...lens,
+      az: 0,
+      el: 0,
+      roll: 0,
+      hide: false,
+      sil: false,
+    };
+    const result = computeContours(mesh, settings, false);
+    const expected = projectMesh(
+      mesh,
+      cameraBasis(settings.az, settings.el, settings.roll),
+      settings.pw,
+      settings.ph,
+      settings.margin,
+      settings.zoom,
+      settings.panX,
+      settings.panY,
+      settings.lensFocalLength,
+      settings.lensPerspective,
+      settings.lensWarpExponent,
+      settings.lensDistortion,
+    );
+
+    expect(result.toolpaths).toHaveLength(1);
+    expect(result.toolpaths[0].runs).toHaveLength(1);
+    const run = result.toolpaths[0].runs[0];
+    expect(run).toHaveLength(4);
+    expect(run[0]).toBeCloseTo(expected.sx[0], 5);
+    expect(run[1]).toBeCloseTo(expected.sy[0], 5);
+    expect(run[2]).toBeCloseTo(expected.sx[1], 5);
+    expect(run[3]).toBeCloseTo(expected.sy[1], 5);
   });
 });
