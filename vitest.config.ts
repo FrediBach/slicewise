@@ -13,7 +13,7 @@ export default defineConfig({
       reporter: ['text', 'html'],
       reportsDirectory: 'coverage',
       include: [
-        'src/lib/{colorPair,contour-engine,gcode,generativeMesh,mapAnnotations,mesh,projection,svg-mesh,toolpaths}.ts',
+        'src/lib/{colorPair,contour-engine,gcode,generativeMesh,mapAnnotations,mesh,projection,scalar-fields,svg-mesh,toolpaths}.ts',
         'src/lib/demo-meshes/index.ts',
         'src/components/controls/{FormControls,GradientChooser}.tsx',
       ],

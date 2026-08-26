@@ -18,6 +18,12 @@ import {
   generativeMaskRun,
   type GenerativeMaskSettings,
 } from './generative-mask';
+import {
+  createPlanarScalarField,
+  resolveScalarFieldFeatures,
+  type MeshScalarField,
+  type ResolvedScalarFieldFeatures,
+} from './scalar-fields';
 
 type NumericArray = ArrayLike<number> & Iterable<number>;
 type Vec2 = [x: number, y: number];
@@ -150,23 +156,27 @@ export interface ContourResult {
   quick: boolean;
 }
 
-interface ScalarField {
-  S: NumericArray;
-  min: number;
-  max: number;
-  dir: Vec3;
-}
-
-interface PointSegments {
+export interface PointSegments {
   pts: number[];
   segs: number[];
 }
 
+export interface ScalarFieldSliceMetadata {
+  constantDirection?: Vec3;
+  gradient?: MeshScalarField['gradient'];
+}
+
 interface CachedSlice {
   position: number;
-  direction: Vec3;
+  metadata: ScalarFieldSliceMetadata;
   worldPoints: number[];
   polylines: number[][];
+}
+
+export interface ScalarFieldLevelOptions {
+  curveStrength?: number;
+  rootIterations?: number;
+  adaptiveDepth?: number;
 }
 
 interface SpiralSegments extends PointSegments {
@@ -275,19 +285,22 @@ function easeLineGap(t: number, easing: string, strength = 100, center = 50, cyc
 }
 
 /* ------------------------------------------------- marching triangles */
-function sliceLevelWorld(
+export function extractScalarFieldLevel(
   mesh: ContourMesh,
-  S: NumericArray,
+  field: MeshScalarField,
   level: number,
-  NV: number,
-  scalarDir: Vec3,
-  curveStrength: number,
-  scalarAtPoint?: (x: number, y: number, z: number) => number,
-  rootIterations = 12,
-  adaptiveDepth = 0,
+  options: ScalarFieldLevelOptions = {},
 ): PointSegments {
-  // returns {pts:[x,y,d,...], segs:[i,j,...]} for one cutting plane
+  // Returns {pts:[x,y,z,...], segs:[i,j,...]} for one scalar-field level.
   const { T, V, N } = mesh;
+  const NV = V.length / 3;
+  const S = field.values;
+  if (S.length < NV || !Number.isFinite(level)) return { pts: [], segs: [] };
+  const scalarDir = field.constantDirection;
+  const scalarAtPoint = field.evaluate;
+  const curveStrength = clamp(options.curveStrength ?? 0, 0, 1);
+  const rootIterations = Math.round(clamp(options.rootIterations ?? 12, 1, 32));
+  const adaptiveDepth = Math.round(clamp(options.adaptiveDepth ?? 0, 0, 5));
   const idx = new Map<number, number>(); // edge key -> point index
   const pts: number[] = [],
     segs: number[] = [];
@@ -308,7 +321,7 @@ function sliceLevelWorld(
     const ex = bx - ax,
       ey = by - ay,
       ez = bz - az;
-    if (!scalarAtPoint && (!curveStrength || !N)) {
+    if (!scalarAtPoint && (!curveStrength || !N || !scalarDir)) {
       pts.push(ax + ex * t, ay + ey * t, az + ez * t);
       idx.set(key, id);
       return id;
@@ -350,7 +363,7 @@ function sliceLevelWorld(
       const p = sample(t);
       const value = scalarAtPoint
         ? scalarAtPoint(p[0], p[1], p[2])
-        : p[0] * scalarDir[0] + p[1] * scalarDir[1] + p[2] * scalarDir[2];
+        : p[0] * scalarDir![0] + p[1] * scalarDir![1] + p[2] * scalarDir![2];
       if (value > level === startAbove) lo = t;
       else hi = t;
     }
@@ -424,6 +437,7 @@ function sliceLevelWorld(
         ca = midpoint(c, a),
         center = centroid(a, b, c);
       const samples = [a[3], b[3], c[3], ab[3], bc[3], ca[3], center[3]];
+      if (!samples.every(Number.isFinite)) return;
       let minimum = Infinity,
         maximum = -Infinity;
       for (const value of samples) {
@@ -453,7 +467,11 @@ function sliceLevelWorld(
         const offset = vertex * 3;
         return [V[offset], V[offset + 1], V[offset + 2], S[vertex] - level];
       };
-      refine(fieldPoint(T[index]), fieldPoint(T[index + 1]), fieldPoint(T[index + 2]), 0);
+      const a = fieldPoint(T[index]),
+        b = fieldPoint(T[index + 1]),
+        c = fieldPoint(T[index + 2]);
+      if (![...a, ...b, ...c].every(Number.isFinite)) continue;
+      refine(a, b, c, 0);
     }
     return { pts, segs };
   }
@@ -465,6 +483,26 @@ function sliceLevelWorld(
     const sa = S[a] - level,
       sb = S[b] - level,
       sc = S[c] - level;
+    const ai = a * 3,
+      bi = b * 3,
+      ci = c * 3;
+    if (
+      ![
+        sa,
+        sb,
+        sc,
+        V[ai],
+        V[ai + 1],
+        V[ai + 2],
+        V[bi],
+        V[bi + 1],
+        V[bi + 2],
+        V[ci],
+        V[ci + 1],
+        V[ci + 2],
+      ].every(Number.isFinite)
+    )
+      continue;
     const pa = sa > 0,
       pb = sb > 0,
       pc = sc > 0;
@@ -610,28 +648,26 @@ function createSliceLfoField(
 function contourSlices(
   mesh: ContourMesh,
   settings: ContourSettings,
-  field: ScalarField,
+  field: MeshScalarField,
+  features: ResolvedScalarFieldFeatures,
   count: number,
   curveStrength: number,
 ): CachedSlice[] {
-  const cacheable = settings.axis !== 'cam';
-  const key = cacheable
+  const key = field.cacheKey
     ? JSON.stringify([
-        settings.axis,
-        settings.cutAz,
-        settings.cutEl,
-        settings.divergence,
-        settings.sliceLfo,
-        settings.sliceLfoAmplitude,
-        settings.sliceLfoCycles,
-        settings.sliceLfoAngle,
-        settings.sliceLfoPhase,
-        settings.sliceLfoWaveform,
-        settings.sliceLfoModulation,
-        settings.sliceLfoModulationMode,
-        settings.sliceLfoModulationDepth,
-        settings.sliceLfoModulationCycles,
-        settings.sliceLfoModulationPhase,
+        field.cacheKey,
+        features.divergence,
+        features.lfo,
+        features.lfo ? settings.sliceLfoAmplitude : 0,
+        features.lfo ? settings.sliceLfoCycles : 0,
+        features.lfo ? settings.sliceLfoAngle : 0,
+        features.lfo ? settings.sliceLfoPhase : 0,
+        features.lfo ? settings.sliceLfoWaveform : '',
+        features.lfo ? settings.sliceLfoModulation : false,
+        features.lfo ? settings.sliceLfoModulationMode : '',
+        features.lfo ? settings.sliceLfoModulationDepth : 0,
+        features.lfo ? settings.sliceLfoModulationCycles : 0,
+        features.lfo ? settings.sliceLfoModulationPhase : 0,
         count,
         settings.gapEase,
         settings.easeStrength,
@@ -647,16 +683,17 @@ function contourSlices(
   const slices: CachedSlice[] = [];
   const span = field.max - field.min;
   const vertexCount = mesh.V.length / 3;
-  const divergence = clamp(settings.divergence || 0, 0, 160);
+  const baseDirection = field.constantDirection;
+  const divergence = baseDirection ? clamp(features.divergence || 0, 0, 160) : 0;
   const lfoAmplitude =
-    settings.sliceLfo && span > 0
+    features.lfo && span > 0
       ? (span / Math.max(1, count)) * clamp(Number(settings.sliceLfoAmplitude) || 0, 0, 400) * 0.01
       : 0;
   const parallelLfo =
-    lfoAmplitude && !divergence
-      ? createSliceLfoField(mesh, field.dir, lfoAmplitude, settings)
+    lfoAmplitude && !divergence && baseDirection
+      ? createSliceLfoField(mesh, baseDirection, lfoAmplitude, settings)
       : null;
-  const fanTangent = divergence ? sliceFanTangent(field.dir) : null;
+  const fanTangent = divergence && baseDirection ? sliceFanTangent(baseDirection) : null;
   const fan = fanTangent ? sliceFanGeometry(mesh, field, fanTangent, divergence) : null;
   for (let i = 0; i < count; i++) {
     const position = easeLineGap(
@@ -667,24 +704,33 @@ function contourSlices(
       settings.easeCycles,
     );
     let level = field.min + span * position;
-    let sliceField = field.S;
-    let sliceDirection = field.dir;
-    let scalarAtPoint: SliceLfoField['evaluate'] | undefined = parallelLfo?.evaluate;
-    if (parallelLfo) sliceField = parallelLfo.values;
-    if (fanTangent && fan) {
+    let sliceField: MeshScalarField = parallelLfo
+      ? {
+          ...field,
+          values: parallelLfo.values,
+          evaluate: parallelLfo.evaluate,
+          constantDirection: baseDirection,
+        }
+      : field;
+    let sliceDirection = baseDirection;
+    if (fanTangent && fan && baseDirection) {
       const angle = fan.minAngle + (fan.maxAngle - fan.minAngle) * position;
       const cos = Math.cos(angle);
       const sin = Math.sin(angle);
       sliceDirection = [
-        field.dir[0] * cos - fanTangent[0] * sin,
-        field.dir[1] * cos - fanTangent[1] * sin,
-        field.dir[2] * cos - fanTangent[2] * sin,
+        baseDirection[0] * cos - fanTangent[0] * sin,
+        baseDirection[1] * cos - fanTangent[1] * sin,
+        baseDirection[2] * cos - fanTangent[2] * sin,
       ];
       level = fan.normalCenter * cos - fan.sourceTangent * sin;
       if (lfoAmplitude) {
         const divergentLfo = createSliceLfoField(mesh, sliceDirection, lfoAmplitude, settings);
-        sliceField = divergentLfo.values;
-        scalarAtPoint = divergentLfo.evaluate;
+        sliceField = {
+          ...field,
+          values: divergentLfo.values,
+          evaluate: divergentLfo.evaluate,
+          constantDirection: sliceDirection,
+        };
       } else {
         const values = new Float32Array(vertexCount);
         for (let vertex = 0, offset = 0; vertex < vertexCount; vertex++, offset += 3)
@@ -692,7 +738,12 @@ function contourSlices(
             mesh.V[offset] * sliceDirection[0] +
             mesh.V[offset + 1] * sliceDirection[1] +
             mesh.V[offset + 2] * sliceDirection[2];
-        sliceField = values;
+        sliceField = {
+          ...field,
+          values,
+          evaluate: undefined,
+          constantDirection: sliceDirection,
+        };
       }
     }
     const baseAdaptiveDepth = 1 + Math.floor(clamp(curveStrength, 0, 1) * 2.999);
@@ -706,20 +757,16 @@ function contourSlices(
       3,
       baseAdaptiveDepth + (fmAdditionalCycles > carrierCycles * 0.75 ? 1 : 0),
     );
-    const { pts, segs } = sliceLevelWorld(
-      mesh,
-      sliceField,
-      level,
-      vertexCount,
-      sliceDirection,
+    const { pts, segs } = extractScalarFieldLevel(mesh, sliceField, level, {
       curveStrength,
-      scalarAtPoint,
-      6 + Math.round(clamp(curveStrength, 0, 1) * 18),
-      scalarAtPoint ? adaptiveDepth : 0,
-    );
+      rootIterations: 6 + Math.round(clamp(curveStrength, 0, 1) * 18),
+      adaptiveDepth: sliceField.evaluate ? adaptiveDepth : 0,
+    });
     slices.push({
       position,
-      direction: sliceDirection,
+      metadata: sliceDirection
+        ? { constantDirection: sliceDirection }
+        : { gradient: field.gradient },
       worldPoints: pts,
       polylines: segs.length ? chain(pts, segs) : [],
     });
@@ -736,9 +783,9 @@ function contourSlices(
   return slices;
 }
 
-function explodeSlicePoints(
+export function explodeScalarFieldPoints(
   points: NumericArray,
-  direction: Vec3,
+  metadata: ScalarFieldSliceMetadata,
   position: number,
   span: number,
   amount: number,
@@ -746,6 +793,20 @@ function explodeSlicePoints(
   const distance = span * (position - 0.5) * clamp(amount / 100, 0, 3);
   const exploded = Array.from(points);
   for (let offset = 0; offset < exploded.length; offset += 3) {
+    let direction = metadata.constantDirection;
+    if (!direction && metadata.gradient) {
+      const gradient = metadata.gradient(
+        exploded[offset],
+        exploded[offset + 1],
+        exploded[offset + 2],
+      );
+      if (gradient) {
+        const length = Math.hypot(gradient[0], gradient[1], gradient[2]);
+        if (Number.isFinite(length) && length > 1e-12)
+          direction = [gradient[0] / length, gradient[1] / length, gradient[2] / length];
+      }
+    }
+    if (!direction) continue;
     exploded[offset] += direction[0] * distance;
     exploded[offset + 1] += direction[1] * distance;
     exploded[offset + 2] += direction[2] * distance;
@@ -762,7 +823,7 @@ interface SliceFanGeometry {
 
 function sliceFanGeometry(
   mesh: ContourMesh,
-  field: ScalarField,
+  field: MeshScalarField,
   tangent: Vec3,
   divergence: number,
 ): SliceFanGeometry | null {
@@ -782,7 +843,7 @@ function sliceFanGeometry(
   const tangentCenter = (tangentMin + tangentMax) * 0.5;
   let radius = 0;
   for (let vertex = 0; vertex < tangentValues.length; vertex++) {
-    const normalOffset = field.S[vertex] - normalCenter;
+    const normalOffset = field.values[vertex] - normalCenter;
     const tangentOffset = tangentValues[vertex] - tangentCenter;
     radius = Math.max(radius, Math.hypot(normalOffset, tangentOffset));
   }
@@ -797,7 +858,10 @@ function sliceFanGeometry(
   let minAngle = Infinity,
     maxAngle = -Infinity;
   for (let vertex = 0; vertex < tangentValues.length; vertex++) {
-    const angle = Math.atan2(field.S[vertex] - normalCenter, tangentValues[vertex] - sourceTangent);
+    const angle = Math.atan2(
+      field.values[vertex] - normalCenter,
+      tangentValues[vertex] - sourceTangent,
+    );
     if (angle < minAngle) minAngle = angle;
     if (angle > maxAngle) maxAngle = angle;
   }
@@ -1340,9 +1404,7 @@ function blueprintDocument(
   );
   const axis = escapeXml(String(settings.axis || 'up').toUpperCase());
   const drawing = deterministicDrawingNumber(settings, geometry);
-  const vector = (geometry.direction || [0, 0, 1])
-    .map((value) => Number(value || 0).toFixed(3))
-    .join(', ');
+  const vector = geometry.direction?.map((value) => Number(value || 0).toFixed(3)).join(', ');
   const fieldMin = Number(geometry.fieldMin || 0);
   const fieldMax = Number(geometry.fieldMax || 0);
   const fieldSpan = fieldMax - fieldMin;
@@ -1362,7 +1424,7 @@ function blueprintDocument(
   const slicing = settings.spiral
     ? `Γₖ: ${lineCount}q(p) − atan2(v,u) = k + 0.5`
     : `hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
-  const objectStats = `n̂_${axis} = [${vector}] · V=${Math.round(geometry.vertices || 0)} · F=${Math.round(geometry.triangles || 0)}`;
+  const objectStats = `${vector ? `n̂_${axis} = [${vector}]` : '∇q = LOCAL / UNAVAILABLE'} · V=${Math.round(geometry.vertices || 0)} · F=${Math.round(geometry.triangles || 0)}`;
   const common = `fill="none" stroke="${ink}" vector-effect="non-scaling-stroke"`;
   const text = `fill="${ink}" stroke="none" font-family="DM Mono,ui-monospace,monospace"`;
   const backdrop = `<rect width="${W}" height="${H}" fill="${paper}"/>
@@ -2098,46 +2160,6 @@ function silhouetteEdges(mesh: ContourMesh, P: Projection): PointSegments {
   return { pts, segs };
 }
 
-function scalarField(
-  mesh: ContourMesh,
-  P: Projection,
-  axis: string,
-  cutAz: number,
-  cutEl: number,
-): ScalarField {
-  const { V } = mesh;
-  const n = V.length / 3;
-  if (axis === 'cam') return { S: P.sd, min: P.dmin, max: P.dmax, dir: P.f };
-  if (axis === 'custom') {
-    const az = (cutAz * Math.PI) / 180,
-      el = (cutEl * Math.PI) / 180;
-    const dir: Vec3 = [Math.cos(el) * Math.cos(az), Math.cos(el) * Math.sin(az), Math.sin(el)];
-    const S = new Float32Array(n);
-    let mn = Infinity,
-      mx = -Infinity;
-    for (let i = 0, v = 0; v < n; i += 3, v++) {
-      const s = V[i] * dir[0] + V[i + 1] * dir[1] + V[i + 2] * dir[2];
-      S[v] = s;
-      if (s < mn) mn = s;
-      if (s > mx) mx = s;
-    }
-    return { S, min: mn, max: mx, dir };
-  }
-  // the mesh is always stored Z-up, so "height" is component 2
-  const comp = axis === 'x' ? 0 : axis === 'y' ? 1 : 2;
-  const S = new Float32Array(n);
-  let mn = Infinity,
-    mx = -Infinity;
-  for (let i = comp, v = 0; v < n; i += 3, v++) {
-    const s = V[i];
-    S[v] = s;
-    if (s < mn) mn = s;
-    if (s > mx) mx = s;
-  }
-  const dir: Vec3 = comp === 0 ? [1, 0, 0] : comp === 1 ? [0, 1, 0] : [0, 0, 1];
-  return { S, min: mn, max: mx, dir };
-}
-
 function inverseLineGapEase(value: number, settings: ContourSettings): number {
   if (settings.gapEase === 'linear' || !settings.easeStrength) return value;
   let lo = 0,
@@ -2159,7 +2181,7 @@ function inverseLineGapEase(value: number, settings: ContourSettings): number {
 
 function spiralContours(
   mesh: ContourMesh,
-  field: ScalarField,
+  field: MeshScalarField,
   settings: ContourSettings,
 ): SpiralSegments {
   const { V, T } = mesh;
@@ -2168,14 +2190,14 @@ function spiralContours(
   const q = new Float32Array(V.length / 3),
     gradientValue = new Float32Array(V.length / 3);
   for (let v = 0; v < q.length; v++) {
-    const position = clamp((field.S[v] - field.min) / span, 0, 1);
+    const position = clamp((field.values[v] - field.min) / span, 0, 1);
     gradientValue[v] = position;
     q[v] = inverseLineGapEase(position, settings);
   }
 
   // A polar frame around the slicing direction turns parallel levels into a
   // helicoidal field. Integer isolines of that field join across its angle seam.
-  const dir = field.dir;
+  const dir = field.constantDirection!;
   const ref: Vec3 = Math.abs(dir[2]) < 0.9 ? [0, 0, 1] : [0, 1, 0];
   let ax = ref[1] * dir[2] - ref[2] * dir[1];
   let ay = ref[2] * dir[0] - ref[0] * dir[2];
@@ -2527,11 +2549,22 @@ function computeContourInstance(
       mobiusStrength: settings.mobiusStrength,
     },
   );
-  const field = scalarField(mesh, P, settings.axis, settings.cutAz, settings.cutEl);
+  const field = createPlanarScalarField(mesh, {
+    axis: settings.axis,
+    cutAz: settings.cutAz,
+    cutEl: settings.cutEl,
+    camera: { values: P.sd, min: P.dmin, max: P.dmax, direction: P.f },
+  });
+  const fieldFeatures = resolveScalarFieldFeatures(field, {
+    lfo: Boolean(settings.sliceLfo),
+    divergence: clamp(settings.divergence || 0, 0, 160),
+    continuousSpiral: Boolean(settings.spiral),
+    explodeAmount: clamp(Number(settings.explodeAmount) || 0, 0, 300),
+  });
   const blueprintGeometry = {
     fieldMin: field.min,
     fieldMax: field.max,
-    direction: field.dir,
+    direction: field.constantDirection,
     vertices: mesh.V.length / 3,
     triangles: mesh.T.length / 3,
   };
@@ -2585,9 +2618,10 @@ function computeContourInstance(
   );
   const curveStrength = (quality - 1) / 9;
   if (
-    settings.spiral &&
-    !settings.divergence &&
-    !settings.explodeAmount &&
+    fieldFeatures.continuousSpiral &&
+    !fieldFeatures.divergence &&
+    !fieldFeatures.lfo &&
+    !fieldFeatures.explodeAmount &&
     lineWeightMode === 'uniform'
   ) {
     const previewSettings = quick && N !== settings.lines ? { ...settings, lines: N } : settings;
@@ -2623,13 +2657,19 @@ function computeContourInstance(
         } else emitProjectedPath(poly, pts, P, quality, vis, step, out[0][0][0]);
       }
   } else {
-    const slices = contourSlices(mesh, settings, field, N, curveStrength);
+    const slices = contourSlices(mesh, settings, field, fieldFeatures, N, curveStrength);
     for (let sliceIndex = 0; sliceIndex < slices.length; sliceIndex++) {
-      const { position, direction, worldPoints, polylines } = slices[sliceIndex];
+      const { position, metadata, worldPoints, polylines } = slices[sliceIndex];
       if (!polylines.length) continue;
-      const explodeAmount = clamp(Number(settings.explodeAmount) || 0, 0, 300);
+      const explodeAmount = fieldFeatures.explodeAmount;
       const outputWorldPoints = explodeAmount
-        ? explodeSlicePoints(worldPoints, direction, position, field.max - field.min, explodeAmount)
+        ? explodeScalarFieldPoints(
+            worldPoints,
+            metadata,
+            position,
+            field.max - field.min,
+            explodeAmount,
+          )
         : worldPoints;
       const band =
         indexedPalette.get(sliceIndex) ??

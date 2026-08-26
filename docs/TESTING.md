@@ -60,6 +60,7 @@ Coverage currently measures the focused core under active test:
 - `mapAnnotations.ts`
 - `mesh.ts`
 - `projection.ts`
+- `scalar-fields.ts`
 - `svg-mesh.ts`
 - `toolpaths.ts`
 - `FormControls.tsx`

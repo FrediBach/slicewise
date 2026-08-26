@@ -265,6 +265,8 @@ Prefer polar displacement controls because they guarantee a valid disk parameter
 
 ## Session 5 — General scalar-field contract
 
+**Status: completed.**
+
 ### Goal
 
 Remove the assumption that every contour level has one constant plane normal while preserving the optimized planar path.
@@ -288,6 +290,13 @@ Remove the assumption that every contour level has one constant plane normal whi
   | Slice explode     | Constant direction | Local gradient  | Initially no |
 
 - Make blueprint metadata tolerate a field without a global direction.
+
+### Decisions recorded
+
+- `MeshScalarField.values` are authoritative at vertices. Analytic fields may additionally evaluate off-vertex points for root refinement; intrinsic fields do not receive a fabricated evaluator.
+- A non-empty field `cacheKey` opts into the existing bounded per-mesh topology cache. Model/custom planar fields provide stable keys, while camera fields remain uncached with an empty key.
+- One compatibility resolver governs LFO, divergence, continuous spiral, and explosion. Planar fields retain all existing behavior, analytic fields allow local-gradient explosion when available, and intrinsic fields initially disable all four effects except gap easing.
+- Cached slices now carry constant-direction or local-gradient metadata. Blueprint metadata reports a local/unavailable gradient rather than inventing a global direction.
 
 ### Tests
 
