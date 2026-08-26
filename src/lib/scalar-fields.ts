@@ -1,6 +1,12 @@
 'use strict';
 
 import type { Vec3 } from './projection';
+import {
+  selectDirectionalSeedVertex,
+  surfaceGraphDistances,
+  type ModelDirection,
+} from './mesh-geodesics';
+import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
 export type MeshScalarFieldKind = 'planar' | 'analytic' | 'intrinsic';
 
@@ -18,6 +24,14 @@ export interface MeshScalarField {
   constantDirection?: Vec3;
   /** Empty keys deliberately disable topology caching. */
   cacheKey: string;
+  /** Development diagnostics for intrinsic fields with unreachable components. */
+  intrinsicDiagnostics?: IntrinsicFieldDiagnostics;
+}
+
+export interface IntrinsicFieldDiagnostics {
+  seedVertex: number | null;
+  reachableVertexCount: number;
+  skippedComponentCount: number;
 }
 
 export interface ScalarFieldMesh {
@@ -44,6 +58,10 @@ export interface SphericalScalarFieldOptions {
 
 export interface CylindricalScalarFieldOptions extends SphericalScalarFieldOptions {
   axis: Vec3;
+}
+
+export interface GeodesicScalarFieldOptions {
+  direction: ModelDirection;
 }
 
 export type SliceExplosionMode = 'constant-direction' | 'local-gradient' | 'none';
@@ -117,6 +135,28 @@ const sampleAnalyticField = (
   }
   return { values, min: min === Infinity ? 0 : min, max: max === -Infinity ? 0 : max };
 };
+
+const GEODESIC_DISTANCE_CACHE_LIMIT = 8;
+const geodesicDistanceCache = new WeakMap<TopologyMesh, Map<number, Float64Array>>();
+
+function cachedSurfaceGraphDistances(mesh: TopologyMesh, seedVertex: number): Float64Array {
+  let cache = geodesicDistanceCache.get(mesh);
+  const cached = cache?.get(seedVertex);
+  if (cached) {
+    // Refresh insertion order so active morph endpoints stay resident.
+    cache!.delete(seedVertex);
+    cache!.set(seedVertex, cached);
+    return cached;
+  }
+  const distances = surfaceGraphDistances(mesh, [seedVertex]);
+  if (!cache) {
+    cache = new Map();
+    geodesicDistanceCache.set(mesh, cache);
+  }
+  if (cache.size >= GEODESIC_DISTANCE_CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+  cache.set(seedVertex, distances);
+  return distances;
+}
 
 export function createPlanarScalarField(
   mesh: ScalarFieldMesh,
@@ -216,6 +256,56 @@ export function createCylindricalScalarField(
     evaluate,
     gradient,
     cacheKey: `analytic:cylinder:${vectorKey(center)}:${vectorKey(axis)}`,
+  };
+}
+
+/**
+ * Creates an intrinsic surface-graph distance field from the mesh vertex most
+ * extreme in a model-space direction. Unreachable components retain Infinity
+ * and are consequently omitted by marching triangles.
+ */
+export function createGeodesicScalarField(
+  mesh: ScalarFieldMesh & TopologyMesh,
+  options: GeodesicScalarFieldOptions,
+): MeshScalarField {
+  const seedVertex = selectDirectionalSeedVertex(mesh, options.direction);
+  if (seedVertex === null) {
+    return {
+      values: new Float64Array(Math.floor(mesh.V.length / 3)).fill(Infinity),
+      min: 0,
+      max: 0,
+      kind: 'intrinsic',
+      cacheKey: 'intrinsic:geodesic:none',
+      intrinsicDiagnostics: {
+        seedVertex: null,
+        reachableVertexCount: 0,
+        skippedComponentCount: getMeshTopology(mesh).componentCount,
+      },
+    };
+  }
+
+  const values = cachedSurfaceGraphDistances(mesh, seedVertex);
+  let min = Infinity,
+    max = -Infinity,
+    reachableVertexCount = 0;
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+    reachableVertexCount++;
+  }
+  const topology = getMeshTopology(mesh);
+  return {
+    values,
+    min: min === Infinity ? 0 : min,
+    max: max === -Infinity ? 0 : max,
+    kind: 'intrinsic',
+    cacheKey: `intrinsic:geodesic:${seedVertex}`,
+    intrinsicDiagnostics: {
+      seedVertex,
+      reachableVertexCount,
+      skippedComponentCount: Math.max(0, topology.componentCount - 1),
+    },
   };
 }
 

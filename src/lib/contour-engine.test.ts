@@ -461,4 +461,81 @@ describe('computeContours', () => {
     expect(morphResult.svg).toContain('data-morph-x="0"');
     expect(morphResult.svg).toContain('data-morph-x="1"');
   });
+
+  it('renders deterministic geodesic contours independent of camera topology', () => {
+    const mesh = makeContourMesh();
+    const base = {
+      ...contourSettings,
+      axis: 'geodesic',
+      geodesicSeedAzimuth: 25,
+      geodesicSeedElevation: 35,
+      hide: false,
+      sil: false,
+      bg: false,
+      clipToArtboard: false,
+      quality: 6,
+    };
+    const first = computeContours(mesh, base, false);
+    const repeated = computeContours(mesh, base, false);
+    const rotatedCamera = computeContours(mesh, { ...base, az: -70, el: 52 }, false);
+    const differentSeed = computeContours(
+      mesh,
+      { ...base, geodesicSeedAzimuth: -145, geodesicSeedElevation: -25 },
+      false,
+    );
+    const missingSnapshotDefaults = computeContours(
+      mesh,
+      {
+        ...base,
+        geodesicSeedAzimuth: undefined,
+        geodesicSeedElevation: undefined,
+      },
+      false,
+    );
+    const explicitDefaults = computeContours(
+      mesh,
+      { ...base, geodesicSeedAzimuth: 0, geodesicSeedElevation: 90 },
+      false,
+    );
+    const gcode = generateGCode(
+      first.toolpaths,
+      { width: base.pw, height: base.ph },
+      { origin: 'bottom-left', clipToArtboard: false, optimizeTravel: false },
+    );
+
+    expect(first.paths).toBeGreaterThan(0);
+    expect(first.svg).toBe(repeated.svg);
+    expect(first.paths).toBe(rotatedCamera.paths);
+    expect(differentSeed.toolpaths).not.toEqual(first.toolpaths);
+    expect(missingSnapshotDefaults.toolpaths).toEqual(explicitDefaults.toolpaths);
+    expect(first.svg).not.toMatch(/NaN|Infinity/);
+    expect(gcode).not.toMatch(/NaN|Infinity/);
+  });
+
+  it('rejects planar-only construction effects for geodesic contours', () => {
+    const mesh = makeContourMesh();
+    const base = {
+      ...contourSettings,
+      axis: 'geodesic',
+      geodesicSeedAzimuth: 10,
+      geodesicSeedElevation: 55,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const plain = computeContours(mesh, base, false);
+    const incompatible = computeContours(
+      mesh,
+      {
+        ...base,
+        divergence: 120,
+        sliceLfo: true,
+        spiral: true,
+        explodeAmount: 180,
+      },
+      false,
+    );
+
+    expect(incompatible.toolpaths).toEqual(plain.toolpaths);
+  });
 });

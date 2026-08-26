@@ -173,6 +173,8 @@ const state: AppState = {
   waveCenterZ: 0,
   cylinderAzimuth: 0,
   cylinderElevation: 90,
+  geodesicSeedAzimuth: 0,
+  geodesicSeedElevation: 90,
   divergence: 0,
   sliceLfo: false,
   sliceLfoAmplitude: 75,
@@ -351,6 +353,8 @@ if (typeof document !== 'undefined') {
       waveCenterZ,
       cylinderAzimuth,
       cylinderElevation,
+      geodesicSeedAzimuth,
+      geodesicSeedElevation,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -449,6 +453,8 @@ if (typeof document !== 'undefined') {
       waveCenterZ,
       cylinderAzimuth,
       cylinderElevation,
+      geodesicSeedAzimuth,
+      geodesicSeedElevation,
       divergence,
       sliceLfo,
       sliceLfoAmplitude,
@@ -1092,6 +1098,8 @@ if (typeof document !== 'undefined') {
   bindPair('waveCenterZ', 'waveCenterZ');
   bindPair('cylinderAzimuth', 'cylinderAzimuth');
   bindPair('cylinderElevation', 'cylinderElevation');
+  bindPair('geodesicSeedAzimuth', 'geodesicSeedAzimuth');
+  bindPair('geodesicSeedElevation', 'geodesicSeedElevation');
   bindPair('divergence', 'divergence', syncSliceConstruction);
   bindPair('sliceLfoAmplitude', 'sliceLfoAmplitude');
   bindPair('sliceLfoCycles', 'sliceLfoCycles');
@@ -1339,18 +1347,26 @@ if (typeof document !== 'undefined') {
 
   const curvedSliceField = (): boolean =>
     state.axis === 'spherical' || state.axis === 'cylindrical';
+  const intrinsicSliceField = (): boolean => state.axis === 'geodesic';
+  const nonPlanarSliceField = (): boolean => curvedSliceField() || intrinsicSliceField();
   function syncSliceFieldControls(): void {
     const curved = curvedSliceField();
+    const intrinsic = intrinsicSliceField();
+    const nonPlanar = curved || intrinsic;
     $('customAxis').hidden = state.axis !== 'custom';
     $('wavefrontControls').hidden = !curved;
     $('cylinderAxisControls').hidden = state.axis !== 'cylindrical';
+    $('geodesicControls').hidden = !intrinsic;
     for (const id of ['divergence']) {
-      $(id).disabled = curved;
-      $(id + 'N').disabled = curved;
-      $(id + 'Control').classList.toggle('is-disabled', curved);
+      $(id).disabled = nonPlanar;
+      $(id + 'N').disabled = nonPlanar;
+      $(id + 'Control').classList.toggle('is-disabled', nonPlanar);
     }
-    $('sliceLfo').disabled = curved;
-    $('sliceLfo').closest('.checkbox-control')?.classList.toggle('is-disabled', curved);
+    $('sliceLfo').disabled = nonPlanar;
+    $('sliceLfo').closest('.checkbox-control')?.classList.toggle('is-disabled', nonPlanar);
+    $('explodeAmount').disabled = intrinsic;
+    $('explodeAmountN').disabled = intrinsic;
+    $('explodeAmountControl').classList.toggle('is-disabled', intrinsic);
     syncSliceLfoControls();
     syncSliceConstruction();
   }
@@ -1372,7 +1388,7 @@ if (typeof document !== 'undefined') {
   });
   function syncSliceConstruction(): void {
     const spiralBlocked =
-      curvedSliceField() ||
+      nonPlanarSliceField() ||
       state.divergence > 0 ||
       state.sliceLfo ||
       state.explodeAmount > 0 ||
@@ -1385,7 +1401,7 @@ if (typeof document !== 'undefined') {
     $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', spiralBlocked);
   }
   function syncSliceLfoControls(): void {
-    const disabled = curvedSliceField() || !state.sliceLfo;
+    const disabled = nonPlanarSliceField() || !state.sliceLfo;
     for (const id of ['sliceLfoAmplitude', 'sliceLfoCycles', 'sliceLfoAngle', 'sliceLfoPhase']) {
       $(id).disabled = disabled;
       $(id + 'N').disabled = disabled;
@@ -1853,6 +1869,8 @@ if (typeof document !== 'undefined') {
     ['waveCenterZ', 'waveCenterZ'],
     ['cylinderAzimuth', 'cylinderAzimuth'],
     ['cylinderElevation', 'cylinderElevation'],
+    ['geodesicSeedAzimuth', 'geodesicSeedAzimuth'],
+    ['geodesicSeedElevation', 'geodesicSeedElevation'],
     ['divergence', 'divergence'],
     ['sliceLfoAmplitude', 'sliceLfoAmplitude'],
     ['sliceLfoCycles', 'sliceLfoCycles'],
@@ -1999,6 +2017,12 @@ if (typeof document !== 'undefined') {
       : 0;
     restored.cylinderElevation = Number.isFinite(restored.cylinderElevation)
       ? restored.cylinderElevation
+      : 90;
+    restored.geodesicSeedAzimuth = Number.isFinite(restored.geodesicSeedAzimuth)
+      ? restored.geodesicSeedAzimuth
+      : 0;
+    restored.geodesicSeedElevation = Number.isFinite(restored.geodesicSeedElevation)
+      ? restored.geodesicSeedElevation
       : 90;
     restored.explodeAmount = Number.isFinite(restored.explodeAmount) ? restored.explodeAmount : 0;
     if (!Number.isFinite(restored.lensDistortion)) {
@@ -2264,6 +2288,7 @@ if (typeof document !== 'undefined') {
       'custom',
       'spherical',
       'cylindrical',
+      'geodesic',
     ]);
     randomizePair('cutAz', 'cutAz', () => randomInt(-180, 180));
     randomizePair('cutEl', 'cutEl', () => randomInt(-80, 80));
@@ -2272,6 +2297,8 @@ if (typeof document !== 'undefined') {
     randomizePair('waveCenterZ', 'waveCenterZ', () => randomInt(-70, 70));
     randomizePair('cylinderAzimuth', 'cylinderAzimuth', () => randomInt(-180, 180));
     randomizePair('cylinderElevation', 'cylinderElevation', () => randomInt(-80, 80));
+    randomizePair('geodesicSeedAzimuth', 'geodesicSeedAzimuth', () => randomInt(-180, 180));
+    randomizePair('geodesicSeedElevation', 'geodesicSeedElevation', () => randomInt(-80, 80));
     randomizePair('divergence', 'divergence', () => (Math.random() < 0.6 ? 0 : randomInt(15, 110)));
     randomizePair('sliceLfoAmplitude', 'sliceLfoAmplitude', () => randomInt(35, 180));
     randomizePair('sliceLfoCycles', 'sliceLfoCycles', () => randomIn(0.75, 5));
@@ -2299,7 +2326,7 @@ if (typeof document !== 'undefined') {
     randomizeCheckbox('spiral', 'spiral', 0.22);
     if (
       shouldRandomize('spiral') &&
-      (curvedSliceField() || state.divergence > 0 || state.sliceLfo)
+      (nonPlanarSliceField() || state.divergence > 0 || state.sliceLfo)
     ) {
       state.spiral = false;
       $('spiral').checked = false;

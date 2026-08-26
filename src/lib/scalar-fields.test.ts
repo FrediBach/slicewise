@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { explodeScalarFieldPoints, extractScalarFieldLevel } from './contour-engine';
 import {
   createCylindricalScalarField,
+  createGeodesicScalarField,
   createPlanarScalarField,
   createSphericalScalarField,
   resolveScalarFieldFeatures,
@@ -12,6 +13,77 @@ import {
 const mesh = { V: new Float32Array([-1, 2, 3, 4, -5, 6]) };
 
 describe('scalar fields', () => {
+  it('builds geodesic values along the folded surface graph instead of ambient radius', () => {
+    const folded = {
+      V: new Float32Array([-1, 0, 0, 0, 10, 0, 1, 0, 0, -0.9, 0, 0.1]),
+      T: new Uint32Array([0, 1, 2, 2, 1, 3]),
+    };
+    const field = createGeodesicScalarField(folded, { direction: [-1, 0, 0] });
+
+    expect(field.kind).toBe('intrinsic');
+    expect(field.intrinsicDiagnostics?.seedVertex).toBe(0);
+    expect(field.values[3]).toBeGreaterThan(3);
+    expect(field.values[3]).toBeGreaterThan(
+      20 *
+        Math.hypot(
+          folded.V[9] - folded.V[0],
+          folded.V[10] - folded.V[1],
+          folded.V[11] - folded.V[2],
+        ),
+    );
+  });
+
+  it('omits unreachable components and caches per-mesh seed distances', () => {
+    const disconnected = {
+      V: new Float32Array([0, 0, 1, 1, 0, 0, 0, 1, 0, 10, 0, 0, 11, 0, 0, 10, 1, 0]),
+      T: new Uint32Array([0, 1, 2, 3, 4, 5]),
+    };
+    const first = createGeodesicScalarField(disconnected, { direction: [0, 0, 1] });
+    const repeated = createGeodesicScalarField(disconnected, { direction: [0, 0, 1] });
+    const replacement = createGeodesicScalarField(
+      { V: disconnected.V.slice(), T: disconnected.T.slice() },
+      { direction: [0, 0, 1] },
+    );
+
+    expect(first.values).toBe(repeated.values);
+    expect(replacement.values).not.toBe(first.values);
+    expect(first.min).toBe(0);
+    expect(first.max).toBeGreaterThan(0);
+    expect(first.intrinsicDiagnostics).toEqual({
+      seedVertex: 0,
+      reachableVertexCount: 3,
+      skippedComponentCount: 1,
+    });
+    expect(Array.from(first.values).slice(3)).toEqual([Infinity, Infinity, Infinity]);
+    const contour = extractScalarFieldLevel(disconnected, first, first.max * 0.5);
+    expect(contour.segs.length).toBeGreaterThan(0);
+    expect(contour.pts.every(Number.isFinite)).toBe(true);
+  });
+
+  it('bounds the geodesic distance cache to eight recently used seeds per mesh', () => {
+    const vertexCount = 9;
+    const vertices = [0, 0, 0];
+    for (let index = 0; index < vertexCount; index++) {
+      const angle = (index / vertexCount) * Math.PI * 2;
+      vertices.push(Math.cos(angle), Math.sin(angle), 0);
+    }
+    const triangles: number[] = [];
+    for (let index = 0; index < vertexCount; index++)
+      triangles.push(0, index + 1, ((index + 1) % vertexCount) + 1);
+    const radial = { V: Float64Array.from(vertices), T: Uint32Array.from(triangles) };
+    const first = createGeodesicScalarField(radial, { direction: [1, 0, 0] });
+    for (let index = 1; index < vertexCount; index++) {
+      const angle = (index / vertexCount) * Math.PI * 2;
+      createGeodesicScalarField(radial, {
+        direction: [Math.cos(angle), Math.sin(angle), 0],
+      });
+    }
+    const revisited = createGeodesicScalarField(radial, { direction: [1, 0, 0] });
+
+    expect(revisited.values).not.toBe(first.values);
+    expect(revisited.values).toEqual(first.values);
+  });
+
   it('evaluates spherical wavefront values and normalized gradients', () => {
     const field = createSphericalScalarField(
       { V: new Float32Array([1, 2, 3, 4, 6, 3, 1, 2, 3]) },

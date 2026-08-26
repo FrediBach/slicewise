@@ -12,6 +12,7 @@ describe('ContoursPanel slice-field controls', () => {
     expect(field).toHaveValue('up');
     expect(field).toHaveTextContent('Spherical wavefront');
     expect(field).toHaveTextContent('Cylindrical wavefront');
+    expect(field).toHaveTextContent('Geodesic distance · mesh');
 
     for (const label of ['Centre X', 'Centre Y', 'Centre Z']) {
       expect(screen.getByLabelText(label, { selector: 'input[type="range"]' })).toHaveAttribute(
@@ -29,6 +30,12 @@ describe('ContoursPanel slice-field controls', () => {
     ).toHaveAttribute('min', '-180');
     expect(
       screen.getByLabelText('Cylinder elevation', { selector: 'input[type="range"]' }),
+    ).toHaveValue('90');
+    expect(
+      screen.getByLabelText('Seed azimuth', { selector: 'input[type="range"]' }),
+    ).toHaveAttribute('min', '-180');
+    expect(
+      screen.getByLabelText('Seed elevation', { selector: 'input[type="range"]' }),
     ).toHaveValue('90');
   });
 });

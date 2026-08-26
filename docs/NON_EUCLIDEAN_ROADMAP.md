@@ -409,6 +409,8 @@ Single-process Vitest measurements on the development machine (26 August 2026) u
 
 ## Session 8 — Single-source geodesic contours
 
+**Status: completed.**
+
 ### Goal
 
 Ship genuinely intrinsic equal-distance contours from one stable model-space seed.
@@ -440,6 +442,22 @@ Direction-based seed selection is deterministic, snapshot-friendly, and works wi
 - Changing mesh or seed invalidates the right cache entries.
 - Disconnected meshes remain finite and deterministic.
 - Manually compare a torus, rounded cube, gyroid, and open uploaded mesh.
+
+### Decisions recorded
+
+- `geodesic` extends the existing `axis` discriminator. Missing seed settings restore to azimuth 0° and elevation 90°, selecting the extreme model-Z vertex, so older snapshots remain unchanged unless the new field is explicitly active.
+- The UI calls the mode **Geodesic distance · mesh** while technical documentation calls its values **surface graph distances**. The field uses deterministic shortest paths along weighted mesh edges and does not claim continuous exact geodesics.
+- Finite values from the seed's connected component define the level range. Other components retain `Infinity`, are omitted by marching triangles, and are counted in intrinsic development diagnostics.
+- Distance buffers use a per-mesh, per-seed least-recently-used cache capped at eight entries. Three-dimensional contour topology continues through the existing independent eight-entry per-mesh cache, so orbiting only reprojects cached intrinsic contours.
+- Divergence, slice LFO, continuous spiral, and slice explosion are disabled in the UI and independently rejected by the scalar-field compatibility resolver. Gap easing remains available. Imported SVG centrelines continue to bypass mesh-only fields.
+- Quick preview reduces contour count through the existing preview policy without approximating or recomputing the distance solve. Exact SVG and G-code consume the same finished centreline runs.
+
+### Verification and performance observation
+
+- Focused coverage exercises folded geometry, disconnected components, cache reuse/eviction and mesh replacement, camera-topology invariance, seed changes, legacy defaults, compatibility rejection, deterministic SVG, and finite G-code.
+- Diagnostic single-process measurements on welded ripple spheres were 12.87 ms cold / 1.03 ms cached at 1,986 vertices and 22.03 ms cold / 1.58 ms cached at 8,066 vertices. Cold time includes topology construction; these measurements do not justify a separate deferred scheduling path at the current mesh sizes.
+- The full format, React Doctor, lint, typecheck, 197-test, and production-build sequence passed. React Doctor retained its existing maintainability warning for the large `ContoursPanel` component.
+- Live browser comparison could not be completed because no browser backend was available in the development environment; torus, rounded-cube, gyroid, and open uploaded-mesh visual checks remain recommended before release.
 
 ## Session 9 — Multi-source geodesic fields
 

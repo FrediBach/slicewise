@@ -20,6 +20,7 @@ import {
 } from './generative-mask';
 import {
   createCylindricalScalarField,
+  createGeodesicScalarField,
   createPlanarScalarField,
   createSphericalScalarField,
   resolveScalarFieldFeatures,
@@ -88,6 +89,8 @@ export interface ContourSettings extends GenerativeMaskSettings {
   waveCenterZ?: number;
   cylinderAzimuth?: number;
   cylinderElevation?: number;
+  geodesicSeedAzimuth?: number;
+  geodesicSeedElevation?: number;
   divergence: number;
   sliceLfo: boolean;
   sliceLfoAmplitude: number;
@@ -1305,6 +1308,8 @@ function deterministicDrawingNumber(
       settings.waveCenterZ,
       settings.cylinderAzimuth,
       settings.cylinderElevation,
+      settings.geodesicSeedAzimuth,
+      settings.geodesicSeedElevation,
       settings.sliceLfo,
       settings.sliceLfoAmplitude,
       settings.sliceLfoCycles,
@@ -1435,7 +1440,7 @@ function blueprintDocument(
   const transform = `pₛ = ${fmt(settings.zoom || 1)}·Lens_${fmt(focalLength)}mm,${fmt(settings.lensPerspective ?? 0)}%persp,${warpFormula},${fmt(distortion)}%dist(R(${fmt(settings.az || 0)}°, ${fmt(settings.el || 0)}°, ${fmt(settings.roll || 0)}°)p) + [${fmt(settings.panX || 0)}, ${fmt(settings.panY || 0)}]`;
   const slicing = settings.spiral
     ? `Γₖ: ${lineCount}q(p) − atan2(v,u) = k + 0.5`
-    : `hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
+    : `${settings.axis === 'geodesic' ? 'q(v) = d_G(vₛ,v); ' : ''}hᵢ = ${fieldMin.toFixed(3)} + ${fieldSpan.toFixed(3)}·E_${escapeXml(settings.gapEase || 'linear')}((i + 0.5) / ${lineCount})`;
   const objectStats = `${vector ? `n̂_${axis} = [${vector}]` : '∇q = LOCAL / UNAVAILABLE'} · V=${Math.round(geometry.vertices || 0)} · F=${Math.round(geometry.triangles || 0)}`;
   const common = `fill="none" stroke="${ink}" vector-effect="non-scaling-stroke"`;
   const text = `fill="${ink}" stroke="none" font-family="DM Mono,ui-monospace,monospace"`;
@@ -2580,17 +2585,36 @@ function computeContourInstance(
     Math.cos(cylinderElevation) * Math.sin(cylinderAzimuth),
     Math.sin(cylinderElevation),
   ];
+  const geodesicSeedAzimuth =
+    (clamp(Number(settings.geodesicSeedAzimuth) || 0, -180, 180) * Math.PI) / 180;
+  const geodesicSeedElevation =
+    (clamp(
+      Number.isFinite(Number(settings.geodesicSeedElevation))
+        ? Number(settings.geodesicSeedElevation)
+        : 90,
+      -90,
+      90,
+    ) *
+      Math.PI) /
+    180;
+  const geodesicSeedDirection: Vec3 = [
+    Math.cos(geodesicSeedElevation) * Math.cos(geodesicSeedAzimuth),
+    Math.cos(geodesicSeedElevation) * Math.sin(geodesicSeedAzimuth),
+    Math.sin(geodesicSeedElevation),
+  ];
   const field =
     settings.axis === 'spherical'
       ? createSphericalScalarField(mesh, { center: waveCenter })
       : settings.axis === 'cylindrical'
         ? createCylindricalScalarField(mesh, { center: waveCenter, axis: cylinderAxis })
-        : createPlanarScalarField(mesh, {
-            axis: settings.axis,
-            cutAz: settings.cutAz,
-            cutEl: settings.cutEl,
-            camera: { values: P.sd, min: P.dmin, max: P.dmax, direction: P.f },
-          });
+        : settings.axis === 'geodesic'
+          ? createGeodesicScalarField(mesh, { direction: geodesicSeedDirection })
+          : createPlanarScalarField(mesh, {
+              axis: settings.axis,
+              cutAz: settings.cutAz,
+              cutEl: settings.cutEl,
+              camera: { values: P.sd, min: P.dmin, max: P.dmax, direction: P.f },
+            });
   const fieldFeatures = resolveScalarFieldFeatures(field, {
     lfo: Boolean(settings.sliceLfo),
     divergence: clamp(settings.divergence || 0, 0, 160),

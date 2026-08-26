@@ -77,6 +77,7 @@ export function ContoursPanel() {
           <option value="custom">Custom plane angle</option>
           <option value="spherical">Spherical wavefront</option>
           <option value="cylindrical">Cylindrical wavefront</option>
+          <option value="geodesic">Geodesic distance · mesh</option>
         </SelectControl>
         <div className="custom-axis" id="customAxis" hidden>
           <ValueControl
@@ -149,6 +150,30 @@ export function ContoursPanel() {
           <p className="gradient-note blueprint-note">
             Curved fields use model-space distance. Centre values are percentages of the normalized
             model radius.
+          </p>
+        </div>
+        <div id="geodesicControls" hidden>
+          <ValueControl
+            id="geodesicSeedAzimuth"
+            label="Seed azimuth"
+            min="-180"
+            max="180"
+            step="1"
+            value="0"
+            unit="°"
+          />
+          <ValueControl
+            id="geodesicSeedElevation"
+            label="Seed elevation"
+            min="-90"
+            max="90"
+            step="1"
+            value="90"
+            unit="°"
+          />
+          <p className="gradient-note blueprint-note">
+            The directional extreme selects a mesh vertex. Distances follow mesh edges across its
+            connected surface.
           </p>
         </div>
         <ValueControl
