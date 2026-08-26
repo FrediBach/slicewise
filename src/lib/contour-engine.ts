@@ -30,6 +30,12 @@ export interface GradientStop {
   color: string;
 }
 
+export interface LineIndexColor {
+  /** Human-facing, one-based contour/run index. */
+  index: number;
+  color: string;
+}
+
 export interface ContourSettings extends GenerativeMaskSettings {
   az: number;
   el: number;
@@ -78,6 +84,8 @@ export interface ContourSettings extends GenerativeMaskSettings {
   gradientEnabled: boolean;
   gradientColors: number;
   gradientStops: readonly GradientStop[];
+  lineIndexColorEnabled: boolean;
+  lineIndexColors: readonly LineIndexColor[];
   pw: number;
   ph: number;
   margin: number;
@@ -1210,6 +1218,30 @@ function gradientPalette(settings: ContourSettings): string[] {
       cb = rgb(b.color);
     return hex(ca.map((value, j) => value + (cb[j] - value) * mix));
   });
+}
+
+function colorPlan(settings: ContourSettings): {
+  palette: string[];
+  indexedPalette: Map<number, number>;
+  gradientCount: number;
+} {
+  const palette = gradientPalette(settings);
+  const gradientCount = palette.length;
+  const indexedPalette = new Map<number, number>();
+  if (!settings.lineIndexColorEnabled) return { palette, indexedPalette, gradientCount };
+  for (const rule of settings.lineIndexColors || []) {
+    const index = Math.round(Number(rule.index)) - 1;
+    if (index < 0 || !/^#[0-9a-f]{6}$/i.test(rule.color)) continue;
+    let paletteIndex = palette.findIndex(
+      (color) => color.toLowerCase() === rule.color.toLowerCase(),
+    );
+    if (paletteIndex < 0) {
+      paletteIndex = palette.length;
+      palette.push(rule.color);
+    }
+    indexedPalette.set(index, paletteIndex);
+  }
+  return { palette, indexedPalette, gradientCount };
 }
 
 function deterministicDrawingNumber(
@@ -2392,7 +2424,7 @@ function computeLineArtInstance(
     ? previewCurveQuality(settings.quality, settings.previewDetail)
     : settings.quality;
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
-  const palette = gradientPalette(settings);
+  const { palette, indexedPalette, gradientCount } = colorPlan(settings);
   const pathDataByColor = palette.map(() => '');
   const runsByColor = palette.map((): Polyline[] => []);
   const runs: Polyline[] = [];
@@ -2414,13 +2446,15 @@ function computeLineArtInstance(
     const styled = settings.humanizer
       ? humanizeRun(simplified.run, settings.humanizerAmount, salt++)
       : simplified.run;
-    const colorIndex = settings.gradientEnabled
-      ? clamp(
-          Math.floor((runIndex / Math.max(1, offsets.length - 2)) * palette.length),
-          0,
-          palette.length - 1,
-        )
-      : 0;
+    const colorIndex =
+      indexedPalette.get(runIndex) ??
+      (settings.gradientEnabled
+        ? clamp(
+            Math.floor((runIndex / Math.max(1, offsets.length - 2)) * gradientCount),
+            0,
+            gradientCount - 1,
+          )
+        : 0);
     const cutCount = yarnRuns?.get(raw) || 0;
     const processedRuns = cutCount
       ? yarnCutRun(styled, hashPolyline(raw), settings.yarnCurlSize, cutCount)
@@ -2475,10 +2509,10 @@ function computeLineArtInstance(
       W,
       H,
       (color) => `<path d="${pathData}" stroke="${color}" ${dash} ${attrs}/>`,
-      settings.gradientEnabled ? baseArtwork : '',
+      settings.gradientEnabled || settings.lineIndexColorEnabled ? baseArtwork : '',
     );
-    renderedPaths *= settings.gradientEnabled ? 4 : 3;
-    renderedNodes *= settings.gradientEnabled ? 4 : 3;
+    renderedPaths *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
+    renderedNodes *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
   } else {
     artwork = baseArtwork;
   }
@@ -2588,7 +2622,8 @@ function computeContourInstance(
     step = Math.max(0.25, W / D.rw);
   }
 
-  const palette = gradientPalette(settings);
+  const gradient = gradientPalette(settings);
+  const { palette, indexedPalette } = colorPlan(settings);
   const toneBandCount = settings.halftone ? 12 : 1;
   const lineWeightMode = settings.lineWeightMode || 'uniform';
   const weightBandCount = lineWeightMode === 'uniform' ? 1 : lineWeightMode === 'index' ? 2 : 8;
@@ -2633,16 +2668,22 @@ function computeContourInstance(
     const { pts, values, segs } = spiralContours(P, mesh, field, previewSettings);
     if (segs.length)
       for (const poly of chain(pts, segs)) {
-        if (settings.gradientEnabled) {
-          for (const chunk of splitPolylineByBands(poly, pts, values, palette.length)) {
+        if (settings.gradientEnabled || indexedPalette.size) {
+          const bandCount = indexedPalette.size ? N : gradient.length;
+          for (const chunk of splitPolylineByBands(poly, pts, values, bandCount)) {
             const indexes = Array.from({ length: chunk.pts.length / 3 }, (_, i) => i);
-            const position = (chunk.band + 0.5) / palette.length;
+            const position = (chunk.band + 0.5) / bandCount;
+            const colorIndex =
+              indexedPalette.get(chunk.band) ??
+              (settings.gradientEnabled
+                ? clamp(Math.floor(position * gradient.length), 0, gradient.length - 1)
+                : 0);
             emitPath(
               indexes,
               chunk.pts,
               vis,
               step,
-              out[chunk.band][settings.halftone ? toneBand(position) : 0][0],
+              out[colorIndex][settings.halftone ? toneBand(position) : 0][0],
             );
           }
         } else if (settings.halftone) {
@@ -2672,9 +2713,11 @@ function computeContourInstance(
             P,
           )
         : pts;
-      const band = settings.gradientEnabled
-        ? clamp(Math.floor(position * palette.length), 0, palette.length - 1)
-        : 0;
+      const band =
+        indexedPalette.get(sliceIndex) ??
+        (settings.gradientEnabled
+          ? clamp(Math.floor(position * gradient.length), 0, gradient.length - 1)
+          : 0);
       const tone = settings.halftone ? toneBand(position) : 0;
       const weight = weightBand(position, sliceIndex);
       for (const poly of polylines)
@@ -2860,11 +2903,17 @@ function computeContourInstance(
     : '';
   const baseArtwork = `${groups}${outline}`;
   const contours = settings.chroma
-    ? chromaticLayers(settings, W, H, pathsWithColor, settings.gradientEnabled ? baseArtwork : '')
+    ? chromaticLayers(
+        settings,
+        W,
+        H,
+        pathsWithColor,
+        settings.gradientEnabled || settings.lineIndexColorEnabled ? baseArtwork : '',
+      )
     : baseArtwork;
   if (settings.chroma) {
-    renderedPaths *= settings.gradientEnabled ? 4 : 3;
-    renderedNodes *= settings.gradientEnabled ? 4 : 3;
+    renderedPaths *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
+    renderedNodes *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
   }
   artwork = contours;
   if (mapAnnotations) {

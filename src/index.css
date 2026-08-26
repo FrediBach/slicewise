@@ -925,6 +925,59 @@ select {
   border: 1px solid var(--line);
   background: #eef0ec;
 }
+.line-index-editor {
+  margin: -1px 0 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: #eef0ec;
+}
+.line-index-editor > .checkbox-control .checkbox-row {
+  font-size: 10px;
+}
+.line-index-panel {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.line-index-editor:not(.enabled) .line-index-panel {
+  display: none;
+}
+.line-index-color {
+  display: grid;
+  grid-template-columns: auto minmax(54px, 1fr) 27px 24px;
+  align-items: center;
+  gap: 6px;
+}
+.line-index-color label {
+  color: #777c76;
+  font-size: 9px;
+}
+.line-index-color input[type='number'] {
+  min-width: 0;
+  height: 25px;
+}
+.line-index-color input[type='color'] {
+  width: 27px;
+  height: 25px;
+  border: 1px solid #c7cac5;
+  background: white;
+  padding: 2px;
+  cursor: pointer;
+}
+.line-index-color button {
+  width: 24px;
+  height: 25px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #d4d7d2;
+  background: white;
+  color: #777c76;
+  cursor: pointer;
+}
+.line-index-color button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 .gradient-editor > .checkbox-control .checkbox-row {
   font-size: 10px;
 }

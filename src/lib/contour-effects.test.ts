@@ -91,6 +91,33 @@ describe('contour output effects', () => {
     expect(result.toolpaths.every((group) => /^#[0-9a-f]{6}$/i.test(group.color))).toBe(true);
   });
 
+  it('overrides selected one-based line indexes with their assigned colours', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        lines: 8,
+        hide: false,
+        sil: false,
+        lineIndexColorEnabled: true,
+        lineIndexColors: [
+          { index: 3, color: '#ff00aa' },
+          { index: 6, color: '#00aa55' },
+        ],
+      },
+      false,
+    );
+
+    expect(result.svg).toContain('stroke="#ff00aa"');
+    expect(result.svg).toContain('stroke="#00aa55"');
+    expect(
+      result.toolpaths.find((group) => group.color === '#ff00aa')?.runs.length,
+    ).toBeGreaterThan(0);
+    expect(
+      result.toolpaths.find((group) => group.color === '#00aa55')?.runs.length,
+    ).toBeGreaterThan(0);
+  });
+
   it('renders chromatic aberration as three screen-blended paths', () => {
     const result = computeContours(
       makeContourMesh(),

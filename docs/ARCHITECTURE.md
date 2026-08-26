@@ -78,6 +78,7 @@ Complex React controls communicate through custom DOM events:
 - `randomlockchange` and `randomlockbulk` coordinate parameter locks.
 - `randomizegroup` sends the randomizable parameter IDs from one accordion to the runtime.
 - `gradientchange` publishes normalized gradient stops.
+- `lineindexcolorschange` publishes one-based contour-index colour overrides.
 - `setgradient` synchronizes generated gradient stops into the React editor.
 - `restoreparameters` restores React-owned control state during undo/redo.
 - `captureparametersnapshot` and `applyparametersnapshot` bridge the React snapshot manager to the runtime-owned parameter and lock state.

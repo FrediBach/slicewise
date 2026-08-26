@@ -7,6 +7,7 @@ import {
   type ContourSettings,
   type ContourToolpathGroup,
   type GradientStop,
+  type LineIndexColor,
 } from './contour-engine';
 import { GEN_DEFAULTS, type GeneratedMesh, type GenerativeParams } from './generativeMesh';
 import { radialColumnDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from './demo-meshes';
@@ -98,6 +99,7 @@ type MorphChangeDetail = {
 type RandomLockDetail = { id?: string; locked?: boolean };
 type RandomizeGroupDetail = { ids?: string[]; title?: string };
 type GradientChangeDetail = { stops: GradientStop[] };
+type LineIndexColorsChangeDetail = { colors: LineIndexColor[] };
 type ApplyParameterSnapshotDetail = {
   parameters?: ContourSettings;
   randomLocks?: string[];
@@ -213,6 +215,8 @@ const state: AppState = {
     { position: 0.8, color: '#3b82f6' },
     { position: 1, color: '#8b5cf6' },
   ],
+  lineIndexColorEnabled: false,
+  lineIndexColors: [{ index: 1, color: '#ef4444' }],
   halftone: false,
   halftoneSize: 2.4,
   halftoneContrast: 75,
@@ -352,6 +356,8 @@ if (typeof document !== 'undefined') {
       gradientEnabled,
       gradientColors,
       gradientStops,
+      lineIndexColorEnabled,
+      lineIndexColors,
       pw,
       ph,
       margin,
@@ -438,6 +444,8 @@ if (typeof document !== 'undefined') {
       gradientEnabled,
       gradientColors,
       gradientStops,
+      lineIndexColorEnabled,
+      lineIndexColors,
       pw,
       ph,
       margin,
@@ -1464,6 +1472,11 @@ if (typeof document !== 'undefined') {
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
     redraw(false);
   });
+  $('lineIndexColorEnabled').addEventListener('change', (e) => {
+    state.lineIndexColorEnabled = inputTarget(e).checked;
+    $('lineIndexColorEditor').classList.toggle('enabled', state.lineIndexColorEnabled);
+    redraw(false);
+  });
   $('blueprint').addEventListener('change', (e) => {
     state.blueprint = inputTarget(e).checked;
     syncBlueprintControls();
@@ -1481,6 +1494,11 @@ if (typeof document !== 'undefined') {
     state.gradientStops = (e as CustomEvent<GradientChangeDetail>).detail.stops;
     scheduleParameterHistory();
     if (state.gradientEnabled) redraw(true);
+  });
+  $('lineIndexColorEditor').addEventListener('lineindexcolorschange', (e) => {
+    state.lineIndexColors = (e as CustomEvent<LineIndexColorsChangeDetail>).detail.colors;
+    scheduleParameterHistory();
+    if (state.lineIndexColorEnabled) redraw(true);
   });
   $('color').addEventListener('input', (e) => {
     const value = inputTarget(e).value;
@@ -1798,6 +1816,7 @@ if (typeof document !== 'undefined') {
     'maskEnabled',
     'maskOutline',
     'gradientEnabled',
+    'lineIndexColorEnabled',
     'halftone',
     'chroma',
     'humanizer',
@@ -1846,6 +1865,10 @@ if (typeof document !== 'undefined') {
     restoringParameters = true;
     clearTimeout(parameterHistoryTimer);
     const restored = structuredClone(snapshot);
+    restored.lineIndexColorEnabled = restored.lineIndexColorEnabled ?? false;
+    restored.lineIndexColors = restored.lineIndexColors?.length
+      ? restored.lineIndexColors
+      : [{ index: 1, color: '#ef4444' }];
     restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
       ? restored.lensFocalLength
       : 50;
@@ -1888,6 +1911,7 @@ if (typeof document !== 'undefined') {
     syncPaperPreset();
     $('customAxis').hidden = state.axis !== 'custom';
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
+    $('lineIndexColorEditor').classList.toggle('enabled', state.lineIndexColorEnabled);
     syncEaseCenter();
     syncSliceConstruction();
     syncSliceLfoControls();
@@ -1907,7 +1931,12 @@ if (typeof document !== 'undefined') {
     }
     document.dispatchEvent(
       new CustomEvent('restoreparameters', {
-        detail: { morphTargetsById, morphTargets2ById, gradientStops: state.gradientStops },
+        detail: {
+          morphTargetsById,
+          morphTargets2ById,
+          gradientStops: state.gradientStops,
+          lineIndexColors: state.lineIndexColors,
+        },
       }),
     );
     redraw(false);
@@ -2179,6 +2208,8 @@ if (typeof document !== 'undefined') {
     }
     $('gradientEnabled').checked = state.gradientEnabled;
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
+    $('lineIndexColorEnabled').checked = state.lineIndexColorEnabled;
+    $('lineIndexColorEditor').classList.toggle('enabled', state.lineIndexColorEnabled);
     randomizePair('gradientColors', 'gradientColors', () => randomInt(3, 10));
     if (state.gradientEnabled && shouldRandomize('gradientColors')) {
       state.gradientStops = createColorGradient(state.color, {

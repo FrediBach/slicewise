@@ -80,4 +80,31 @@ describe('GradientChooser', () => {
     expect(screen.getByLabelText('Stop 1 colour')).toHaveValue('#336699');
     expect(screen.getByRole('button', { name: 'Rainbow' })).not.toHaveClass('active');
   });
+
+  it('adds and restores line-index colour rules', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    document.addEventListener('lineindexcolorschange', onChange);
+    render(<GradientChooser />);
+
+    await user.click(screen.getByRole('button', { name: /add line colour/i }));
+    fireEvent.change(screen.getByLabelText('Line index 2'), { target: { value: '7' } });
+    fireEvent.change(screen.getByLabelText('Line index 2 colour'), {
+      target: { value: '#336699' },
+    });
+
+    await waitFor(() => {
+      const event = onChange.mock.calls.at(-1)?.[0] as CustomEvent;
+      expect(event.detail.colors).toContainEqual({ index: 7, color: '#336699' });
+    });
+
+    document.dispatchEvent(
+      new CustomEvent('restoreparameters', {
+        detail: { lineIndexColors: [{ index: 12, color: '#abcdef' }] },
+      }),
+    );
+    await waitFor(() => expect(screen.getByLabelText('Line index 1')).toHaveValue(12));
+    expect(screen.getByLabelText('Line index 1 colour')).toHaveValue('#abcdef');
+    document.removeEventListener('lineindexcolorschange', onChange);
+  });
 });

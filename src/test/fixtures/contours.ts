@@ -54,6 +54,8 @@ export const contourSettings = {
     { position: 0, color: '#ef4444' },
     { position: 1, color: '#3b82f6' },
   ],
+  lineIndexColorEnabled: false,
+  lineIndexColors: [{ index: 1, color: '#ef4444' }],
   pw: 120,
   ph: 100,
   margin: 10,
