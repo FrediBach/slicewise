@@ -139,6 +139,8 @@ Create stable seams for projection work without changing rendered output.
 
 ## Session 2 — Nonlinear projection and path contract
 
+**Status: completed.**
+
 ### Goal
 
 Make strongly nonlinear warps accurate in previews and plotter output instead of representing curved images as long straight chords.
@@ -155,9 +157,9 @@ Make strongly nonlinear warps accurate in previews and plotter output instead of
 
 ### Decisions to record
 
-- Exact quality-to-error tolerance mapping.
-- Whether the depth buffer also needs adaptively tessellated triangle edges for the strongest warps. If not implemented, document the supported warp envelope and add a conservative limit.
-- Domain-boundary clipping policy for disk and horizon projections.
+- The sheet-space subdivision tolerance is `0.03 × 0.72^(quality − 1)` mm. Maximum depth rises with quality to eight; the per-run node cap rises with quality to a maximum of 8192.
+- The depth buffer continues to rasterize projected source triangles for the currently bounded radial transforms. Its neighboring-pixel visibility tolerance remains in place. Singular or horizon projections must revisit adaptive face tessellation before Session 11 exposes them.
+- Points brought safely to the Klein/Poincaré disk boundary remain drawable and are reported as `clipped-at-domain`. Non-finite and projection-singularity samples are `invalid` and split the emitted run.
 
 ### Tests
 

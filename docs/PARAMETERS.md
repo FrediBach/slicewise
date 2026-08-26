@@ -57,7 +57,7 @@ Canvas gestures provide equivalent controls: drag to change azimuth/elevation, S
 
 For a classic isometric view, set Perspective to 0%, Lens distortion to 0%, Azimuth to 45°, Elevation to 35.3°, and Roll to 0°. Other orthographic azimuth/elevation combinations produce dimetric, trimetric, plan, and elevation views.
 
-The Klein ↔ Poincaré control is a projection warp of the rendered Euclidean mesh, not a replacement of its intrinsic geometry or contour metric. At the 100% endpoint it uses the disk-model relation `p = k / (1 + sqrt(1 − k²))`; projected points beyond the unit-disk boundary are safely brought toward that boundary.
+The Klein ↔ Poincaré control is a projection warp of the rendered Euclidean mesh, not a replacement of its intrinsic geometry or contour metric. At the 100% endpoint it uses the disk-model relation `p = k / (1 + sqrt(1 − k²))`; projected points beyond the unit-disk boundary are safely brought toward that boundary. Nonlinear spans are adaptively subdivided according to Curve quality before visibility and output processing, so SVG and G-code follow the warped curve rather than connecting distant transformed endpoints with straight chords.
 
 ## Contours
 

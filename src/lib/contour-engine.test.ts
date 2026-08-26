@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
 import { computeContours } from './contour-engine';
+import { generateGCode } from './gcode';
 import { cameraBasis, projectMesh } from './projection';
 
 describe('computeContours', () => {
@@ -147,10 +148,57 @@ describe('computeContours', () => {
     expect(result.toolpaths).toHaveLength(1);
     expect(result.toolpaths[0].runs).toHaveLength(1);
     const run = result.toolpaths[0].runs[0];
-    expect(run).toHaveLength(4);
+    expect(run.length).toBeGreaterThanOrEqual(4);
     expect(run[0]).toBeCloseTo(expected.sx[0], 5);
     expect(run[1]).toBeCloseTo(expected.sy[0], 5);
-    expect(run[2]).toBeCloseTo(expected.sx[1], 5);
-    expect(run[3]).toBeCloseTo(expected.sy[1], 5);
+    expect(run.at(-2)).toBeCloseTo(expected.sx[1], 5);
+    expect(run.at(-1)).toBeCloseTo(expected.sy[1], 5);
+  });
+
+  it('retains nonlinear projection curvature in exact SVG and plotter runs', () => {
+    const mesh = {
+      V: new Float32Array([0, -0.8, 0.5, 0, 0.8, 0.5]),
+      T: new Uint32Array(),
+      N: new Float32Array(6),
+      lineArt: { offsets: new Uint32Array([0, 2]) },
+    };
+    const settings = {
+      ...contourSettings,
+      az: 0,
+      el: 0,
+      roll: 0,
+      quality: 10,
+      lensPerspective: 0,
+      lensWarpExponent: 100,
+      lensDistortion: 0,
+      hide: false,
+      sil: false,
+      bg: false,
+    };
+    const neutral = computeContours(mesh, { ...settings, lensWarpExponent: 0 }, false);
+    const exact = computeContours(mesh, settings, false);
+    const quick = computeContours(mesh, { ...settings, previewDetail: 0.5 }, true);
+    const run = exact.toolpaths[0].runs[0];
+    const lastX = Math.round(run.at(-2)! * 100) / 100;
+    const lastY = Math.round(run.at(-1)! * 100) / 100;
+    const gcode = generateGCode(
+      exact.toolpaths,
+      { width: settings.pw, height: settings.ph },
+      {
+        origin: 'rear-left',
+        clipToArtboard: false,
+        optimizeTravel: false,
+      },
+    );
+    const gcodeLastX = Math.round(run.at(-2)! * 1000) / 1000;
+    const gcodeLastY = Math.round(run.at(-1)! * 1000) / 1000;
+
+    expect(exact.nodes).toBeGreaterThan(neutral.nodes);
+    expect(quick.nodes).toBeLessThanOrEqual(exact.nodes);
+    expect(run.length).toBeGreaterThan(4);
+    expect(exact.svg).toContain(`${lastX} ${lastY}" stroke=`);
+    expect(gcode).toContain(`G1 X${gcodeLastX} Y${gcodeLastY}`);
+    expect(exact.svg).not.toMatch(/NaN|Infinity/);
+    expect(run.every(Number.isFinite)).toBe(true);
   });
 });

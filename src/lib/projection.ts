@@ -37,6 +37,37 @@ export interface LensSettings {
   lensAmount?: number;
 }
 
+export type ProjectionPointStatus = 'valid' | 'clipped-at-domain' | 'invalid';
+
+export interface ProjectedPointResult {
+  status: ProjectionPointStatus;
+  /** Sheet X, sheet Y, and unchanged camera depth. */
+  point: Vec3;
+}
+
+export interface AdaptiveProjectionOptions {
+  /** Maximum projected chord error in sheet units. */
+  tolerance: number;
+  maxDepth?: number;
+  maxNodes?: number;
+  /** Optional paired geometry, such as exploded contour points. */
+  outputPoints?: NumericArray;
+}
+
+export interface AdaptiveProjectedRun {
+  /** Coordinates used for visibility: sheet X, sheet Y, camera depth. */
+  points: number[];
+  /** Coordinates emitted to SVG/G-code, sampled at identical parameters. */
+  outputPoints: number[];
+}
+
+export interface AdaptiveProjectionResult {
+  runs: AdaptiveProjectedRun[];
+  clippedAtDomain: boolean;
+  invalidSamples: number;
+  truncated: boolean;
+}
+
 const clamp = (value: number, minimum: number, maximum: number): number =>
   Math.max(minimum, Math.min(maximum, value));
 
@@ -115,14 +146,205 @@ export function projectCameraPoint(
   warpExponent: number,
   distortion: number,
 ): Vec2 {
+  const result = projectCameraPointResult(
+    x,
+    y,
+    depth,
+    scale,
+    ox,
+    oy,
+    focalLength,
+    perspectiveAmount,
+    warpExponent,
+    distortion,
+  );
+  return [result.point[0], result.point[1]];
+}
+
+export function projectCameraPointResult(
+  x: number,
+  y: number,
+  depth: number,
+  scale: number,
+  ox: number,
+  oy: number,
+  focalLength: number,
+  perspectiveAmount: number,
+  warpExponent: number,
+  distortion: number,
+): ProjectedPointResult {
+  if (
+    ![x, y, depth, scale, ox, oy, focalLength, perspectiveAmount, warpExponent, distortion].every(
+      Number.isFinite,
+    )
+  )
+    return { status: 'invalid', point: [NaN, NaN, depth] };
   // The normalized mesh has radius 1. This maps a full-frame-style focal
   // length to a camera distance that always remains outside the model.
   const cameraDistance = 1.25 + focalLength / 24;
-  const physicalPerspective = cameraDistance / (cameraDistance - depth);
-  const perspective = 1 + (physicalPerspective - 1) * clamp(perspectiveAmount / 100, 0, 1);
-  const hyperbolic = warpKleinPoincare(x * perspective, y * perspective, warpExponent);
+  const perspectiveStrength = clamp(perspectiveAmount / 100, 0, 1);
+  const denominator = cameraDistance - depth;
+  if (perspectiveStrength > 0 && denominator <= 1e-12)
+    return { status: 'invalid', point: [NaN, NaN, depth] };
+  const physicalPerspective = perspectiveStrength ? cameraDistance / denominator : 1;
+  const perspective = 1 + (physicalPerspective - 1) * perspectiveStrength;
+  const perspectiveX = x * perspective,
+    perspectiveY = y * perspective;
+  const clippedAtDomain = warpExponent > 0 && Math.hypot(perspectiveX, perspectiveY) >= 1;
+  const hyperbolic = warpKleinPoincare(perspectiveX, perspectiveY, warpExponent);
   const warped = distortLens(hyperbolic[0], hyperbolic[1], distortion);
-  return [ox + warped[0] * scale, oy - warped[1] * scale];
+  const point: Vec3 = [ox + warped[0] * scale, oy - warped[1] * scale, depth];
+  return {
+    status: point.every(Number.isFinite)
+      ? clippedAtDomain
+        ? 'clipped-at-domain'
+        : 'valid'
+      : 'invalid',
+    point,
+  };
+}
+
+export function projectWorldPoint(
+  x: number,
+  y: number,
+  z: number,
+  projection: Projection,
+): ProjectedPointResult {
+  const { r, u, f } = projection;
+  const depth = x * f[0] + y * f[1] + z * f[2];
+  return projectCameraPointResult(
+    x * r[0] + y * r[1] + z * r[2],
+    x * u[0] + y * u[1] + z * u[2],
+    depth,
+    projection.scale,
+    projection.ox,
+    projection.oy,
+    projection.lensFocalLength,
+    projection.lensPerspective,
+    projection.lensWarpExponent,
+    projection.lensDistortion,
+  );
+}
+
+const pointToChordDistance = (point: Vec3, start: Vec3, end: Vec3): number => {
+  const dx = end[0] - start[0],
+    dy = end[1] - start[1];
+  const length2 = dx * dx + dy * dy;
+  if (length2 < 1e-18) return Math.hypot(point[0] - start[0], point[1] - start[1]);
+  const t = clamp(((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length2, 0, 1);
+  return Math.hypot(point[0] - (start[0] + dx * t), point[1] - (start[1] + dy * t));
+};
+
+interface AdaptiveSample {
+  world: Vec3;
+  outputWorld: Vec3;
+  projected: ProjectedPointResult;
+  outputProjected: ProjectedPointResult;
+}
+
+/**
+ * Projects an indexed world-space polyline and inserts samples wherever a
+ * nonlinear projection bends farther from its sheet-space chord than allowed.
+ * Invalid samples split runs; domain-clamped samples remain drawable and are
+ * reported to the caller. Work is bounded by both recursion depth and nodes.
+ */
+export function projectPolylineAdaptive(
+  points: NumericArray,
+  polyline: NumericArray,
+  projection: Projection,
+  options: AdaptiveProjectionOptions,
+): AdaptiveProjectionResult {
+  const tolerance = Math.max(1e-6, Number(options.tolerance) || 1e-6);
+  const maxDepth = Math.round(clamp(options.maxDepth ?? 8, 0, 12));
+  const maxNodes = Math.max(2, Math.round(clamp(options.maxNodes ?? 8192, 2, 65536)));
+  const outputPoints = options.outputPoints ?? points;
+  let clippedAtDomain = false,
+    invalidSamples = 0,
+    truncated = false;
+
+  const sample = (world: Vec3, outputWorld: Vec3): AdaptiveSample => {
+    const projected = projectWorldPoint(world[0], world[1], world[2], projection);
+    const outputProjected =
+      world[0] === outputWorld[0] && world[1] === outputWorld[1] && world[2] === outputWorld[2]
+        ? projected
+        : projectWorldPoint(outputWorld[0], outputWorld[1], outputWorld[2], projection);
+    if (projected.status === 'clipped-at-domain' || outputProjected.status === 'clipped-at-domain')
+      clippedAtDomain = true;
+    if (projected.status === 'invalid' || outputProjected.status === 'invalid') invalidSamples++;
+    return { world, outputWorld, projected, outputProjected };
+  };
+  const pointAt = (source: NumericArray, index: number): Vec3 => {
+    const offset = index * 3;
+    return [source[offset], source[offset + 1], source[offset + 2]];
+  };
+  const midpoint = (a: Vec3, b: Vec3): Vec3 => [
+    (a[0] + b[0]) * 0.5,
+    (a[1] + b[1]) * 0.5,
+    (a[2] + b[2]) * 0.5,
+  ];
+  const samples: AdaptiveSample[] = [];
+  const appendSegment = (a: AdaptiveSample, b: AdaptiveSample, depth: number): void => {
+    if (samples.length >= maxNodes - 1) {
+      truncated = true;
+      return;
+    }
+    const middle = sample(midpoint(a.world, b.world), midpoint(a.outputWorld, b.outputWorld));
+    const invalid =
+      a.projected.status === 'invalid' ||
+      b.projected.status === 'invalid' ||
+      middle.projected.status === 'invalid' ||
+      a.outputProjected.status === 'invalid' ||
+      b.outputProjected.status === 'invalid' ||
+      middle.outputProjected.status === 'invalid';
+    const error = invalid
+      ? Infinity
+      : Math.max(
+          pointToChordDistance(middle.projected.point, a.projected.point, b.projected.point),
+          pointToChordDistance(
+            middle.outputProjected.point,
+            a.outputProjected.point,
+            b.outputProjected.point,
+          ),
+        );
+    if (depth < maxDepth && samples.length < maxNodes - 1 && (invalid || error > tolerance)) {
+      appendSegment(a, middle, depth + 1);
+      appendSegment(middle, b, depth + 1);
+      return;
+    }
+    if ((invalid || error > tolerance) && depth >= maxDepth) truncated = true;
+    samples.push(b);
+  };
+
+  if (polyline.length >= 2) {
+    const firstIndex = polyline[0];
+    let previous = sample(pointAt(points, firstIndex), pointAt(outputPoints, firstIndex));
+    samples.push(previous);
+    for (let index = 1; index < polyline.length; index++) {
+      const vertex = polyline[index];
+      const next = sample(pointAt(points, vertex), pointAt(outputPoints, vertex));
+      appendSegment(previous, next, 0);
+      previous = next;
+      if (samples.length >= maxNodes - 1 && index + 1 < polyline.length) {
+        truncated = true;
+        break;
+      }
+    }
+  }
+
+  const runs: AdaptiveProjectedRun[] = [];
+  let run: AdaptiveProjectedRun | null = null;
+  for (const current of samples) {
+    if (current.projected.status === 'invalid' || current.outputProjected.status === 'invalid') {
+      if (run && run.points.length >= 6) runs.push(run);
+      run = null;
+      continue;
+    }
+    if (!run) run = { points: [], outputPoints: [] };
+    run.points.push(...current.projected.point);
+    run.outputPoints.push(...current.outputProjected.point);
+  }
+  if (run && run.points.length >= 6) runs.push(run);
+  return { runs, clippedAtDomain, invalidSamples, truncated };
 }
 
 export function projectMesh(
@@ -190,40 +412,4 @@ export function projectMesh(
     lensWarpExponent,
     lensDistortion,
   };
-}
-
-export function projectWorldPoints(points: NumericArray, projection: Projection): number[] {
-  const projected: number[] = [];
-  const {
-    r,
-    u,
-    f,
-    scale,
-    ox,
-    oy,
-    lensFocalLength,
-    lensPerspective,
-    lensWarpExponent,
-    lensDistortion,
-  } = projection;
-  for (let i = 0; i < points.length; i += 3) {
-    const x = points[i],
-      y = points[i + 1],
-      z = points[i + 2];
-    const depth = x * f[0] + y * f[1] + z * f[2];
-    const screen = projectCameraPoint(
-      x * r[0] + y * r[1] + z * r[2],
-      x * u[0] + y * u[1] + z * u[2],
-      depth,
-      scale,
-      ox,
-      oy,
-      lensFocalLength,
-      lensPerspective,
-      lensWarpExponent,
-      lensDistortion,
-    );
-    projected.push(screen[0], screen[1], depth);
-  }
-  return projected;
 }

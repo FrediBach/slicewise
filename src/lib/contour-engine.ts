@@ -6,7 +6,7 @@ import { previewCurveQuality, previewLineCount, previewMorphSteps } from './prev
 import {
   cameraBasis,
   projectMesh as project,
-  projectWorldPoints,
+  projectPolylineAdaptive,
   resolveLens,
   type Projection,
 } from './projection';
@@ -1014,6 +1014,32 @@ function emitPath(
   healShortPathGaps(out, firstRun, healGap, poly.length > 2 && poly[0] === poly[poly.length - 1]);
 }
 
+function emitProjectedPath(
+  poly: NumericArray,
+  worldPoints: NumericArray,
+  projection: Projection,
+  quality: number,
+  visible: VisibilityTest | null,
+  step: number,
+  out: Polyline[],
+  healGap = 0,
+  outputWorldPoints: NumericArray = worldPoints,
+): void {
+  const tolerance = 0.03 * Math.pow(0.72, quality - 1);
+  const projected = projectPolylineAdaptive(worldPoints, poly, projection, {
+    tolerance,
+    maxDepth: Math.min(8, 3 + Math.ceil(quality / 2)),
+    maxNodes: Math.min(8192, Math.max(1024, quality * 1024)),
+    outputPoints: outputWorldPoints,
+  });
+  const sourceClosed = poly.length > 2 && poly[0] === poly[poly.length - 1];
+  for (const run of projected.runs) {
+    const indexes = Array.from({ length: run.points.length / 3 }, (_, index) => index);
+    if (sourceClosed && projected.runs.length === 1) indexes[indexes.length - 1] = 0;
+    emitPath(indexes, run.points, visible, step, out, healGap, run.outputPoints);
+  }
+}
+
 function splitPolylineByBands(
   poly: NumericArray,
   pts: NumericArray,
@@ -2003,8 +2029,8 @@ function isConvexMesh(mesh: ContourMesh): boolean {
 }
 
 function silhouetteEdges(mesh: ContourMesh, P: Projection): PointSegments {
-  const { T } = mesh;
-  const { sx, sy, sd } = P;
+  const { T, V } = mesh;
+  const { sx, sy } = P;
   const facing = new Int8Array(T.length / 3);
   for (let i = 0, t = 0; i < T.length; i += 3, t++) {
     const a = T[i],
@@ -2033,7 +2059,8 @@ function silhouetteEdges(mesh: ContourMesh, P: Projection): PointSegments {
     if (id === undefined) {
       id = pts.length / 3;
       seen.set(v, id);
-      pts.push(sx[v], sy[v], sd[v]);
+      const offset = v * 3;
+      pts.push(V[offset], V[offset + 1], V[offset + 2]);
     }
     return id;
   };
@@ -2109,7 +2136,6 @@ function inverseLineGapEase(value: number, settings: ContourSettings): number {
 }
 
 function spiralContours(
-  P: Projection,
   mesh: ContourMesh,
   field: ScalarField,
   settings: ContourSettings,
@@ -2203,10 +2229,12 @@ function spiralContours(
     let id = pointIndex.get(key);
     if (id !== undefined) return id;
     id = pts.length / 3;
+    const ai = a * 3,
+      bi = b * 3;
     pts.push(
-      P.sx[a] + (P.sx[b] - P.sx[a]) * t,
-      P.sy[a] + (P.sy[b] - P.sy[a]) * t,
-      P.sd[a] + (P.sd[b] - P.sd[a]) * t,
+      V[ai] + (V[bi] - V[ai]) * t,
+      V[ai + 1] + (V[bi + 1] - V[ai + 1]) * t,
+      V[ai + 2] + (V[bi + 2] - V[ai + 2]) * t,
     );
     values.push(gradientValue[a] + (gradientValue[b] - gradientValue[a]) * t);
     pointIndex.set(key, id);
@@ -2275,29 +2303,44 @@ function computeLineArtInstance(
   const pathDataByColor = palette.map(() => '');
   const runsByColor = palette.map((): Polyline[] => []);
   const runs: Polyline[] = [];
-  const sourceRuns: Polyline[] = [];
+  const sourceRuns: Array<{ run: Polyline; sourceIndex: number }> = [];
   for (let runIndex = 0; runIndex + 1 < offsets.length; runIndex++) {
-    const raw: Polyline = [];
+    const polyline: number[] = [];
     for (let point = offsets[runIndex]; point < offsets[runIndex + 1]; point++)
-      raw.push(P.sx[point], P.sy[point]);
-    if (raw.length >= 4) sourceRuns.push(raw);
+      polyline.push(point);
+    const projected = projectPolylineAdaptive(mesh.V, polyline, P, {
+      tolerance: tolerance * 0.5,
+      maxDepth: Math.min(8, 3 + Math.ceil(quality / 2)),
+      maxNodes: Math.min(8192, Math.max(1024, quality * 1024)),
+    });
+    for (const projectedRun of projected.runs) {
+      const raw: Polyline = [];
+      for (let point = 0; point < projectedRun.outputPoints.length; point += 3)
+        raw.push(projectedRun.outputPoints[point], projectedRun.outputPoints[point + 1]);
+      if (raw.length >= 4) sourceRuns.push({ run: raw, sourceIndex: runIndex });
+    }
   }
-  const yarnRuns = settings.yarnCurl ? selectYarnRuns(sourceRuns, settings.yarnCutPercent) : null;
+  const yarnRuns = settings.yarnCurl
+    ? selectYarnRuns(
+        sourceRuns.map(({ run }) => run),
+        settings.yarnCutPercent,
+      )
+    : null;
   let pathData = '',
     paths = 0,
     nodes = 0,
     salt = 0;
   for (let runIndex = 0; runIndex < sourceRuns.length; runIndex++) {
-    const raw = sourceRuns[runIndex];
+    const { run: raw, sourceIndex } = sourceRuns[runIndex];
     const simplified = simplify(raw, tolerance);
     const styled = settings.humanizer
       ? humanizeRun(simplified.run, settings.humanizerAmount, salt++)
       : simplified.run;
     const colorIndex =
-      indexedPalette.get(runIndex) ??
+      indexedPalette.get(sourceIndex) ??
       (settings.gradientEnabled
         ? clamp(
-            Math.floor((runIndex / Math.max(1, offsets.length - 2)) * gradientCount),
+            Math.floor((sourceIndex / Math.max(1, offsets.length - 2)) * gradientCount),
             0,
             gradientCount - 1,
           )
@@ -2512,7 +2555,7 @@ function computeContourInstance(
     lineWeightMode === 'uniform'
   ) {
     const previewSettings = quick && N !== settings.lines ? { ...settings, lines: N } : settings;
-    const { pts, values, segs } = spiralContours(P, mesh, field, previewSettings);
+    const { pts, values, segs } = spiralContours(mesh, field, previewSettings);
     if (segs.length)
       for (const poly of chain(pts, segs)) {
         if (settings.gradientEnabled || indexedPalette.size) {
@@ -2525,9 +2568,11 @@ function computeContourInstance(
               (settings.gradientEnabled
                 ? clamp(Math.floor(position * gradient.length), 0, gradient.length - 1)
                 : 0);
-            emitPath(
+            emitProjectedPath(
               indexes,
               chunk.pts,
+              P,
+              quality,
               vis,
               step,
               out[colorIndex][settings.halftone ? toneBand(position) : 0][0],
@@ -2537,29 +2582,19 @@ function computeContourInstance(
           const tones = Float32Array.from(values, toneValue);
           for (const chunk of splitPolylineByBands(poly, pts, tones, toneBandCount)) {
             const indexes = Array.from({ length: chunk.pts.length / 3 }, (_, i) => i);
-            emitPath(indexes, chunk.pts, vis, step, out[0][chunk.band][0]);
+            emitProjectedPath(indexes, chunk.pts, P, quality, vis, step, out[0][chunk.band][0]);
           }
-        } else emitPath(poly, pts, vis, step, out[0][0][0]);
+        } else emitProjectedPath(poly, pts, P, quality, vis, step, out[0][0][0]);
       }
   } else {
     const slices = contourSlices(mesh, settings, field, N, curveStrength);
     for (let sliceIndex = 0; sliceIndex < slices.length; sliceIndex++) {
       const { position, direction, worldPoints, polylines } = slices[sliceIndex];
       if (!polylines.length) continue;
-      const pts = projectWorldPoints(worldPoints, P);
       const explodeAmount = clamp(Number(settings.explodeAmount) || 0, 0, 300);
-      const outputPts = explodeAmount
-        ? projectWorldPoints(
-            explodeSlicePoints(
-              worldPoints,
-              direction,
-              position,
-              field.max - field.min,
-              explodeAmount,
-            ),
-            P,
-          )
-        : pts;
+      const outputWorldPoints = explodeAmount
+        ? explodeSlicePoints(worldPoints, direction, position, field.max - field.min, explodeAmount)
+        : worldPoints;
       const band =
         indexedPalette.get(sliceIndex) ??
         (settings.gradientEnabled
@@ -2568,7 +2603,17 @@ function computeContourInstance(
       const tone = settings.halftone ? toneBand(position) : 0;
       const weight = weightBand(position, sliceIndex);
       for (const poly of polylines)
-        emitPath(poly, pts, vis, step, out[band][tone][weight], 0, outputPts);
+        emitProjectedPath(
+          poly,
+          worldPoints,
+          P,
+          quality,
+          vis,
+          step,
+          out[band][tone][weight],
+          0,
+          outputWorldPoints,
+        );
     }
   }
   if (settings.sil) {
@@ -2579,7 +2624,7 @@ function computeContourInstance(
       // stays intact even when edge-on triangles collapse onto the depth cliff.
       const outlineVisibility = visOutline && !isConvexMesh(mesh) ? visOutline : null;
       for (const poly of chain(pts, segs))
-        emitPath(poly, pts, outlineVisibility, step, outlineOut, step * 2.5);
+        emitProjectedPath(poly, pts, P, quality, outlineVisibility, step, outlineOut, step * 2.5);
     }
   }
 
