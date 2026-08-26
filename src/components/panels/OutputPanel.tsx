@@ -65,6 +65,7 @@ export function AppearancePanel() {
             step="1"
             value="5"
             disabled
+            disabledReason="Choose Index contours or Thickness wave to edit the interval."
           />
           <ValueControl
             id="lineWeightAmount"
@@ -75,6 +76,7 @@ export function AppearancePanel() {
             value="100"
             unit="%"
             disabled
+            disabledReason="Choose a line-weight variation mode to edit the variation amount."
           />
         </div>
         <InkColorControl />
@@ -187,6 +189,7 @@ export function EffectsPanel() {
             value="2.4"
             unit="mm"
             disabled
+            disabledReason="Turn on Halftone stroke to edit this parameter."
           />
           <ValueControl
             id="halftoneContrast"
@@ -197,6 +200,7 @@ export function EffectsPanel() {
             value="75"
             unit="%"
             disabled
+            disabledReason="Turn on Halftone stroke to edit this parameter."
           />
           <ValueControl
             id="halftoneCycles"
@@ -206,6 +210,7 @@ export function EffectsPanel() {
             step="1"
             value="2"
             disabled
+            disabledReason="Turn on Halftone stroke to edit this parameter."
           />
         </div>
         <Checkbox id="chroma" randomizable>
@@ -221,6 +226,7 @@ export function EffectsPanel() {
             value="1.5"
             unit="mm"
             disabled
+            disabledReason="Turn on Chromatic aberration to edit the RGB split."
           />
         </div>
         <Checkbox id="humanizer" randomizable>
@@ -236,6 +242,7 @@ export function EffectsPanel() {
             value="30"
             unit="%"
             disabled
+            disabledReason="Turn on Humanizer to edit the human touch amount."
           />
           <p className="gradient-note blueprint-note">
             Adds stable, small hand-drawn variations to contour lines and plotter paths.
@@ -254,6 +261,7 @@ export function EffectsPanel() {
             value="15"
             unit="%"
             disabled
+            disabledReason="Turn on Yarn cut & curl to edit this parameter."
           />
           <ValueControl
             id="yarnCurlSize"
@@ -264,6 +272,7 @@ export function EffectsPanel() {
             value="100"
             unit="%"
             disabled
+            disabledReason="Turn on Yarn cut & curl to edit this parameter."
           />
           <p className="gradient-note blueprint-note">
             Opens random contour lines and curls their new ends in stable, organic directions.
@@ -278,6 +287,7 @@ export function EffectsPanel() {
             label="Document stock"
             defaultValue="blue"
             disabled
+            disabledReason="Turn on Technical blueprint to choose the document stock."
             rowClassName="select-row"
             controlId="blueprintStyleControl"
           >

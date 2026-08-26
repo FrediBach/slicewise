@@ -212,6 +212,7 @@ export function SourcePanel() {
               value="25"
               unit="%"
               disabled
+              disabledReason="Turn on Round extruded edges to edit roundness."
               morphable={false}
             />
             <p className="gradient-note">

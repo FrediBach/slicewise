@@ -26,7 +26,7 @@ import {
   previewMorphSteps,
 } from './preview-detail';
 import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
-import { setDisabledPair } from './control-state';
+import { setDisabled, setDisabledPair } from './control-state';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -290,8 +290,17 @@ const state: AppState = {
 const dynamicState = state as unknown as Record<string, unknown>;
 
 if (typeof document !== 'undefined') {
-  function setControlPairDisabled(id: string, disabled: boolean): void {
-    setDisabledPair($<HTMLInputElement>(id), $<HTMLInputElement>(id + 'N'), disabled);
+  function setControlPairDisabled(id: string, disabled: boolean, reason = ''): void {
+    setDisabledPair($<HTMLInputElement>(id), $<HTMLInputElement>(id + 'N'), disabled, reason);
+    const row = document.getElementById(id + 'Control');
+    if (row) row.title = disabled ? reason : '';
+  }
+
+  function setSingleControlDisabled(id: string, disabled: boolean, reason = ''): void {
+    const control = $<HTMLInputElement | HTMLSelectElement>(id);
+    setDisabled(control, disabled, reason);
+    const row = control.closest<HTMLElement>('.control-row, .checkbox-control');
+    if (row) row.title = disabled ? reason : '';
   }
 
   function fitBed(W: number, H: number): void {
@@ -1250,7 +1259,11 @@ if (typeof document !== 'undefined') {
     );
     const inversionEnabled = state.projectionWarpMode === 'inversion';
     for (const id of ['lensWarpExponent']) {
-      setControlPairDisabled(id, !kleinEnabled);
+      setControlPairDisabled(
+        id,
+        !kleinEnabled,
+        'Select Klein ↔ Poincaré as the projection warp to edit this parameter.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', !kleinEnabled);
     }
     for (const id of [
@@ -1259,11 +1272,19 @@ if (typeof document !== 'undefined') {
       'mobiusRotation',
       'mobiusStrength',
     ]) {
-      setControlPairDisabled(id, !mobiusEnabled);
+      setControlPairDisabled(
+        id,
+        !mobiusEnabled,
+        'Select Hyperbolic Möbius as the projection warp to edit this parameter.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', !mobiusEnabled);
     }
     for (const id of ['sphericalStrength']) {
-      setControlPairDisabled(id, !sphericalEnabled);
+      setControlPairDisabled(
+        id,
+        !sphericalEnabled,
+        'Select a spherical projection warp to edit this parameter.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', !sphericalEnabled);
     }
     for (const id of [
@@ -1272,7 +1293,11 @@ if (typeof document !== 'undefined') {
       'inversionRadius',
       'inversionStrength',
     ]) {
-      setControlPairDisabled(id, !inversionEnabled);
+      setControlPairDisabled(
+        id,
+        !inversionEnabled,
+        'Select Circle inversion as the projection warp to edit this parameter.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', !inversionEnabled);
     }
   }
@@ -1344,11 +1369,25 @@ if (typeof document !== 'undefined') {
   });
   function syncMorphControls(): void {
     $('morphSettings').classList.toggle('is-disabled', !state.morphEnabled);
-    setControlPairDisabled('morphSteps', !state.morphEnabled);
-    $('morphSecondEnabled').disabled = !state.morphEnabled;
+    setControlPairDisabled(
+      'morphSteps',
+      !state.morphEnabled,
+      'Enable morph instances to edit the X step count.',
+    );
+    setSingleControlDisabled(
+      'morphSecondEnabled',
+      !state.morphEnabled,
+      'Enable morph instances before adding a Y dimension.',
+    );
     const secondActive = state.morphEnabled && state.morphSecondEnabled;
     $('morphSecondSettings').classList.toggle('is-disabled', !secondActive);
-    setControlPairDisabled('morphStepsY', !secondActive);
+    setControlPairDisabled(
+      'morphStepsY',
+      !secondActive,
+      state.morphEnabled
+        ? 'Add a Y dimension to edit the Y step count.'
+        : 'Enable morph instances and add a Y dimension to edit the Y step count.',
+    );
   }
   $('morphEnabled').addEventListener('change', (event) => {
     state.morphEnabled = inputTarget(event).checked;
@@ -1424,7 +1463,11 @@ if (typeof document !== 'undefined') {
     $('svgExtrusionControls').hidden = centerline;
     $('svgCenterlineControls').hidden = !centerline;
     const roundnessActive = active && !centerline && state.svgRounded;
-    setControlPairDisabled('svgRoundness', !roundnessActive);
+    setControlPairDisabled(
+      'svgRoundness',
+      !roundnessActive,
+      'Turn on Round extruded edges to edit roundness.',
+    );
     $('svgRoundnessControl').classList.toggle('is-disabled', !roundnessActive);
   }
   function syncSourceControls(): void {
@@ -1494,7 +1537,11 @@ if (typeof document !== 'undefined') {
     updateExportSize();
   });
   function syncTravelOptimization(): void {
-    setControlPairDisabled('mergeTolerance', !state.optimizeTravel);
+    setControlPairDisabled(
+      'mergeTolerance',
+      !state.optimizeTravel,
+      'Turn on Optimize travel to edit the merge tolerance.',
+    );
     $('mergeToleranceControl').classList.toggle('is-disabled', !state.optimizeTravel);
   }
   $('optimizeTravel').addEventListener('change', (event) => {
@@ -1525,15 +1572,31 @@ if (typeof document !== 'undefined') {
     $('curvatureControls').hidden = state.axis !== 'curvature';
     $('geodesicSecondSeedControls').hidden = !multiSourceGeodesic();
     for (const id of ['divergence']) {
-      setControlPairDisabled(id, nonPlanar);
+      setControlPairDisabled(
+        id,
+        nonPlanar,
+        'Divergence is available only with planar slice fields.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', nonPlanar);
     }
-    $('sliceLfo').disabled = nonPlanar;
+    setSingleControlDisabled(
+      'sliceLfo',
+      nonPlanar,
+      'Slice-plane modulation is available only with planar slice fields.',
+    );
     $('sliceLfo').closest('.checkbox-control')?.classList.toggle('is-disabled', nonPlanar);
-    setControlPairDisabled('explodeAmount', intrinsic);
+    setControlPairDisabled(
+      'explodeAmount',
+      intrinsic,
+      'Slice explode is unavailable for intrinsic mesh fields because they do not provide a reliable local gradient.',
+    );
     $('explodeAmountControl').classList.toggle('is-disabled', intrinsic);
     const voronoi = state.axis === 'geodesic' && state.geodesicMode === 'voronoi';
-    setControlPairDisabled('lines', voronoi);
+    setControlPairDisabled(
+      'lines',
+      voronoi,
+      'Geodesic Voronoi mode extracts one boundary, so line count does not apply.',
+    );
     $('linesControl').classList.toggle('is-disabled', voronoi);
     syncEaseCenter();
     syncSliceLfoControls();
@@ -1559,15 +1622,22 @@ if (typeof document !== 'undefined') {
   });
   function syncEaseCenter(): void {
     const spacingDisabled = fixedGeodesicSpacing();
-    $('gapEase').disabled = spacingDisabled;
+    const spacingReason = 'Geodesic difference and Voronoi modes define their own level spacing.';
+    setSingleControlDisabled('gapEase', spacingDisabled, spacingReason);
     $('gapEaseControl').classList.toggle('is-disabled', spacingDisabled);
     for (const id of ['easeStrength', 'easeCycles']) {
-      setControlPairDisabled(id, spacingDisabled);
+      setControlPairDisabled(id, spacingDisabled, spacingReason);
       $(id + 'Control').classList.toggle('is-disabled', spacingDisabled);
     }
     const centerEnabled =
       !spacingDisabled && (state.gapEase.endsWith('-in-out') || state.gapEase.endsWith('-out-in'));
-    setControlPairDisabled('easeCenter', !centerEnabled);
+    setControlPairDisabled(
+      'easeCenter',
+      !centerEnabled,
+      spacingDisabled
+        ? spacingReason
+        : 'Choose an in & out or out & in gap easing mode to edit the easing centre.',
+    );
     $('easeCenterControl').classList.toggle('is-disabled', !centerEnabled);
   }
   $('gapEase').addEventListener('change', (e) => {
@@ -1576,39 +1646,55 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   function syncSliceConstruction(): void {
-    const spiralBlocked =
-      nonPlanarSliceField() ||
-      state.divergence > 0 ||
-      state.sliceLfo ||
-      state.explodeAmount > 0 ||
-      state.lineWeightMode !== 'uniform';
+    const spiralBlockers = [
+      nonPlanarSliceField() ? 'the slice field is non-planar' : '',
+      state.divergence > 0 ? 'divergence is above 0°' : '',
+      state.sliceLfo ? 'slice-plane modulation is on' : '',
+      state.explodeAmount > 0 ? 'slice explode is above 0%' : '',
+      state.lineWeightMode !== 'uniform' ? 'line-weight variation is not uniform' : '',
+    ].filter(Boolean);
+    const spiralBlocked = spiralBlockers.length > 0;
     if (spiralBlocked && state.spiral) {
       state.spiral = false;
       $('spiral').checked = false;
     }
-    $('spiral').disabled = spiralBlocked;
+    setSingleControlDisabled(
+      'spiral',
+      spiralBlocked,
+      `Continuous spiral is disabled because ${spiralBlockers.join(', ')}.`,
+    );
     $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', spiralBlocked);
   }
   function syncSliceLfoControls(): void {
     const disabled = nonPlanarSliceField() || !state.sliceLfo;
+    const disabledReason = nonPlanarSliceField()
+      ? 'Slice-plane modulation is available only with planar slice fields.'
+      : 'Turn on Modulate slice planes to edit this parameter.';
     for (const id of ['sliceLfoAmplitude', 'sliceLfoCycles', 'sliceLfoAngle', 'sliceLfoPhase']) {
-      setControlPairDisabled(id, disabled);
+      setControlPairDisabled(id, disabled, disabledReason);
       $(id + 'Control').classList.toggle('is-disabled', disabled);
     }
-    $('sliceLfoWaveform').disabled = disabled;
+    setSingleControlDisabled('sliceLfoWaveform', disabled, disabledReason);
     $('sliceLfoWaveformControl').classList.toggle('is-disabled', disabled);
-    $('sliceLfoModulation').disabled = disabled;
+    setSingleControlDisabled('sliceLfoModulation', disabled, disabledReason);
     $('sliceLfoModulation').closest('.checkbox-control')?.classList.toggle('is-disabled', disabled);
     const modulationDisabled = disabled || !state.sliceLfoModulation;
+    const modulationDisabledReason = disabled
+      ? disabledReason
+      : 'Turn on Modulate LFO to edit this parameter.';
     for (const id of [
       'sliceLfoModulationDepth',
       'sliceLfoModulationCycles',
       'sliceLfoModulationPhase',
     ]) {
-      setControlPairDisabled(id, modulationDisabled);
+      setControlPairDisabled(id, modulationDisabled, modulationDisabledReason);
       $(id + 'Control').classList.toggle('is-disabled', modulationDisabled);
     }
-    $('sliceLfoModulationMode').disabled = modulationDisabled;
+    setSingleControlDisabled(
+      'sliceLfoModulationMode',
+      modulationDisabled,
+      modulationDisabledReason,
+    );
     $('sliceLfoModulationModeControl').classList.toggle('is-disabled', modulationDisabled);
   }
   $('sliceLfo').addEventListener('change', (event) => {
@@ -1642,7 +1728,13 @@ if (typeof document !== 'undefined') {
     const intervalEnabled = state.lineWeightMode === 'index' || state.lineWeightMode === 'wave';
     for (const id of ['lineWeightInterval', 'lineWeightAmount']) {
       const controlEnabled = id === 'lineWeightInterval' ? intervalEnabled : enabled;
-      setControlPairDisabled(id, !controlEnabled);
+      setControlPairDisabled(
+        id,
+        !controlEnabled,
+        id === 'lineWeightInterval'
+          ? 'Choose Index contours or Thickness wave to edit the interval.'
+          : 'Choose a line-weight variation mode to edit the variation amount.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', !controlEnabled);
     }
   }
@@ -1685,12 +1777,13 @@ if (typeof document !== 'undefined') {
     'maskLfo2Waveform',
   ] as const;
   function syncMaskControls(): void {
-    $('maskOutline').disabled = !state.maskEnabled;
+    const reason = 'Turn on Clip to generative shape to edit this parameter.';
+    setSingleControlDisabled('maskOutline', !state.maskEnabled, reason);
     $('maskOutline')
       .closest('.checkbox-control')
       ?.classList.toggle('is-disabled', !state.maskEnabled);
     for (const id of maskControlIds) {
-      setControlPairDisabled(id, !state.maskEnabled);
+      setControlPairDisabled(id, !state.maskEnabled, reason);
       $(id + 'Control').classList.toggle('is-disabled', !state.maskEnabled);
     }
   }
@@ -1706,26 +1799,46 @@ if (typeof document !== 'undefined') {
   syncMaskControls();
   function syncHalftoneControls(): void {
     for (const id of ['halftoneSize', 'halftoneContrast', 'halftoneCycles']) {
-      setControlPairDisabled(id, !state.halftone);
+      setControlPairDisabled(
+        id,
+        !state.halftone,
+        'Turn on Halftone stroke to edit this parameter.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', !state.halftone);
     }
   }
   function syncChromaAmount(): void {
-    setControlPairDisabled('chromaAmount', !state.chroma);
+    setControlPairDisabled(
+      'chromaAmount',
+      !state.chroma,
+      'Turn on Chromatic aberration to edit the RGB split.',
+    );
     $('chromaAmountControl').classList.toggle('is-disabled', !state.chroma);
   }
   function syncHumanizerControls(): void {
-    setControlPairDisabled('humanizerAmount', !state.humanizer);
+    setControlPairDisabled(
+      'humanizerAmount',
+      !state.humanizer,
+      'Turn on Humanizer to edit the human touch amount.',
+    );
     $('humanizerAmountControl').classList.toggle('is-disabled', !state.humanizer);
   }
   function syncYarnCurlControls(): void {
     for (const id of ['yarnCutPercent', 'yarnCurlSize']) {
-      setControlPairDisabled(id, !state.yarnCurl);
+      setControlPairDisabled(
+        id,
+        !state.yarnCurl,
+        'Turn on Yarn cut & curl to edit this parameter.',
+      );
       $(id + 'Control').classList.toggle('is-disabled', !state.yarnCurl);
     }
   }
   function syncBlueprintControls(): void {
-    $('blueprintStyle').disabled = !state.blueprint;
+    setSingleControlDisabled(
+      'blueprintStyle',
+      !state.blueprint,
+      'Turn on Technical blueprint to choose the document stock.',
+    );
     $('blueprintStyleControl').classList.toggle('is-disabled', !state.blueprint);
   }
   $('halftone').addEventListener('change', (e) => {

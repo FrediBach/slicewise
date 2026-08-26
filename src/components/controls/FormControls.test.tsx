@@ -16,7 +16,13 @@ describe('shared control labels', () => {
   it('uses the same label structure for selects and custom control rows', () => {
     const { container } = render(
       <>
-        <SelectControl id="waveform" label="Waveform" defaultValue="sine" disabled>
+        <SelectControl
+          id="waveform"
+          label="Waveform"
+          defaultValue="sine"
+          disabled
+          disabledReason="Turn on slice modulation to choose a waveform."
+        >
           <option value="sine">Sine</option>
         </SelectControl>
         <div className="control-row">
@@ -30,6 +36,10 @@ describe('shared control labels', () => {
     expect(labels).toHaveLength(2);
     labels.forEach((label) => expect(label.parentElement).toHaveClass('control-label'));
     expect(screen.getByRole('combobox', { name: 'Waveform' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Waveform' })).toHaveAttribute(
+      'title',
+      'Turn on slice modulation to choose a waveform.',
+    );
     expect(container.querySelector('.control-row.is-disabled')).toBeInTheDocument();
   });
 });
@@ -66,6 +76,30 @@ describe('randomization locks', () => {
 });
 
 describe('ValueControl morph contract', () => {
+  it('explains why both inputs are disabled', () => {
+    render(
+      <ValueControl
+        id="amount"
+        label="Amount"
+        min="0"
+        max="100"
+        step="1"
+        value="50"
+        disabled
+        disabledReason="Turn on the effect to edit its amount."
+      />,
+    );
+
+    expect(screen.getByRole('slider', { name: 'Amount' })).toHaveAttribute(
+      'title',
+      'Turn on the effect to edit its amount.',
+    );
+    expect(screen.getByRole('spinbutton', { name: 'Amount' })).toHaveAttribute(
+      'title',
+      'Turn on the effect to edit its amount.',
+    );
+  });
+
   it('keeps an enabled number field compact next to a long unit', () => {
     const { container } = render(
       <ValueControl

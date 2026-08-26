@@ -25,6 +25,7 @@ type SelectControlProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id'> & 
   randomizable?: boolean;
   rowClassName?: string;
   controlId?: string;
+  disabledReason?: string;
 };
 type ValueControlProps = {
   id: string;
@@ -35,6 +36,7 @@ type ValueControlProps = {
   value: string | number;
   unit?: string;
   disabled?: boolean;
+  disabledReason?: string;
   morphable?: boolean;
   randomizable?: boolean;
 };
@@ -105,6 +107,7 @@ function SelectControl({
   randomizable = false,
   rowClassName = '',
   controlId,
+  disabledReason,
   disabled = false,
   ...selectProps
 }: SelectControlProps) {
@@ -112,12 +115,18 @@ function SelectControl({
     <div
       className={`control-row${rowClassName ? ` ${rowClassName}` : ''}${disabled ? ' is-disabled' : ''}`}
       id={controlId}
+      title={disabled ? disabledReason : undefined}
     >
       <ControlLabel htmlFor={id} randomizable={randomizable}>
         {label}
       </ControlLabel>
       <div className="select-wrap">
-        <select id={id} disabled={disabled} {...selectProps}>
+        <select
+          id={id}
+          disabled={disabled}
+          title={disabled ? disabledReason : undefined}
+          {...selectProps}
+        >
           {children}
         </select>
         <ChevronDown size={14} />
@@ -220,6 +229,7 @@ function ValueControl({
   step,
   value,
   unit,
+  disabledReason,
   disabled = false,
   morphable = true,
   randomizable = morphable,
@@ -341,6 +351,7 @@ function ValueControl({
     <div
       className={`control-row${disabled ? ' is-disabled' : ''}${morphMode ? ' is-morphing' : ''}`}
       id={`${id}Control`}
+      title={disabled ? disabledReason : undefined}
     >
       <div className="control-label">
         <label htmlFor={id}>{label}</label>
@@ -369,6 +380,7 @@ function ValueControl({
             step={step}
             defaultValue={value}
             disabled={disabled}
+            title={disabled ? disabledReason : undefined}
           />
           <span className={`value-field${unit ? ' has-unit' : ''}`}>
             <input
@@ -379,6 +391,7 @@ function ValueControl({
               step={step}
               defaultValue={value}
               disabled={disabled}
+              title={disabled ? disabledReason : undefined}
               aria-label={`${label}${unit ? ` in ${unit}` : ''}`}
             />
             <span className="unit" aria-hidden="true" title={unit}>

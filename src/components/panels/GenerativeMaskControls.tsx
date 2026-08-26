@@ -1,6 +1,7 @@
 import { Checkbox, FieldGroup, ValueControl } from '../controls/FormControls';
 
 export function GenerativeMaskControls() {
+  const disabledReason = 'Turn on Clip to generative shape to edit this parameter.';
   return (
     <FieldGroup title="Generative mask">
       <Checkbox id="maskEnabled" randomizable>
@@ -19,6 +20,7 @@ export function GenerativeMaskControls() {
           value="100"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskScaleX"
@@ -29,6 +31,7 @@ export function GenerativeMaskControls() {
           value="100"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskScaleY"
@@ -39,6 +42,7 @@ export function GenerativeMaskControls() {
           value="100"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskOffsetX"
@@ -49,6 +53,7 @@ export function GenerativeMaskControls() {
           value="0"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskOffsetY"
@@ -59,6 +64,7 @@ export function GenerativeMaskControls() {
           value="0"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <p className="gradient-note blueprint-note">
           Roundness morphs from rectangle to ellipse. Two angular LFOs reshape the boundary; wave
@@ -73,6 +79,7 @@ export function GenerativeMaskControls() {
           value="0"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskLfo1Cycles"
@@ -82,6 +89,7 @@ export function GenerativeMaskControls() {
           step="0.25"
           value="3"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskLfo1Phase"
@@ -92,6 +100,7 @@ export function GenerativeMaskControls() {
           value="0"
           unit="°"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskLfo1Waveform"
@@ -102,6 +111,7 @@ export function GenerativeMaskControls() {
           value="0"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskLfo2Amplitude"
@@ -112,6 +122,7 @@ export function GenerativeMaskControls() {
           value="0"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskLfo2Cycles"
@@ -121,6 +132,7 @@ export function GenerativeMaskControls() {
           step="0.25"
           value="5"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskLfo2Phase"
@@ -131,6 +143,7 @@ export function GenerativeMaskControls() {
           value="90"
           unit="°"
           disabled
+          disabledReason={disabledReason}
         />
         <ValueControl
           id="maskLfo2Waveform"
@@ -141,6 +154,7 @@ export function GenerativeMaskControls() {
           value="0"
           unit="%"
           disabled
+          disabledReason={disabledReason}
         />
       </div>
     </FieldGroup>

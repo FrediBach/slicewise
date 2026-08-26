@@ -61,6 +61,7 @@ export function ContoursPanel() {
           value="50"
           unit="%"
           disabled
+          disabledReason="Choose an in & out or out & in gap easing mode to edit the easing centre."
         />
       </FieldGroup>
       <FieldGroup title="Slice field">
@@ -282,6 +283,7 @@ export function ContoursPanel() {
             value="75"
             unit="% gap"
             disabled
+            disabledReason="Turn on Modulate slice planes to edit this parameter."
           />
           <ValueControl
             id="sliceLfoCycles"
@@ -291,6 +293,7 @@ export function ContoursPanel() {
             step="0.25"
             value="2"
             disabled
+            disabledReason="Turn on Modulate slice planes to edit this parameter."
           />
           <ValueControl
             id="sliceLfoAngle"
@@ -301,6 +304,7 @@ export function ContoursPanel() {
             value="0"
             unit="°"
             disabled
+            disabledReason="Turn on Modulate slice planes to edit this parameter."
           />
           <ValueControl
             id="sliceLfoPhase"
@@ -311,12 +315,14 @@ export function ContoursPanel() {
             value="0"
             unit="°"
             disabled
+            disabledReason="Turn on Modulate slice planes to edit this parameter."
           />
           <SelectControl
             id="sliceLfoWaveform"
             label="Waveform"
             defaultValue="sine"
             disabled
+            disabledReason="Turn on Modulate slice planes to edit this parameter."
             rowClassName="select-row"
             controlId="sliceLfoWaveformControl"
           >
@@ -332,6 +338,7 @@ export function ContoursPanel() {
               label="Mode"
               defaultValue="amplitude"
               disabled
+              disabledReason="Turn on Modulate slice planes and Modulate LFO to edit this parameter."
               rowClassName="select-row"
               controlId="sliceLfoModulationModeControl"
             >
@@ -347,6 +354,7 @@ export function ContoursPanel() {
               value="50"
               unit="%"
               disabled
+              disabledReason="Turn on Modulate slice planes and Modulate LFO to edit this parameter."
             />
             <ValueControl
               id="sliceLfoModulationCycles"
@@ -356,6 +364,7 @@ export function ContoursPanel() {
               step="0.25"
               value="1"
               disabled
+              disabledReason="Turn on Modulate slice planes and Modulate LFO to edit this parameter."
             />
             <ValueControl
               id="sliceLfoModulationPhase"
@@ -366,6 +375,7 @@ export function ContoursPanel() {
               value="0"
               unit="°"
               disabled
+              disabledReason="Turn on Modulate slice planes and Modulate LFO to edit this parameter."
             />
           </div>
           <p className="gradient-note blueprint-note">

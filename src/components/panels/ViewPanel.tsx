@@ -79,6 +79,7 @@ export function ViewPanel() {
           value="0"
           unit="%"
           disabled
+          disabledReason="Select Klein ↔ Poincaré as the projection warp to edit this parameter."
         />
         <ValueControl
           id="mobiusDirection"
@@ -89,6 +90,7 @@ export function ViewPanel() {
           value="0"
           unit="°"
           disabled
+          disabledReason="Select Hyperbolic Möbius as the projection warp to edit this parameter."
         />
         <ValueControl
           id="mobiusDisplacement"
@@ -99,6 +101,7 @@ export function ViewPanel() {
           value="0"
           unit="%"
           disabled
+          disabledReason="Select Hyperbolic Möbius as the projection warp to edit this parameter."
         />
         <ValueControl
           id="mobiusRotation"
@@ -109,6 +112,7 @@ export function ViewPanel() {
           value="0"
           unit="°"
           disabled
+          disabledReason="Select Hyperbolic Möbius as the projection warp to edit this parameter."
         />
         <ValueControl
           id="mobiusStrength"
@@ -119,6 +123,7 @@ export function ViewPanel() {
           value="100"
           unit="%"
           disabled
+          disabledReason="Select Hyperbolic Möbius as the projection warp to edit this parameter."
         />
         <ValueControl
           id="sphericalStrength"
@@ -129,6 +134,7 @@ export function ViewPanel() {
           value="100"
           unit="%"
           disabled
+          disabledReason="Select a spherical projection warp to edit this parameter."
         />
         <ValueControl
           id="inversionCenterX"
@@ -139,6 +145,7 @@ export function ViewPanel() {
           value="0"
           unit="% radius"
           disabled
+          disabledReason="Select Circle inversion as the projection warp to edit this parameter."
         />
         <ValueControl
           id="inversionCenterY"
@@ -149,6 +156,7 @@ export function ViewPanel() {
           value="0"
           unit="% radius"
           disabled
+          disabledReason="Select Circle inversion as the projection warp to edit this parameter."
         />
         <ValueControl
           id="inversionRadius"
@@ -159,6 +167,7 @@ export function ViewPanel() {
           value="50"
           unit="% radius"
           disabled
+          disabledReason="Select Circle inversion as the projection warp to edit this parameter."
         />
         <ValueControl
           id="inversionStrength"
@@ -169,6 +178,7 @@ export function ViewPanel() {
           value="100"
           unit="%"
           disabled
+          disabledReason="Select Circle inversion as the projection warp to edit this parameter."
         />
         <p className="gradient-note blueprint-note">
           Spherical modes lift camera-plane radius to angular distance; radius 100% is the spherical
