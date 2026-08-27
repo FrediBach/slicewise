@@ -20,7 +20,13 @@ export type GCodeOptions = {
   mergeTolerance?: number;
   effects?: Partial<
     Record<
-      'halftone' | 'chroma' | 'humanizer' | 'yarnCurl' | 'blueprint' | 'topographicMap',
+      | 'kaleidoscope'
+      | 'halftone'
+      | 'chroma'
+      | 'humanizer'
+      | 'yarnCurl'
+      | 'blueprint'
+      | 'topographicMap',
       boolean
     >
   >;
@@ -127,6 +133,8 @@ export function generateGCode(
       ? '; Origin: rear-left of sheet; +X right; +Y toward front'
       : '; Origin: bottom-left of sheet; +X right; +Y up',
   ];
+  if (effects.kaleidoscope)
+    lines.push('; Kaleidoscope: mirrored radial geometry is included in these toolpaths');
   if (effects.halftone)
     lines.push('; Note: SVG dash styling is exported as continuous plotter paths');
   if (effects.chroma)

@@ -90,6 +90,7 @@ describe('generateGCode', () => {
         zFeed: 900,
         machine: 'UUNA TEK',
         effects: {
+          kaleidoscope: true,
           halftone: true,
           chroma: true,
           humanizer: true,
@@ -101,6 +102,7 @@ describe('generateGCode', () => {
 
     expect(output).toContain('G1 Z3.25 F900 ; pen up');
     expect(output).toContain('G1 Z-2.5 F900 ; pen down');
+    expect(output).toContain('Kaleidoscope: mirrored radial geometry is included');
     expect(output).toContain('SVG dash styling is exported as continuous plotter paths');
     expect(output).toContain('chromatic SVG offsets are exported as one base contour set');
     expect(output).toContain('Humanizer: hand-drawn variations are included');

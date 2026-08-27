@@ -212,6 +212,9 @@ const state: AppState = {
   sliceLfoModulationCycles: 1,
   sliceLfoModulationPhase: 0,
   explodeAmount: 0,
+  kaleidoscope: false,
+  kaleidoscopeSegments: 6,
+  kaleidoscopeRotation: 0,
   spiral: false,
   hide: true,
   sil: true,
@@ -427,6 +430,9 @@ if (typeof document !== 'undefined') {
       sliceLfoModulationCycles,
       sliceLfoModulationPhase,
       explodeAmount,
+      kaleidoscope,
+      kaleidoscopeSegments,
+      kaleidoscopeRotation,
       spiral,
       hide,
       sil,
@@ -544,6 +550,9 @@ if (typeof document !== 'undefined') {
       sliceLfoModulationCycles,
       sliceLfoModulationPhase,
       explodeAmount,
+      kaleidoscope,
+      kaleidoscopeSegments,
+      kaleidoscopeRotation,
       spiral,
       hide,
       sil,
@@ -1222,6 +1231,8 @@ if (typeof document !== 'undefined') {
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
+  bindPair('kaleidoscopeSegments', 'kaleidoscopeSegments');
+  bindPair('kaleidoscopeRotation', 'kaleidoscopeRotation');
   bindPair('gradientColors', 'gradientColors');
   bindPair('cutAz', 'cutAz', activateCustomAxis);
   bindPair('cutEl', 'cutEl', activateCustomAxis);
@@ -1812,6 +1823,16 @@ if (typeof document !== 'undefined') {
       $(id + 'Control').classList.toggle('is-disabled', !state.halftone);
     }
   }
+  function syncKaleidoscopeControls(): void {
+    for (const id of ['kaleidoscopeSegments', 'kaleidoscopeRotation']) {
+      setControlPairDisabled(
+        id,
+        !state.kaleidoscope,
+        'Turn on Kaleidoscope to edit this parameter.',
+      );
+      $(id + 'Control').classList.toggle('is-disabled', !state.kaleidoscope);
+    }
+  }
   function syncChromaAmount(): void {
     setControlPairDisabled(
       'chromaAmount',
@@ -1849,6 +1870,11 @@ if (typeof document !== 'undefined') {
   $('halftone').addEventListener('change', (e) => {
     state.halftone = inputTarget(e).checked;
     syncHalftoneControls();
+    redraw(false);
+  });
+  $('kaleidoscope').addEventListener('change', (e) => {
+    state.kaleidoscope = inputTarget(e).checked;
+    syncKaleidoscopeControls();
     redraw(false);
   });
   $('chroma').addEventListener('change', (e) => {
@@ -2197,6 +2223,8 @@ if (typeof document !== 'undefined') {
     ['sliceLfoModulationCycles', 'sliceLfoModulationCycles'],
     ['sliceLfoModulationPhase', 'sliceLfoModulationPhase'],
     ['explodeAmount', 'explodeAmount'],
+    ['kaleidoscopeSegments', 'kaleidoscopeSegments'],
+    ['kaleidoscopeRotation', 'kaleidoscopeRotation'],
     ['sw', 'sw'],
     ['lineWeightInterval', 'lineWeightInterval'],
     ['lineWeightAmount', 'lineWeightAmount'],
@@ -2249,6 +2277,7 @@ if (typeof document !== 'undefined') {
     'maskOutline',
     'gradientEnabled',
     'lineIndexColorEnabled',
+    'kaleidoscope',
     'halftone',
     'chroma',
     'humanizer',
@@ -2445,6 +2474,7 @@ if (typeof document !== 'undefined') {
     syncSliceLfoControls();
     syncLineWeightControls();
     syncMaskControls();
+    syncKaleidoscopeControls();
     syncHalftoneControls();
     syncChromaAmount();
     syncHumanizerControls();
@@ -2800,6 +2830,7 @@ if (typeof document !== 'undefined') {
 
     const effectChances = {
       gradientEnabled: 0.24,
+      kaleidoscope: 0.2,
       halftone: 0.22,
       chroma: 0.18,
       humanizer: 0.3,
@@ -2828,6 +2859,10 @@ if (typeof document !== 'undefined') {
       );
     }
     $('halftone').checked = state.halftone;
+    $('kaleidoscope').checked = state.kaleidoscope;
+    randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
+    randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));
+    syncKaleidoscopeControls();
     randomizePair('halftoneSize', 'halftoneSize', () => randomIn(1.2, 4.8));
     randomizePair('halftoneContrast', 'halftoneContrast', () => randomInt(55, 100));
     randomizePair('halftoneCycles', 'halftoneCycles', () => randomInt(1, 5));
@@ -2880,6 +2915,7 @@ if (typeof document !== 'undefined') {
         optimizeTravel: state.optimizeTravel,
         mergeTolerance: state.mergeTolerance,
         effects: {
+          kaleidoscope: state.kaleidoscope,
           halftone: state.halftone,
           chroma: state.chroma,
           humanizer: state.humanizer,

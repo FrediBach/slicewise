@@ -186,6 +186,35 @@ export function EffectsPanel() {
           Separates contour layers along their slice-plane normals. At 100%, the original spacing is
           doubled.
         </p>
+        <Checkbox id="kaleidoscope" randomizable>
+          Kaleidoscope
+        </Checkbox>
+        <div className="effect-controls">
+          <ValueControl
+            id="kaleidoscopeSegments"
+            label="Segments"
+            min="3"
+            max="24"
+            step="1"
+            value="6"
+            disabled
+            disabledReason="Turn on Kaleidoscope to edit this parameter."
+          />
+          <ValueControl
+            id="kaleidoscopeRotation"
+            label="Rotation"
+            min="-180"
+            max="180"
+            step="1"
+            value="0"
+            unit="°"
+            disabled
+            disabledReason="Turn on Kaleidoscope to edit this parameter."
+          />
+          <p className="gradient-note blueprint-note">
+            Mirrors one radial slice around the centre of the artboard for SVG and plotter output.
+          </p>
+        </div>
         <Checkbox id="halftone" randomizable>
           Halftone stroke
         </Checkbox>

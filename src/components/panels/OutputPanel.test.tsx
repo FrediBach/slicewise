@@ -49,3 +49,13 @@ describe('OutputPanel explode control', () => {
     ).toBeInTheDocument();
   });
 });
+
+describe('OutputPanel kaleidoscope controls', () => {
+  it('exposes plotter-safe segment and rotation controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Kaleidoscope' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'Segments' })).toHaveValue(6);
+    expect(screen.getByRole('spinbutton', { name: 'Rotation in °' })).toHaveValue(0);
+  });
+});

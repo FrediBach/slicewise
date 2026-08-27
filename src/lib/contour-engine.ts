@@ -1,6 +1,7 @@
 'use strict';
 
 import { clipRunToRect } from './toolpaths';
+import { kaleidoscopeRun, type KaleidoscopeSettings } from './kaleidoscope';
 import { createMapAnnotations } from './mapAnnotations';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
 import {
@@ -61,7 +62,7 @@ export interface LineIndexColor {
   reverse?: boolean;
 }
 
-export interface ContourSettings extends GenerativeMaskSettings {
+export interface ContourSettings extends GenerativeMaskSettings, KaleidoscopeSettings {
   az: number;
   el: number;
   roll: number;
@@ -2642,7 +2643,11 @@ function computeLineArtInstance(
     const processedRuns = cutCount
       ? yarnCutRun(styled, hashPolyline(raw), settings.yarnCurlSize, cutCount)
       : [styled];
-    const clippedRuns = processedRuns.flatMap((run) => clipArtworkRun(run, settings, W, H));
+    const clippedRuns = processedRuns.flatMap((run) =>
+      kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
+        clipArtworkRun(candidate, settings, W, H),
+      ),
+    );
     for (const run of clippedRuns) {
       if (run.length < 4) continue;
       const data = serialiseRun(run, quality, sharpVertices(run));
@@ -3073,8 +3078,10 @@ function computeContourInstance(
       const processedRuns = cutCount
         ? yarnCutRun(run, hashPolyline(raw), settings.yarnCurlSize, cutCount)
         : [run];
-      const clippedRuns = processedRuns.flatMap((candidate) =>
-        clipArtworkRun(candidate, settings, W, H),
+      const clippedRuns = processedRuns.flatMap((run) =>
+        kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
+          clipArtworkRun(candidate, settings, W, H),
+        ),
       );
       for (const clipped of clippedRuns) {
         if (clipped.length < 4) continue;

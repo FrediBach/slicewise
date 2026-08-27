@@ -315,6 +315,7 @@ describe('contour output effects', () => {
   it('renders every post-processing combination without invalid SVG values', () => {
     const effects = [
       'gradientEnabled',
+      'kaleidoscope',
       'halftone',
       'chroma',
       'humanizer',
@@ -339,6 +340,27 @@ describe('contour output effects', () => {
       if (enabled.chroma) expect(result.svg).toContain('id="chromatic-aberration"');
       if (enabled.blueprint) expect(result.svg).toContain('id="technical-annotations"');
       if (enabled.topographicMap) expect(result.svg).toContain('id="topographic-annotations"');
+    }
+  });
+
+  it('exports deterministic kaleidoscope geometry to SVG and plotter runs', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      kaleidoscope: true,
+      kaleidoscopeSegments: 8,
+      kaleidoscopeRotation: 17,
+    };
+    const first = computeContours(makeContourMesh(), settings, false);
+    const second = computeContours(makeContourMesh(), settings, false);
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.toolpaths).toEqual(second.toolpaths);
+    expect(first.paths).toBeGreaterThan(0);
+    expect(first.toolpaths.flatMap((group) => group.runs)).not.toHaveLength(0);
+    for (const value of first.toolpaths.flatMap((group) => group.runs).flat()) {
+      expect(Number.isFinite(value)).toBe(true);
     }
   });
 
