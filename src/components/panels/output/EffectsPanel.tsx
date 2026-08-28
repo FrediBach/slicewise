@@ -3,6 +3,7 @@ import { Section } from '../../ui/section';
 import { GlitchControls } from './GlitchControls';
 import { StaggeredSliceControls } from './StaggeredSliceControls';
 import { VectorZoomControls } from './VectorZoomControls';
+import { WraparoundTearControls } from './WraparoundTearControls';
 
 function TopographicMapControl() {
   return (
@@ -43,6 +44,7 @@ export function EffectsPanel() {
         </p>
         <GlitchControls />
         <StaggeredSliceControls />
+        <WraparoundTearControls />
         <Checkbox id="kaleidoscope" randomizable>
           Kaleidoscope
         </Checkbox>

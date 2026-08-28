@@ -9,6 +9,11 @@ import {
 } from './block-glitch';
 import { resolveScanBands, type ScanBandGlitchSettings } from './scan-band-glitch';
 import { resolveStaggeredSlices, type StaggeredSliceSettings } from './staggered-slices';
+import {
+  applyWraparoundTear,
+  resolveWraparoundTear,
+  type WraparoundTearSettings,
+} from './wraparound-tear';
 import { kaleidoscopeRun, type KaleidoscopeSettings } from './kaleidoscope';
 import { createMapAnnotations } from './mapAnnotations';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
@@ -90,6 +95,7 @@ export interface ContourSettings
     BlockGlitchSettings,
     ScanBandGlitchSettings,
     StaggeredSliceSettings,
+    WraparoundTearSettings,
     GenerativeMaskSettings,
     KaleidoscopeSettings,
     VectorZoomSettings {
@@ -1583,6 +1589,11 @@ function deterministicDrawingNumber(
       settings.staggeredSlicesOrientation,
       settings.staggeredSlicesPattern,
       settings.staggeredSlicesSeed,
+      settings.wraparoundTear,
+      settings.wraparoundTearOrientation,
+      settings.wraparoundTearPosition,
+      settings.wraparoundTearSize,
+      settings.wraparoundTearShift,
       settings.blueprintStyle,
       settings.maskEnabled,
       settings.maskOutline,
@@ -2321,6 +2332,7 @@ function computeLineArtInstance(
   const glitchBlocks = resolveGlitchBlocks(settings, W, H, settings.margin);
   const scanBands = resolveScanBands(settings, W, H, settings.margin);
   const staggeredSlices = resolveStaggeredSlices(settings, W, H, settings.margin);
+  const wraparoundTear = resolveWraparoundTear(settings, W, H, settings.margin);
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
   const { palette, indexedPalette, gradientCount } = colorPlan(settings, offsets.length - 1);
   const pathDataByColor = palette.map(() => '');
@@ -2379,7 +2391,8 @@ function computeLineArtInstance(
     );
     const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
     const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
-    const clippedRuns = staggeredRuns.flatMap((run) =>
+    const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
+    const clippedRuns = wrappedRuns.flatMap((run) =>
       kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
         clipArtworkRun(candidate, settings, W, H),
       ),
@@ -2545,6 +2558,7 @@ function computeContourInstance(
   const glitchBlocks = resolveGlitchBlocks(settings, W, H, settings.margin);
   const scanBands = resolveScanBands(settings, W, H, settings.margin);
   const staggeredSlices = resolveStaggeredSlices(settings, W, H, settings.margin);
+  const wraparoundTear = resolveWraparoundTear(settings, W, H, settings.margin);
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
   const [focalLength, distortion] = resolveLens(settings);
   const perspective = clamp(settings.lensPerspective ?? 0, 0, 100);
@@ -2857,7 +2871,8 @@ function computeContourInstance(
       );
       const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
       const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
-      const clippedRuns = staggeredRuns.flatMap((run) =>
+      const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
+      const clippedRuns = wrappedRuns.flatMap((run) =>
         kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
           clipArtworkRun(candidate, settings, W, H),
         ),

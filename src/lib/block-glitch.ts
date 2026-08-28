@@ -121,7 +121,11 @@ function runLength(run: readonly number[]): number {
   return length;
 }
 
-function clipRun(run: readonly number[], rectangle: Rectangle, keepInside: boolean): number[][] {
+export function clipRunToGlitchRectangle(
+  run: readonly number[],
+  rectangle: Rectangle,
+  keepInside: boolean,
+): number[][] {
   const result: number[][] = [];
   let current: number[] | null = null;
   const flush = (): void => {
@@ -152,7 +156,7 @@ function clipRun(run: readonly number[], rectangle: Rectangle, keepInside: boole
   return result;
 }
 
-function translateRun(run: readonly number[], dx: number, dy: number): number[] {
+export function translateGlitchRun(run: readonly number[], dx: number, dy: number): number[] {
   const translated: number[] = [];
   for (let index = 0; index + 1 < run.length; index += 2)
     translated.push(run[index] + dx, run[index + 1] + dy);
@@ -167,7 +171,8 @@ export function applyBlockGlitch(
 ): number[][] {
   if (!blocks.length) return runs.map((run) => run.slice());
   let baseRuns = runs.map((run) => run.slice());
-  for (const block of blocks) baseRuns = baseRuns.flatMap((run) => clipRun(run, block, false));
+  for (const block of blocks)
+    baseRuns = baseRuns.flatMap((run) => clipRunToGlitchRectangle(run, block, false));
   if (clearDestination) {
     for (const block of blocks) {
       const destination = {
@@ -176,12 +181,14 @@ export function applyBlockGlitch(
         right: block.right + block.dx,
         bottom: block.bottom + block.dy,
       };
-      baseRuns = baseRuns.flatMap((run) => clipRun(run, destination, false));
+      baseRuns = baseRuns.flatMap((run) => clipRunToGlitchRectangle(run, destination, false));
     }
   }
   const displacedRuns = blocks.flatMap((block) =>
     runs.flatMap((run) =>
-      clipRun(run, block, true).map((fragment) => translateRun(fragment, block.dx, block.dy)),
+      clipRunToGlitchRectangle(run, block, true).map((fragment) =>
+        translateGlitchRun(fragment, block.dx, block.dy),
+      ),
     ),
   );
   return [...baseRuns, ...displacedRuns];
@@ -200,10 +207,12 @@ export function applyContiguousSliceGlitch(
     region.right = Math.max(region.right, slices[index].right);
     region.bottom = Math.max(region.bottom, slices[index].bottom);
   }
-  const baseRuns = runs.flatMap((run) => clipRun(run, region, false));
+  const baseRuns = runs.flatMap((run) => clipRunToGlitchRectangle(run, region, false));
   const displacedRuns = slices.flatMap((slice) =>
     runs.flatMap((run) =>
-      clipRun(run, slice, true).map((fragment) => translateRun(fragment, slice.dx, slice.dy)),
+      clipRunToGlitchRectangle(run, slice, true).map((fragment) =>
+        translateGlitchRun(fragment, slice.dx, slice.dy),
+      ),
     ),
   );
   return [...baseRuns, ...displacedRuns];

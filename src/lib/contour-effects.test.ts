@@ -459,6 +459,33 @@ describe('contour output effects', () => {
       expect(Number.isFinite(value)).toBe(true);
   });
 
+  it('exports deterministic wraparound-tear geometry to SVG and plotter runs', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      wraparoundTear: true,
+      wraparoundTearOrientation: 'horizontal',
+      wraparoundTearPosition: 45,
+      wraparoundTearSize: 35,
+      wraparoundTearShift: 27,
+    };
+    const baseline = computeContours(
+      makeContourMesh(),
+      { ...settings, wraparoundTear: false },
+      false,
+    );
+    const first = computeContours(makeContourMesh(), settings, false);
+    const second = computeContours(makeContourMesh(), settings, false);
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.toolpaths).toEqual(second.toolpaths);
+    expect(first.toolpaths).not.toEqual(baseline.toolpaths);
+    expect(first.paths).toBeGreaterThan(0);
+    for (const value of first.toolpaths.flatMap((group) => group.runs).flat())
+      expect(Number.isFinite(value)).toBe(true);
+  });
+
   it('exports cropped vector zoom insets and plotter-real guides', () => {
     const settings = {
       ...contourSettings,

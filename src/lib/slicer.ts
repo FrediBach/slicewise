@@ -244,6 +244,11 @@ const state: AppState = {
   staggeredSlicesOrientation: 'horizontal',
   staggeredSlicesPattern: 'ramp',
   staggeredSlicesSeed: 3,
+  wraparoundTear: false,
+  wraparoundTearOrientation: 'horizontal',
+  wraparoundTearPosition: 50,
+  wraparoundTearSize: 18,
+  wraparoundTearShift: 20,
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,
@@ -1075,6 +1080,9 @@ if (typeof document !== 'undefined') {
   bindPair('staggeredSlicesExtent', 'staggeredSlicesExtent');
   bindPair('staggeredSlicesDisplacement', 'staggeredSlicesDisplacement');
   bindPair('staggeredSlicesSeed', 'staggeredSlicesSeed');
+  bindPair('wraparoundTearPosition', 'wraparoundTearPosition');
+  bindPair('wraparoundTearSize', 'wraparoundTearSize');
+  bindPair('wraparoundTearShift', 'wraparoundTearShift');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1741,6 +1749,16 @@ if (typeof document !== 'undefined') {
     setControlPairDisabled('staggeredSlicesSeed', seedDisabled, seedReason);
     $('staggeredSlicesSeedControl').classList.toggle('is-disabled', seedDisabled);
   }
+  function syncWraparoundTearControls(): void {
+    const disabled = !state.wraparoundTear;
+    const reason = 'Turn on Wraparound tear to edit this parameter.';
+    for (const id of ['wraparoundTearPosition', 'wraparoundTearSize', 'wraparoundTearShift']) {
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    setSingleControlDisabled('wraparoundTearOrientation', disabled, reason);
+    $('wraparoundTearOrientationControl').classList.toggle('is-disabled', disabled);
+  }
   function syncVectorZoomControls(): void {
     for (let index = 1; index <= 4; index++) {
       const prefix = `vectorZoom${index}`;
@@ -1848,6 +1866,16 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   syncStaggeredSliceControls();
+  $('wraparoundTear').addEventListener('change', (event) => {
+    state.wraparoundTear = inputTarget(event).checked;
+    syncWraparoundTearControls();
+    redraw(false);
+  });
+  $('wraparoundTearOrientation').addEventListener('change', (event) => {
+    state.wraparoundTearOrientation = inputTarget(event).value;
+    redraw(false);
+  });
+  syncWraparoundTearControls();
   for (let index = 1; index <= 4; index++) {
     const prefix = `vectorZoom${index}`;
     $(`${prefix}Enabled`).addEventListener('change', (event) => {
@@ -2242,6 +2270,9 @@ if (typeof document !== 'undefined') {
     ['staggeredSlicesExtent', 'staggeredSlicesExtent'],
     ['staggeredSlicesDisplacement', 'staggeredSlicesDisplacement'],
     ['staggeredSlicesSeed', 'staggeredSlicesSeed'],
+    ['wraparoundTearPosition', 'wraparoundTearPosition'],
+    ['wraparoundTearSize', 'wraparoundTearSize'],
+    ['wraparoundTearShift', 'wraparoundTearShift'],
     ['kaleidoscopeSegments', 'kaleidoscopeSegments'],
     ['kaleidoscopeRotation', 'kaleidoscopeRotation'],
     ['sw', 'sw'],
@@ -2291,6 +2322,7 @@ if (typeof document !== 'undefined') {
     'scanBandGlitchOrientation',
     'staggeredSlicesOrientation',
     'staggeredSlicesPattern',
+    'wraparoundTearOrientation',
     'blueprintStyle',
     'vectorZoom1Shape',
     'vectorZoom1Corner',
@@ -2318,6 +2350,7 @@ if (typeof document !== 'undefined') {
     'blockGlitchClearDestination',
     'scanBandGlitch',
     'staggeredSlices',
+    'wraparoundTear',
     'kaleidoscope',
     'halftone',
     'chroma',
@@ -2393,6 +2426,7 @@ if (typeof document !== 'undefined') {
     syncBlockGlitchControls();
     syncScanBandGlitchControls();
     syncStaggeredSliceControls();
+    syncWraparoundTearControls();
     syncKaleidoscopeControls();
     syncVectorZoomControls();
     syncHalftoneControls();
@@ -2757,6 +2791,7 @@ if (typeof document !== 'undefined') {
       blockGlitch: 0.25,
       scanBandGlitch: 0.22,
       staggeredSlices: 0.2,
+      wraparoundTear: 0.2,
       kaleidoscope: 0.2,
       vectorZoom1Enabled: 0.12,
       vectorZoom2Enabled: 0.06,
@@ -2836,6 +2871,16 @@ if (typeof document !== 'undefined') {
       'seeded',
     ]);
     syncStaggeredSliceControls();
+    $('wraparoundTear').checked = state.wraparoundTear;
+    randomizePair('wraparoundTearPosition', 'wraparoundTearPosition', () => randomInt(0, 100));
+    randomizePair('wraparoundTearSize', 'wraparoundTearSize', () => randomInt(5, 40));
+    randomizePair('wraparoundTearShift', 'wraparoundTearShift', () => randomIn(-60, 60));
+    randomizeSelect('wraparoundTearOrientation', 'wraparoundTearOrientation', [
+      'horizontal',
+      'horizontal',
+      'vertical',
+    ]);
+    syncWraparoundTearControls();
     $('kaleidoscope').checked = state.kaleidoscope;
     randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
     randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));

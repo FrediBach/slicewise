@@ -82,6 +82,7 @@ Coverage currently measures the focused core under active test:
 - `staggered-slices.ts`
 - `toolpaths.ts`
 - `vector-zoom.ts`
+- `wraparound-tear.ts`
 - `FormControls.tsx`
 - `GradientChooser.tsx`
 

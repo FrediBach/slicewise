@@ -125,6 +125,21 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   restored.staggeredSlicesSeed = Number.isFinite(restored.staggeredSlicesSeed)
     ? restored.staggeredSlicesSeed
     : 3;
+  restored.wraparoundTear = restored.wraparoundTear === true;
+  restored.wraparoundTearOrientation = ['horizontal', 'vertical'].includes(
+    String(restored.wraparoundTearOrientation),
+  )
+    ? restored.wraparoundTearOrientation
+    : 'horizontal';
+  restored.wraparoundTearPosition = Number.isFinite(restored.wraparoundTearPosition)
+    ? restored.wraparoundTearPosition
+    : 50;
+  restored.wraparoundTearSize = Number.isFinite(restored.wraparoundTearSize)
+    ? restored.wraparoundTearSize
+    : 18;
+  restored.wraparoundTearShift = Number.isFinite(restored.wraparoundTearShift)
+    ? restored.wraparoundTearShift
+    : 20;
   restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
     ? restored.lensFocalLength
     : 50;

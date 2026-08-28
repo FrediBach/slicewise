@@ -174,6 +174,26 @@ describe('parameter snapshot migrations', () => {
     });
   });
 
+  it('repairs missing or invalid wraparound-tear settings', () => {
+    const restored = normalizeParameterSnapshot(
+      snapshot({
+        wraparoundTear: undefined,
+        wraparoundTearOrientation: 'diagonal',
+        wraparoundTearPosition: Number.NaN,
+        wraparoundTearSize: Number.NaN,
+        wraparoundTearShift: Number.NaN,
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      wraparoundTear: false,
+      wraparoundTearOrientation: 'horizontal',
+      wraparoundTearPosition: 50,
+      wraparoundTearSize: 18,
+      wraparoundTearShift: 20,
+    });
+  });
+
   it('repairs invalid optical, wavefront, and vector-zoom values', () => {
     const restored = normalizeParameterSnapshot(
       snapshot({

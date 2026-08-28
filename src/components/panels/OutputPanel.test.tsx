@@ -103,6 +103,18 @@ describe('OutputPanel staggered-slice controls', () => {
   });
 });
 
+describe('OutputPanel wraparound-tear controls', () => {
+  it('exposes full-span band and signed-shift controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Wraparound tear' })).not.toBeChecked();
+    expect(screen.getByLabelText('Tear orientation')).toHaveValue('horizontal');
+    expect(screen.getByRole('spinbutton', { name: 'Band position in %' })).toHaveValue(50);
+    expect(screen.getByRole('spinbutton', { name: 'Band size in %' })).toHaveValue(18);
+    expect(screen.getByRole('spinbutton', { name: 'Wrap shift in mm' })).toHaveValue(20);
+  });
+});
+
 describe('OutputPanel composition boundaries', () => {
   it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
     render(<EffectsPanel />);
