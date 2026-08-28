@@ -74,12 +74,14 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `gcode.ts` converts grouped toolpaths into machine instructions, applies an export-time clipping safety net, and owns plotter-profile defaults.
 - `slicer-export.ts` maps browser runtime state into SVG/G-code export artifacts and safe download names. It is DOM-free; `slicer.ts` remains responsible only for waiting for a current render, clipboard access, and initiating downloads.
 - `render-settings.ts` is the exhaustive browser-state-to-worker-settings adapter. Its key list is compile-time checked against `ContourSettings`, omits runtime/request-only fields, derives the document title, and detaches mutable morph maps.
+- `parameter-history.ts` owns the bounded, branch-aware undo/redo timeline. It clones values at its boundary and exposes navigation availability without knowing about controls or rendering.
+- `parameter-migrations.ts` normalizes legacy and incomplete parameter snapshots before the browser runtime applies them. Compatibility defaults, legacy lens conversion, and saved vector-zoom validation belong here rather than in DOM restoration code.
 - `colorPair.ts` creates random ink/background combinations and ink-anchored harmonic gradients in OKLCH while enforcing contrast and gamut constraints.
 - `mapAnnotations.ts` derives deterministic, plotter-safe elevation labels, generated locations, map symbols, and single-line lettering from finished contour runs.
 
 ### Browser orchestration
 
-`slicer.ts` is the integration boundary for browser-only behavior. It owns the current settings, binds form controls, schedules worker renders, manages parameter history and randomization, handles orbit/pan gestures, and coordinates preview and export. Keep computation that can run without `document`, `window`, or mutable UI state out of this module.
+`slicer.ts` is the integration boundary for browser-only behavior. It owns the current settings, binds form controls, schedules worker renders, connects the pure history timeline to DOM restoration, manages randomization, handles orbit/pan gestures, and coordinates preview and export. Keep computation that can run without `document`, `window`, or mutable UI state out of this module.
 
 ## State and events
 

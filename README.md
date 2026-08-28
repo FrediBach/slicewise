@@ -61,6 +61,9 @@ src/
 │   ├── contour-engine.ts      DOM-free mesh-to-SVG contour pipeline
 │   ├── polyline-styling.ts    Deterministic simplification and run effects
 │   ├── projection.ts          Projection warps and adaptive nonlinear paths
+│   ├── render-settings.ts     Exhaustive browser-to-worker settings adapter
+│   ├── parameter-history.ts   Bounded undo/redo timeline
+│   ├── parameter-migrations.ts Saved-setting compatibility and validation
 │   ├── scalar-fields.ts       Planar, curved, geodesic, and curvature fields
 │   ├── hyperbolic-tiling.ts   Poincaré-disk tiling line-art generator
 │   ├── demo-meshes/           Built-in procedural mesh generators

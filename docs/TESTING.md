@@ -46,6 +46,7 @@ Prioritize observable contracts and failure-prone transformations:
 - Export assembly: runtime-profile mapping, MIME/extension selection, effect metadata, and safe filenames.
 - React controls: user interactions and the custom events consumed by `slicer.ts`.
 - Render snapshots: exhaustive worker keys, omission of browser-only state, derived metadata, and detached mutable values.
+- Parameter history and migrations: duplicate suppression, branch truncation, bounded eviction, snapshot isolation, legacy compatibility, and invalid saved values.
 
 Avoid snapshots of entire panels. They are noisy and do not prove that controls remain connected to the imperative runtime. Prefer assertions about accessible controls, event payloads, and exported data.
 
@@ -68,8 +69,11 @@ Coverage currently measures the focused core under active test:
 - `mesh-curvature.ts`
 - `mesh-geodesics.ts`
 - `mesh-topology.ts`
+- `parameter-history.ts`
+- `parameter-migrations.ts`
 - `projection.ts`
 - `polyline-styling.ts`
+- `render-settings.ts`
 - `scalar-fields.ts`
 - `slicer-export.ts`
 - `svg-mesh.ts`

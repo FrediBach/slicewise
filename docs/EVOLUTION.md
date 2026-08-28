@@ -18,6 +18,7 @@ The latest extraction established two examples:
 - `components/panels/contours/` separates slice-field and LFO markup from the Contours composition panel while preserving the runtime's ID-based interface.
 - `render-settings.ts` makes the worker snapshot exhaustive and prevents browser-only state from leaking into render requests.
 - `components/panels/output/` gives appearance, canvas, effects, vector zoom, and export controls focused owners while `OutputPanel.tsx` remains a compatibility barrel.
+- `parameter-history.ts` separates bounded undo/redo mechanics from browser restoration, while `parameter-migrations.ts` owns saved-setting compatibility and validation.
 
 ## Preferred dependency direction
 
@@ -43,7 +44,7 @@ Dependencies should flow downward. Pure library modules must not import React, q
 
 These are candidates, not mandatory milestones. Re-evaluate them against the feature being built.
 
-1. **Parameter history and randomization.** Both manipulate the same control/state bridge. A controller with injected DOM adapters and random source could make undo/redo and scoped randomization testable without booting the application runtime.
+1. **Scoped randomization.** Randomization still manipulates the control/state bridge directly. Extract distributions and scope/lock decisions first; keep DOM writes in `slicer.ts` until an injected adapter has a clear payoff.
 2. **Contour document composition.** Blueprint stock, annotations, background, colour plans, and final SVG assembly form a later-stage concern in `contour-engine.ts`. Extract only after defining an intermediate rendered-run structure shared by mesh and line-art paths.
 3. **Visibility and silhouette.** Depth-buffer creation and silhouette extraction can become a focused projected-geometry module once their cache and projection inputs are made explicit.
 4. **Panel decomposition.** Split a React panel when a subsection owns state or an event contract. Preserve control IDs, and add an interaction test before moving markup.
