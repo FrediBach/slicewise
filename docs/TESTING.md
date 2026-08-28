@@ -69,6 +69,7 @@ Coverage currently measures the focused core under active test:
 - `scalar-fields.ts`
 - `svg-mesh.ts`
 - `toolpaths.ts`
+- `vector-zoom.ts`
 - `FormControls.tsx`
 - `GradientChooser.tsx`
 

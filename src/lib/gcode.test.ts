@@ -96,6 +96,7 @@ describe('generateGCode', () => {
           humanizer: true,
           blueprint: true,
           topographicMap: true,
+          vectorZoom: true,
         },
       },
     );
@@ -108,6 +109,7 @@ describe('generateGCode', () => {
     expect(output).toContain('Humanizer: hand-drawn variations are included');
     expect(output).toContain('blueprint border and annotations are SVG-only');
     expect(output).toContain('Topographic map: elevation labels, locations, and map symbols');
+    expect(output).toContain('Vector zoom: enlarged detail, borders, and dashed leaders');
   });
 
   it('always returns controller setup and shutdown for an empty drawing', () => {

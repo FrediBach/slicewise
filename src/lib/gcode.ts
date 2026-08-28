@@ -26,7 +26,8 @@ export type GCodeOptions = {
       | 'humanizer'
       | 'yarnCurl'
       | 'blueprint'
-      | 'topographicMap',
+      | 'topographicMap'
+      | 'vectorZoom',
       boolean
     >
   >;
@@ -151,6 +152,8 @@ export function generateGCode(
     );
   if (effects.topographicMap)
     lines.push('; Topographic map: elevation labels, locations, and map symbols are included');
+  if (effects.vectorZoom)
+    lines.push('; Vector zoom: enlarged detail, borders, and dashed leaders are included');
   if (clipToArtboard) lines.push('; Artboard clipping: enabled');
   if (optimizeTravel) lines.push(`; Optimized pen-up travel: ${clampPrecision(penUpDistance)} mm`);
   lines.push(

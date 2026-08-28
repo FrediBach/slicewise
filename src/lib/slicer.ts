@@ -222,6 +222,42 @@ const state: AppState = {
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,
+  vectorZoom1Enabled: false,
+  vectorZoom1Shape: 'rectangle',
+  vectorZoom1CenterX: 45,
+  vectorZoom1CenterY: 45,
+  vectorZoom1Width: 20,
+  vectorZoom1Height: 20,
+  vectorZoom1Corner: 'top-right',
+  vectorZoom1Size: 30,
+  vectorZoom1Margin: 14,
+  vectorZoom2Enabled: false,
+  vectorZoom2Shape: 'rectangle',
+  vectorZoom2CenterX: 55,
+  vectorZoom2CenterY: 45,
+  vectorZoom2Width: 20,
+  vectorZoom2Height: 20,
+  vectorZoom2Corner: 'top-left',
+  vectorZoom2Size: 30,
+  vectorZoom2Margin: 14,
+  vectorZoom3Enabled: false,
+  vectorZoom3Shape: 'circle',
+  vectorZoom3CenterX: 45,
+  vectorZoom3CenterY: 55,
+  vectorZoom3Width: 20,
+  vectorZoom3Height: 20,
+  vectorZoom3Corner: 'bottom-right',
+  vectorZoom3Size: 30,
+  vectorZoom3Margin: 14,
+  vectorZoom4Enabled: false,
+  vectorZoom4Shape: 'circle',
+  vectorZoom4CenterX: 55,
+  vectorZoom4CenterY: 55,
+  vectorZoom4Width: 20,
+  vectorZoom4Height: 20,
+  vectorZoom4Corner: 'bottom-left',
+  vectorZoom4Size: 30,
+  vectorZoom4Margin: 14,
   spiral: false,
   hide: true,
   sil: true,
@@ -608,6 +644,42 @@ if (typeof document !== 'undefined') {
       blueprint,
       blueprintStyle,
       topographicMap,
+      vectorZoom1Enabled: state.vectorZoom1Enabled,
+      vectorZoom1Shape: state.vectorZoom1Shape,
+      vectorZoom1CenterX: state.vectorZoom1CenterX,
+      vectorZoom1CenterY: state.vectorZoom1CenterY,
+      vectorZoom1Width: state.vectorZoom1Width,
+      vectorZoom1Height: state.vectorZoom1Height,
+      vectorZoom1Corner: state.vectorZoom1Corner,
+      vectorZoom1Size: state.vectorZoom1Size,
+      vectorZoom1Margin: state.vectorZoom1Margin,
+      vectorZoom2Enabled: state.vectorZoom2Enabled,
+      vectorZoom2Shape: state.vectorZoom2Shape,
+      vectorZoom2CenterX: state.vectorZoom2CenterX,
+      vectorZoom2CenterY: state.vectorZoom2CenterY,
+      vectorZoom2Width: state.vectorZoom2Width,
+      vectorZoom2Height: state.vectorZoom2Height,
+      vectorZoom2Corner: state.vectorZoom2Corner,
+      vectorZoom2Size: state.vectorZoom2Size,
+      vectorZoom2Margin: state.vectorZoom2Margin,
+      vectorZoom3Enabled: state.vectorZoom3Enabled,
+      vectorZoom3Shape: state.vectorZoom3Shape,
+      vectorZoom3CenterX: state.vectorZoom3CenterX,
+      vectorZoom3CenterY: state.vectorZoom3CenterY,
+      vectorZoom3Width: state.vectorZoom3Width,
+      vectorZoom3Height: state.vectorZoom3Height,
+      vectorZoom3Corner: state.vectorZoom3Corner,
+      vectorZoom3Size: state.vectorZoom3Size,
+      vectorZoom3Margin: state.vectorZoom3Margin,
+      vectorZoom4Enabled: state.vectorZoom4Enabled,
+      vectorZoom4Shape: state.vectorZoom4Shape,
+      vectorZoom4CenterX: state.vectorZoom4CenterX,
+      vectorZoom4CenterY: state.vectorZoom4CenterY,
+      vectorZoom4Width: state.vectorZoom4Width,
+      vectorZoom4Height: state.vectorZoom4Height,
+      vectorZoom4Corner: state.vectorZoom4Corner,
+      vectorZoom4Size: state.vectorZoom4Size,
+      vectorZoom4Margin: state.vectorZoom4Margin,
       documentTitle: state.name,
       morphEnabled,
       morphSteps,
@@ -1241,6 +1313,11 @@ if (typeof document !== 'undefined') {
   bindPair('halftoneCycles', 'halftoneCycles');
   bindPair('kaleidoscopeSegments', 'kaleidoscopeSegments');
   bindPair('kaleidoscopeRotation', 'kaleidoscopeRotation');
+  for (let index = 1; index <= 4; index++)
+    for (const suffix of ['CenterX', 'CenterY', 'Width', 'Height', 'Size', 'Margin']) {
+      const id = `vectorZoom${index}${suffix}`;
+      bindPair(id, id);
+    }
   bindPair('gradientColors', 'gradientColors');
   bindPair('cutAz', 'cutAz', activateCustomAxis);
   bindPair('cutEl', 'cutEl', activateCustomAxis);
@@ -1841,6 +1918,27 @@ if (typeof document !== 'undefined') {
       $(id + 'Control').classList.toggle('is-disabled', !state.kaleidoscope);
     }
   }
+  function syncVectorZoomControls(): void {
+    for (let index = 1; index <= 4; index++) {
+      const prefix = `vectorZoom${index}`;
+      const enabled = Boolean(dynamicState[`${prefix}Enabled`]);
+      const reason = `Turn on Vector zoom ${index} to edit this parameter.`;
+      for (const suffix of ['Shape', 'Corner']) {
+        const id = `${prefix}${suffix}`;
+        setSingleControlDisabled(id, !enabled, reason);
+        $(id + 'Control').classList.toggle('is-disabled', !enabled);
+      }
+      for (const suffix of ['CenterX', 'CenterY', 'Width', 'Size', 'Margin']) {
+        const id = `${prefix}${suffix}`;
+        setControlPairDisabled(id, !enabled, reason);
+        $(id + 'Control').classList.toggle('is-disabled', !enabled);
+      }
+      const circle = dynamicState[`${prefix}Shape`] === 'circle';
+      const heightReason = circle ? 'Circle areas use Area width as their diameter.' : reason;
+      setControlPairDisabled(`${prefix}Height`, !enabled || circle, heightReason);
+      $(`${prefix}HeightControl`).classList.toggle('is-disabled', !enabled || circle);
+    }
+  }
   function syncChromaAmount(): void {
     setControlPairDisabled(
       'chromaAmount',
@@ -1885,6 +1983,24 @@ if (typeof document !== 'undefined') {
     syncKaleidoscopeControls();
     redraw(false);
   });
+  for (let index = 1; index <= 4; index++) {
+    const prefix = `vectorZoom${index}`;
+    $(`${prefix}Enabled`).addEventListener('change', (event) => {
+      dynamicState[`${prefix}Enabled`] = inputTarget(event).checked;
+      syncVectorZoomControls();
+      redraw(false);
+    });
+    $(`${prefix}Shape`).addEventListener('change', (event) => {
+      dynamicState[`${prefix}Shape`] = inputTarget(event).value;
+      syncVectorZoomControls();
+      redraw(false);
+    });
+    $(`${prefix}Corner`).addEventListener('change', (event) => {
+      dynamicState[`${prefix}Corner`] = inputTarget(event).value;
+      redraw(false);
+    });
+  }
+  syncVectorZoomControls();
   $('chroma').addEventListener('change', (e) => {
     state.chroma = inputTarget(e).checked;
     syncChromaAmount();
@@ -2258,6 +2374,12 @@ if (typeof document !== 'undefined') {
     ['humanizerAmount', 'humanizerAmount'],
     ['yarnCutPercent', 'yarnCutPercent'],
     ['yarnCurlSize', 'yarnCurlSize'],
+    ...Array.from({ length: 4 }, (_, offset) => {
+      const prefix = `vectorZoom${offset + 1}`;
+      return ['CenterX', 'CenterY', 'Width', 'Height', 'Size', 'Margin'].map(
+        (suffix) => [`${prefix}${suffix}`, `${prefix}${suffix}` as keyof ContourSettings] as const,
+      );
+    }).flat(),
     ['morphSteps', 'morphSteps'],
     ['morphStepsY', 'morphStepsY'],
   ];
@@ -2271,6 +2393,14 @@ if (typeof document !== 'undefined') {
     'sliceLfoModulationMode',
     'lineWeightMode',
     'blueprintStyle',
+    'vectorZoom1Shape',
+    'vectorZoom1Corner',
+    'vectorZoom2Shape',
+    'vectorZoom2Corner',
+    'vectorZoom3Shape',
+    'vectorZoom3Corner',
+    'vectorZoom4Shape',
+    'vectorZoom4Corner',
   ];
   const historyChecks: Array<keyof ContourSettings> = [
     'spiral',
@@ -2292,6 +2422,10 @@ if (typeof document !== 'undefined') {
     'yarnCurl',
     'blueprint',
     'topographicMap',
+    'vectorZoom1Enabled',
+    'vectorZoom2Enabled',
+    'vectorZoom3Enabled',
+    'vectorZoom4Enabled',
     'morphEnabled',
     'morphSecondEnabled',
   ];
@@ -2334,6 +2468,39 @@ if (typeof document !== 'undefined') {
     restoringParameters = true;
     clearTimeout(parameterHistoryTimer);
     const restored = structuredClone(snapshot);
+    const zoomDefaults = [
+      { x: 45, y: 45, shape: 'rectangle', corner: 'top-right' },
+      { x: 55, y: 45, shape: 'rectangle', corner: 'top-left' },
+      { x: 45, y: 55, shape: 'circle', corner: 'bottom-right' },
+      { x: 55, y: 55, shape: 'circle', corner: 'bottom-left' },
+    ] as const;
+    const restoredValues = restored as unknown as Record<string, unknown>;
+    for (let index = 1; index <= 4; index++) {
+      const prefix = `vectorZoom${index}`;
+      const defaults = zoomDefaults[index - 1];
+      restoredValues[`${prefix}Enabled`] = restoredValues[`${prefix}Enabled`] === true;
+      restoredValues[`${prefix}Shape`] =
+        restoredValues[`${prefix}Shape`] === 'circle' ? 'circle' : defaults.shape;
+      restoredValues[`${prefix}Corner`] = [
+        'top-left',
+        'top-right',
+        'bottom-left',
+        'bottom-right',
+      ].includes(String(restoredValues[`${prefix}Corner`]))
+        ? restoredValues[`${prefix}Corner`]
+        : defaults.corner;
+      for (const [suffix, fallback] of [
+        ['CenterX', defaults.x],
+        ['CenterY', defaults.y],
+        ['Width', 20],
+        ['Height', 20],
+        ['Size', 30],
+        ['Margin', 14],
+      ] as const)
+        restoredValues[`${prefix}${suffix}`] = Number.isFinite(restoredValues[`${prefix}${suffix}`])
+          ? restoredValues[`${prefix}${suffix}`]
+          : fallback;
+    }
     restored.lineIndexColorEnabled = restored.lineIndexColorEnabled ?? false;
     restored.lineIndexColors = restored.lineIndexColors?.length
       ? restored.lineIndexColors
@@ -2483,6 +2650,7 @@ if (typeof document !== 'undefined') {
     syncLineWeightControls();
     syncMaskControls();
     syncKaleidoscopeControls();
+    syncVectorZoomControls();
     syncHalftoneControls();
     syncChromaAmount();
     syncHumanizerControls();
@@ -2839,6 +3007,10 @@ if (typeof document !== 'undefined') {
     const effectChances = {
       gradientEnabled: 0.24,
       kaleidoscope: 0.2,
+      vectorZoom1Enabled: 0.12,
+      vectorZoom2Enabled: 0.06,
+      vectorZoom3Enabled: 0.04,
+      vectorZoom4Enabled: 0.03,
       halftone: 0.22,
       chroma: 0.18,
       humanizer: 0.3,
@@ -2871,6 +3043,24 @@ if (typeof document !== 'undefined') {
     randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
     randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));
     syncKaleidoscopeControls();
+    for (let index = 1; index <= 4; index++) {
+      const prefix = `vectorZoom${index}`;
+      $(`${prefix}Enabled`).checked = Boolean(dynamicState[`${prefix}Enabled`]);
+      randomizeSelect(`${prefix}Shape`, `${prefix}Shape`, ['rectangle', 'rectangle', 'circle']);
+      randomizeSelect(`${prefix}Corner`, `${prefix}Corner`, [
+        'top-left',
+        'top-right',
+        'bottom-left',
+        'bottom-right',
+      ]);
+      randomizePair(`${prefix}CenterX`, `${prefix}CenterX`, () => randomInt(20, 80));
+      randomizePair(`${prefix}CenterY`, `${prefix}CenterY`, () => randomInt(20, 80));
+      randomizePair(`${prefix}Width`, `${prefix}Width`, () => randomInt(8, 30));
+      randomizePair(`${prefix}Height`, `${prefix}Height`, () => randomInt(8, 30));
+      randomizePair(`${prefix}Size`, `${prefix}Size`, () => randomInt(20, 45));
+      randomizePair(`${prefix}Margin`, `${prefix}Margin`, () => randomInt(4, 24));
+    }
+    syncVectorZoomControls();
     randomizePair('halftoneSize', 'halftoneSize', () => randomIn(1.2, 4.8));
     randomizePair('halftoneContrast', 'halftoneContrast', () => randomInt(55, 100));
     randomizePair('halftoneCycles', 'halftoneCycles', () => randomInt(1, 5));
@@ -2930,6 +3120,11 @@ if (typeof document !== 'undefined') {
           yarnCurl: state.yarnCurl,
           blueprint: state.blueprint,
           topographicMap: state.topographicMap,
+          vectorZoom:
+            state.vectorZoom1Enabled ||
+            state.vectorZoom2Enabled ||
+            state.vectorZoom3Enabled ||
+            state.vectorZoom4Enabled,
         },
       },
     );

@@ -22,6 +22,12 @@ import {
   type GenerativeMaskSettings,
 } from './generative-mask';
 import {
+  applyVectorZooms,
+  resolveVectorZooms,
+  vectorZoomGuides,
+  type VectorZoomSettings,
+} from './vector-zoom';
+import {
   createCylindricalScalarField,
   createCurvatureScalarField,
   createGeodesicScalarField,
@@ -62,7 +68,8 @@ export interface LineIndexColor {
   reverse?: boolean;
 }
 
-export interface ContourSettings extends GenerativeMaskSettings, KaleidoscopeSettings {
+export interface ContourSettings
+  extends GenerativeMaskSettings, KaleidoscopeSettings, VectorZoomSettings {
   az: number;
   el: number;
   roll: number;
@@ -1547,6 +1554,42 @@ function deterministicDrawingNumber(
       settings.maskLfo2Cycles,
       settings.maskLfo2Phase,
       settings.maskLfo2Waveform,
+      settings.vectorZoom1Enabled,
+      settings.vectorZoom1Shape,
+      settings.vectorZoom1CenterX,
+      settings.vectorZoom1CenterY,
+      settings.vectorZoom1Width,
+      settings.vectorZoom1Height,
+      settings.vectorZoom1Corner,
+      settings.vectorZoom1Size,
+      settings.vectorZoom1Margin,
+      settings.vectorZoom2Enabled,
+      settings.vectorZoom2Shape,
+      settings.vectorZoom2CenterX,
+      settings.vectorZoom2CenterY,
+      settings.vectorZoom2Width,
+      settings.vectorZoom2Height,
+      settings.vectorZoom2Corner,
+      settings.vectorZoom2Size,
+      settings.vectorZoom2Margin,
+      settings.vectorZoom3Enabled,
+      settings.vectorZoom3Shape,
+      settings.vectorZoom3CenterX,
+      settings.vectorZoom3CenterY,
+      settings.vectorZoom3Width,
+      settings.vectorZoom3Height,
+      settings.vectorZoom3Corner,
+      settings.vectorZoom3Size,
+      settings.vectorZoom3Margin,
+      settings.vectorZoom4Enabled,
+      settings.vectorZoom4Shape,
+      settings.vectorZoom4CenterX,
+      settings.vectorZoom4CenterY,
+      settings.vectorZoom4Width,
+      settings.vectorZoom4Height,
+      settings.vectorZoom4Corner,
+      settings.vectorZoom4Size,
+      settings.vectorZoom4Margin,
     ],
     morph: [
       settings.morphEnabled,
@@ -2592,6 +2635,7 @@ function computeLineArtInstance(
   const quality = quick
     ? previewCurveQuality(settings.quality, settings.previewDetail)
     : settings.quality;
+  const vectorZooms = resolveVectorZooms(settings, W, H, settings.margin);
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
   const { palette, indexedPalette, gradientCount } = colorPlan(settings, offsets.length - 1);
   const pathDataByColor = palette.map(() => '');
@@ -2650,11 +2694,16 @@ function computeLineArtInstance(
     );
     for (const run of clippedRuns) {
       if (run.length < 4) continue;
+      runsByColor[colorIndex].push(run);
+    }
+  }
+  for (let colorIndex = 0; colorIndex < runsByColor.length; colorIndex++) {
+    runsByColor[colorIndex] = applyVectorZooms(runsByColor[colorIndex], vectorZooms);
+    for (const run of runsByColor[colorIndex]) {
       const data = serialiseRun(run, quality, sharpVertices(run));
       pathData += data;
       pathDataByColor[colorIndex] += data;
       if (!quick || settings.topographicMap) runs.push(run);
-      if (!quick) runsByColor[colorIndex].push(run);
       paths++;
       nodes += run.length / 2;
     }
@@ -2709,6 +2758,18 @@ function computeLineArtInstance(
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
   }
+  const zoomGuides = vectorZoomGuides(vectorZooms, settings.sw);
+  const zoomGuideRuns = [...zoomGuides.dashedRuns, ...zoomGuides.outlineRuns].flatMap((run) =>
+    clipArtworkRun(run, settings, W, H),
+  );
+  if (zoomGuideRuns.length) {
+    const guideData = zoomGuideRuns
+      .map((run) => serialiseRun(run, quality, sharpVertices(run)))
+      .join('');
+    artwork += `<g id="vector-zoom-guides" fill="none" stroke="${effectiveAnnotationColor(settings)}" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round"><path d="${guideData}"/></g>`;
+    renderedPaths += zoomGuideRuns.length;
+    renderedNodes += zoomGuideRuns.reduce((sum, run) => sum + run.length / 2, 0);
+  }
   const maskOutline = maskOutlineArtwork(settings, W, H, quality);
   renderedPaths += maskOutline.runs.length;
   renderedNodes += maskOutline.runs.reduce((sum, run) => sum + run.length / 2, 0);
@@ -2750,6 +2811,12 @@ ${artwork}
     if (matching) matching.runs.push(...maskOutline.runs);
     else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
   }
+  if (!quick && zoomGuideRuns.length) {
+    const color = effectiveAnnotationColor(settings);
+    const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
+    if (matching) matching.runs.push(...zoomGuideRuns);
+    else toolpaths.push({ color, label: 'vector zoom guides', runs: zoomGuideRuns });
+  }
   return {
     svg,
     toolpaths,
@@ -2773,6 +2840,7 @@ function computeContourInstance(
   const t0 = performance.now();
   const W = settings.pw,
     H = settings.ph;
+  const vectorZooms = resolveVectorZooms(settings, W, H, settings.margin);
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
   const [focalLength, distortion] = resolveLens(settings);
   const perspective = clamp(settings.lensPerspective ?? 0, 0, 100);
@@ -3083,7 +3151,7 @@ function computeContourInstance(
           clipArtworkRun(candidate, settings, W, H),
         ),
       );
-      for (const clipped of clippedRuns) {
+      for (const clipped of applyVectorZooms(clippedRuns, vectorZooms)) {
         if (clipped.length < 4) continue;
         const sharp =
           clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
@@ -3169,6 +3237,16 @@ function computeContourInstance(
     if (matching) matching.runs.push(...maskOutline.runs);
     else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
   }
+  const zoomGuides = vectorZoomGuides(vectorZooms, settings.sw);
+  const zoomGuideRuns = [...zoomGuides.dashedRuns, ...zoomGuides.outlineRuns].flatMap((run) =>
+    clipArtworkRun(run, settings, W, H),
+  );
+  if (!quick && zoomGuideRuns.length) {
+    const color = effectiveAnnotationColor(settings);
+    const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
+    if (matching) matching.runs.push(...zoomGuideRuns);
+    else toolpaths.push({ color, label: 'vector zoom guides', runs: zoomGuideRuns });
+  }
   let artwork: string,
     renderedPaths = paths,
     renderedNodes = nodes;
@@ -3239,6 +3317,14 @@ function computeContourInstance(
     artwork += mapAnnotations.svg;
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
+  }
+  if (zoomGuideRuns.length) {
+    const guideData = zoomGuideRuns
+      .map((run) => serialiseRun(run, quality, sharpVertices(run)))
+      .join('');
+    artwork += `<g id="vector-zoom-guides" fill="none" stroke="${effectiveAnnotationColor(settings)}" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round"><path d="${guideData}"/></g>`;
+    renderedPaths += zoomGuideRuns.length;
+    renderedNodes += zoomGuideRuns.reduce((sum, run) => sum + run.length / 2, 0);
   }
   renderedPaths += maskOutline.runs.length;
   renderedNodes += maskOutline.runs.reduce((sum, run) => sum + run.length / 2, 0);

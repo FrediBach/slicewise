@@ -450,6 +450,33 @@ button {
 .effect-controls .effect-controls .select-info {
   margin-left: 110px;
 }
+.vector-zoom-controls {
+  margin: 8px 0 11px;
+  padding: 9px 10px;
+  border: 1px solid #d8dbd6;
+  border-radius: 5px;
+  background: #f5f6f3;
+}
+.vector-zoom-slot {
+  border-top: 1px solid #dde0db;
+}
+.vector-zoom-slot:first-of-type {
+  margin-top: 7px;
+}
+.vector-zoom-slot > summary {
+  padding: 8px 2px;
+  color: #555c55;
+  font-family: Manrope, sans-serif;
+  font-size: 10.5px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.vector-zoom-slot[open] > summary {
+  color: var(--ink);
+}
+.vector-zoom-slot .effect-controls {
+  margin-bottom: 8px;
+}
 .blueprint-note {
   margin: 5px 5px 2px 0;
   line-height: 1.45;

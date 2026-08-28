@@ -322,6 +322,7 @@ describe('contour output effects', () => {
       'yarnCurl',
       'blueprint',
       'topographicMap',
+      'vectorZoom1Enabled',
     ] as const;
 
     for (let mask = 0; mask < 1 << effects.length; mask++) {
@@ -340,6 +341,7 @@ describe('contour output effects', () => {
       if (enabled.chroma) expect(result.svg).toContain('id="chromatic-aberration"');
       if (enabled.blueprint) expect(result.svg).toContain('id="technical-annotations"');
       if (enabled.topographicMap) expect(result.svg).toContain('id="topographic-annotations"');
+      if (enabled.vectorZoom1Enabled) expect(result.svg).toContain('id="vector-zoom-guides"');
     }
   });
 
@@ -362,6 +364,31 @@ describe('contour output effects', () => {
     for (const value of first.toolpaths.flatMap((group) => group.runs).flat()) {
       expect(Number.isFinite(value)).toBe(true);
     }
+  });
+
+  it('exports cropped vector zoom insets and plotter-real guides', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      vectorZoom1Enabled: true,
+      vectorZoom1Shape: 'circle' as const,
+      vectorZoom1CenterX: 50,
+      vectorZoom1CenterY: 50,
+      vectorZoom1Width: 24,
+      vectorZoom1Height: 24,
+      vectorZoom1Corner: 'top-right' as const,
+      vectorZoom1Size: 38,
+      vectorZoom1Margin: 8,
+    };
+    const baseline = computeContours(makeContourMesh(), contourSettings, false);
+    const result = computeContours(makeContourMesh(), settings, false);
+
+    expect(result.svg).toContain('id="vector-zoom-guides"');
+    expect(result.toolpaths.flatMap((group) => group.runs).length).toBeGreaterThan(
+      baseline.toolpaths.flatMap((group) => group.runs).length,
+    );
+    expect(result.svg).not.toMatch(/(?:NaN|undefined|Infinity)/);
   });
 
   it('cuts a stable percentage of lines with independently adjustable curl sizing', () => {
