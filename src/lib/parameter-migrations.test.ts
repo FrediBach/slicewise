@@ -216,6 +216,26 @@ describe('parameter snapshot migrations', () => {
     });
   });
 
+  it('repairs missing or invalid sample-and-hold settings', () => {
+    const restored = normalizeParameterSnapshot(
+      snapshot({
+        sampleAndHold: undefined,
+        sampleAndHoldAxis: 'z',
+        sampleAndHoldSpacing: Number.NaN,
+        sampleAndHoldLength: Number.NaN,
+        sampleAndHoldMix: Number.NaN,
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      sampleAndHold: false,
+      sampleAndHoldAxis: 'y',
+      sampleAndHoldSpacing: 2,
+      sampleAndHoldLength: 4,
+      sampleAndHoldMix: 100,
+    });
+  });
+
   it('repairs invalid optical, wavefront, and vector-zoom values', () => {
     const restored = normalizeParameterSnapshot(
       snapshot({

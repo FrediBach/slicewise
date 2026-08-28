@@ -128,6 +128,18 @@ describe('OutputPanel tile-shuffle controls', () => {
   });
 });
 
+describe('OutputPanel sample-and-hold controls', () => {
+  it('exposes plotter-safe resampling and coordinate-hold controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Sample-and-hold' })).not.toBeChecked();
+    expect(screen.getByLabelText('Hold axis')).toHaveValue('y');
+    expect(screen.getByRole('spinbutton', { name: 'Sample spacing in mm' })).toHaveValue(2);
+    expect(screen.getByRole('spinbutton', { name: 'Hold length in samples' })).toHaveValue(4);
+    expect(screen.getByRole('spinbutton', { name: 'Hold mix in %' })).toHaveValue(100);
+  });
+});
+
 describe('OutputPanel composition boundaries', () => {
   it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
     render(<EffectsPanel />);

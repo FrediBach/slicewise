@@ -18,6 +18,7 @@ import {
 import { kaleidoscopeRun, type KaleidoscopeSettings } from './kaleidoscope';
 import { createMapAnnotations } from './mapAnnotations';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
+import { applySampleAndHold, type SampleAndHoldSettings } from './sample-and-hold';
 import {
   cameraBasis,
   projectMesh as project,
@@ -98,6 +99,7 @@ export interface ContourSettings
     StaggeredSliceSettings,
     WraparoundTearSettings,
     TileShuffleSettings,
+    SampleAndHoldSettings,
     GenerativeMaskSettings,
     KaleidoscopeSettings,
     VectorZoomSettings {
@@ -1602,6 +1604,11 @@ function deterministicDrawingNumber(
       settings.tileShuffleExtent,
       settings.tileShuffleAffected,
       settings.tileShuffleSeed,
+      settings.sampleAndHold,
+      settings.sampleAndHoldAxis,
+      settings.sampleAndHoldSpacing,
+      settings.sampleAndHoldLength,
+      settings.sampleAndHoldMix,
       settings.blueprintStyle,
       settings.maskEnabled,
       settings.maskOutline,
@@ -2402,7 +2409,8 @@ function computeLineArtInstance(
     const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
     const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
     const shuffledRuns = applyTileShuffle(wrappedRuns, shuffledTiles);
-    const clippedRuns = shuffledRuns.flatMap((run) =>
+    const heldRuns = applySampleAndHold(shuffledRuns, settings);
+    const clippedRuns = heldRuns.flatMap((run) =>
       kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
         clipArtworkRun(candidate, settings, W, H),
       ),
@@ -2884,7 +2892,8 @@ function computeContourInstance(
       const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
       const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
       const shuffledRuns = applyTileShuffle(wrappedRuns, shuffledTiles);
-      const clippedRuns = shuffledRuns.flatMap((run) =>
+      const heldRuns = applySampleAndHold(shuffledRuns, settings);
+      const clippedRuns = heldRuns.flatMap((run) =>
         kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
           clipArtworkRun(candidate, settings, W, H),
         ),

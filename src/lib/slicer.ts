@@ -255,6 +255,11 @@ const state: AppState = {
   tileShuffleExtent: 80,
   tileShuffleAffected: 50,
   tileShuffleSeed: 4,
+  sampleAndHold: false,
+  sampleAndHoldAxis: 'y',
+  sampleAndHoldSpacing: 2,
+  sampleAndHoldLength: 4,
+  sampleAndHoldMix: 100,
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,
@@ -1094,6 +1099,9 @@ if (typeof document !== 'undefined') {
   bindPair('tileShuffleExtent', 'tileShuffleExtent');
   bindPair('tileShuffleAffected', 'tileShuffleAffected');
   bindPair('tileShuffleSeed', 'tileShuffleSeed');
+  bindPair('sampleAndHoldSpacing', 'sampleAndHoldSpacing');
+  bindPair('sampleAndHoldLength', 'sampleAndHoldLength');
+  bindPair('sampleAndHoldMix', 'sampleAndHoldMix');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1784,6 +1792,16 @@ if (typeof document !== 'undefined') {
       $(id + 'Control').classList.toggle('is-disabled', disabled);
     }
   }
+  function syncSampleAndHoldControls(): void {
+    const disabled = !state.sampleAndHold;
+    const reason = 'Turn on Sample-and-hold to edit this parameter.';
+    for (const id of ['sampleAndHoldSpacing', 'sampleAndHoldLength', 'sampleAndHoldMix']) {
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    setSingleControlDisabled('sampleAndHoldAxis', disabled, reason);
+    $('sampleAndHoldAxisControl').classList.toggle('is-disabled', disabled);
+  }
   function syncVectorZoomControls(): void {
     for (let index = 1; index <= 4; index++) {
       const prefix = `vectorZoom${index}`;
@@ -1907,6 +1925,16 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   syncTileShuffleControls();
+  $('sampleAndHold').addEventListener('change', (event) => {
+    state.sampleAndHold = inputTarget(event).checked;
+    syncSampleAndHoldControls();
+    redraw(false);
+  });
+  $('sampleAndHoldAxis').addEventListener('change', (event) => {
+    state.sampleAndHoldAxis = inputTarget(event).value;
+    redraw(false);
+  });
+  syncSampleAndHoldControls();
   for (let index = 1; index <= 4; index++) {
     const prefix = `vectorZoom${index}`;
     $(`${prefix}Enabled`).addEventListener('change', (event) => {
@@ -2309,6 +2337,9 @@ if (typeof document !== 'undefined') {
     ['tileShuffleExtent', 'tileShuffleExtent'],
     ['tileShuffleAffected', 'tileShuffleAffected'],
     ['tileShuffleSeed', 'tileShuffleSeed'],
+    ['sampleAndHoldSpacing', 'sampleAndHoldSpacing'],
+    ['sampleAndHoldLength', 'sampleAndHoldLength'],
+    ['sampleAndHoldMix', 'sampleAndHoldMix'],
     ['kaleidoscopeSegments', 'kaleidoscopeSegments'],
     ['kaleidoscopeRotation', 'kaleidoscopeRotation'],
     ['sw', 'sw'],
@@ -2359,6 +2390,7 @@ if (typeof document !== 'undefined') {
     'staggeredSlicesOrientation',
     'staggeredSlicesPattern',
     'wraparoundTearOrientation',
+    'sampleAndHoldAxis',
     'blueprintStyle',
     'vectorZoom1Shape',
     'vectorZoom1Corner',
@@ -2388,6 +2420,7 @@ if (typeof document !== 'undefined') {
     'staggeredSlices',
     'wraparoundTear',
     'tileShuffle',
+    'sampleAndHold',
     'kaleidoscope',
     'halftone',
     'chroma',
@@ -2465,6 +2498,7 @@ if (typeof document !== 'undefined') {
     syncStaggeredSliceControls();
     syncWraparoundTearControls();
     syncTileShuffleControls();
+    syncSampleAndHoldControls();
     syncKaleidoscopeControls();
     syncVectorZoomControls();
     syncHalftoneControls();
@@ -2831,6 +2865,7 @@ if (typeof document !== 'undefined') {
       staggeredSlices: 0.2,
       wraparoundTear: 0.2,
       tileShuffle: 0.16,
+      sampleAndHold: 0.2,
       kaleidoscope: 0.2,
       vectorZoom1Enabled: 0.12,
       vectorZoom2Enabled: 0.06,
@@ -2927,6 +2962,12 @@ if (typeof document !== 'undefined') {
     randomizePair('tileShuffleAffected', 'tileShuffleAffected', () => randomInt(20, 85));
     randomizePair('tileShuffleSeed', 'tileShuffleSeed', () => randomInt(0, 9999));
     syncTileShuffleControls();
+    $('sampleAndHold').checked = state.sampleAndHold;
+    randomizePair('sampleAndHoldSpacing', 'sampleAndHoldSpacing', () => randomIn(0.8, 8));
+    randomizePair('sampleAndHoldLength', 'sampleAndHoldLength', () => randomInt(2, 12));
+    randomizePair('sampleAndHoldMix', 'sampleAndHoldMix', () => randomInt(35, 100));
+    randomizeSelect('sampleAndHoldAxis', 'sampleAndHoldAxis', ['y', 'y', 'x']);
+    syncSampleAndHoldControls();
     $('kaleidoscope').checked = state.kaleidoscope;
     randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
     randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));

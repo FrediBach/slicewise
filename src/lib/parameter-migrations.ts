@@ -156,6 +156,19 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   restored.tileShuffleSeed = Number.isFinite(restored.tileShuffleSeed)
     ? restored.tileShuffleSeed
     : 4;
+  restored.sampleAndHold = restored.sampleAndHold === true;
+  restored.sampleAndHoldAxis = ['x', 'y'].includes(String(restored.sampleAndHoldAxis))
+    ? restored.sampleAndHoldAxis
+    : 'y';
+  restored.sampleAndHoldSpacing = Number.isFinite(restored.sampleAndHoldSpacing)
+    ? restored.sampleAndHoldSpacing
+    : 2;
+  restored.sampleAndHoldLength = Number.isFinite(restored.sampleAndHoldLength)
+    ? restored.sampleAndHoldLength
+    : 4;
+  restored.sampleAndHoldMix = Number.isFinite(restored.sampleAndHoldMix)
+    ? restored.sampleAndHoldMix
+    : 100;
   restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
     ? restored.lensFocalLength
     : 50;
