@@ -23,6 +23,7 @@ const exportState = (overrides: Partial<ExportState> = {}): ExportState => ({
   kaleidoscope: false,
   halftone: false,
   chroma: false,
+  misregistration: false,
   humanizer: false,
   yarnCurl: false,
   blueprint: false,
@@ -46,12 +47,15 @@ describe('slicer export assembly', () => {
   });
 
   it('maps the UUNA TEK profile and active vector zoom into G-code metadata', () => {
-    const output = createGCodeExport(exportState({ vectorZoom3Enabled: true }));
+    const output = createGCodeExport(
+      exportState({ vectorZoom3Enabled: true, misregistration: true }),
+    );
 
     expect(output).toContain('; Machine: UUNA TEK 3.0 A3');
     expect(output).toContain('; Origin: rear-left of sheet; +X right; +Y toward front');
     expect(output).toContain('G0 X10 Y20 F4800');
     expect(output).toContain('Vector zoom: enlarged detail, borders, and dashed leaders');
+    expect(output).toContain('Misregistration: offset colour copies are included');
   });
 
   it('maps unknown profiles to the generic bottom-left convention', () => {

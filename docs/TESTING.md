@@ -70,6 +70,7 @@ Coverage currently measures the focused core under active test:
 - `mesh-curvature.ts`
 - `mesh-geodesics.ts`
 - `mesh-topology.ts`
+- `misregistration.ts`
 - `parameter-history.ts`
 - `parameter-migrations.ts`
 - `projection.ts`

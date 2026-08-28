@@ -18,6 +18,7 @@ export interface ExportState {
   kaleidoscope: boolean;
   halftone: boolean;
   chroma: boolean;
+  misregistration: boolean;
   humanizer: boolean;
   yarnCurl: boolean;
   blueprint: boolean;
@@ -57,6 +58,7 @@ export function createGCodeExport(state: ExportState): string {
         kaleidoscope: state.kaleidoscope,
         halftone: state.halftone,
         chroma: state.chroma,
+        misregistration: state.misregistration,
         humanizer: state.humanizer,
         yarnCurl: state.yarnCurl,
         blueprint: state.blueprint,

@@ -93,6 +93,7 @@ describe('generateGCode', () => {
           kaleidoscope: true,
           halftone: true,
           chroma: true,
+          misregistration: true,
           humanizer: true,
           blueprint: true,
           topographicMap: true,
@@ -106,6 +107,7 @@ describe('generateGCode', () => {
     expect(output).toContain('Kaleidoscope: mirrored radial geometry is included');
     expect(output).toContain('SVG dash styling is exported as continuous plotter paths');
     expect(output).toContain('chromatic SVG offsets are exported as one base contour set');
+    expect(output).toContain('offset colour copies are included as physical pen groups');
     expect(output).toContain('Humanizer: hand-drawn variations are included');
     expect(output).toContain('blueprint border and annotations are SVG-only');
     expect(output).toContain('Topographic map: elevation labels, locations, and map symbols');

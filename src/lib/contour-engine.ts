@@ -17,6 +17,11 @@ import {
 } from './wraparound-tear';
 import { kaleidoscopeRun, type KaleidoscopeSettings } from './kaleidoscope';
 import { createMapAnnotations } from './mapAnnotations';
+import {
+  createMisregistrationGroups,
+  type MisregistrationGroup,
+  type MisregistrationSettings,
+} from './misregistration';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
 import { applySampleAndHold, type SampleAndHoldSettings } from './sample-and-hold';
 import {
@@ -100,6 +105,7 @@ export interface ContourSettings
     WraparoundTearSettings,
     TileShuffleSettings,
     SampleAndHoldSettings,
+    MisregistrationSettings,
     GenerativeMaskSettings,
     KaleidoscopeSettings,
     VectorZoomSettings {
@@ -1609,6 +1615,14 @@ function deterministicDrawingNumber(
       settings.sampleAndHoldSpacing,
       settings.sampleAndHoldLength,
       settings.sampleAndHoldMix,
+      settings.misregistration,
+      settings.misregistrationCopies,
+      settings.misregistrationOffset,
+      settings.misregistrationRotation,
+      settings.misregistrationScope,
+      settings.misregistrationColor1,
+      settings.misregistrationColor2,
+      settings.misregistrationColor3,
       settings.blueprintStyle,
       settings.maskEnabled,
       settings.maskOutline,
@@ -1934,6 +1948,39 @@ function chromaticLayers(
 <g transform="translate(0 ${fmt(amount * 0.08)})" ${attrs}>${paths('#25ff48')}</g>
 <g transform="translate(${amount} 0) rotate(${rotation} ${cx} ${cy})" ${attrs}>${paths('#2548ff')}</g>
 </g>`;
+}
+
+function misregistrationArtwork(
+  sourceRuns: readonly Polyline[],
+  settings: ContourSettings,
+  width: number,
+  height: number,
+  quality: number,
+): { svg: string; groups: MisregistrationGroup[]; paths: number; nodes: number } {
+  const groups: MisregistrationGroup[] = [];
+  for (const group of createMisregistrationGroups(sourceRuns, settings, width, height)) {
+    const runs = group.runs.flatMap((run) => clipArtworkRun(run, settings, width, height));
+    if (runs.length) groups.push({ ...group, runs });
+  }
+  const svg = groups.length
+    ? `<g id="misregistration" fill="none" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round">${groups
+        .map(
+          (group) =>
+            `<path stroke="${group.color}" d="${group.runs
+              .map((run) => serialiseRun(run, quality, sharpVertices(run)))
+              .join('')}"/>`,
+        )
+        .join('')}</g>`
+    : '';
+  return {
+    svg,
+    groups,
+    paths: groups.reduce((sum, group) => sum + group.runs.length, 0),
+    nodes: groups.reduce(
+      (sum, group) => sum + group.runs.reduce((runSum, run) => runSum + run.length / 2, 0),
+      0,
+    ),
+  };
 }
 
 /* ------------------------------------ Ramer–Douglas–Peucker (iterative) */
@@ -2451,6 +2498,8 @@ function computeLineArtInstance(
         title: settings.documentTitle,
       })
     : null;
+  const clippedAnnotationRuns =
+    mapAnnotations?.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)) ?? [];
   const attrs = `fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
   const dash = settings.halftone
     ? `stroke-dasharray="${fmt(settings.halftoneSize * 0.5)} ${fmt(settings.halftoneSize * 0.5)}"`
@@ -2498,6 +2547,20 @@ function computeLineArtInstance(
   const maskOutline = maskOutlineArtwork(settings, W, H, quality);
   renderedPaths += maskOutline.runs.length;
   renderedNodes += maskOutline.runs.reduce((sum, run) => sum + run.length / 2, 0);
+  const primaryRegistrationRuns = runsByColor.flat();
+  const registrationSourceRuns =
+    settings.misregistrationScope === 'all'
+      ? [
+          ...primaryRegistrationRuns,
+          ...clippedAnnotationRuns,
+          ...maskOutline.runs,
+          ...zoomGuideRuns,
+        ]
+      : primaryRegistrationRuns;
+  const registration = misregistrationArtwork(registrationSourceRuns, settings, W, H, quality);
+  artwork += registration.svg;
+  renderedPaths += registration.paths;
+  renderedNodes += registration.nodes;
   artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${maskOutline.svg}${documentOverlay(settings, blueprint)}`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
@@ -2524,7 +2587,7 @@ ${artwork}
               {
                 color: effectiveAnnotationColor(settings),
                 label: 'topographic annotations',
-                runs: mapAnnotations.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)),
+                runs: clippedAnnotationRuns,
               },
             ]
           : []),
@@ -2549,6 +2612,7 @@ ${artwork}
           runs: guideGroup.runs,
         });
     }
+  if (!quick) toolpaths.push(...registration.groups);
   return {
     svg,
     toolpaths,
@@ -2870,6 +2934,7 @@ function computeContourInstance(
   let nodes = 0,
     paths = 0;
   let humanizerSalt = 0;
+  const primaryRegistrationRuns: Polyline[] = [];
   const serialiseGroup = (runs: Polyline[]): SerialisedGroup => {
     let d = '';
     const plotRuns: Polyline[] = [];
@@ -2903,7 +2968,7 @@ function computeContourInstance(
         const sharp =
           clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
         d += serialiseRun(clipped, quality, sharp);
-        if (!quick || settings.topographicMap) plotRuns.push(clipped);
+        if (!quick || settings.topographicMap || settings.misregistration) plotRuns.push(clipped);
         nodes += clipped.length / 2;
         paths++;
       }
@@ -2927,6 +2992,7 @@ function computeContourInstance(
       pathsForColor.push(pathsForTone);
     }
     colorPaths.push(pathsForColor);
+    primaryRegistrationRuns.push(...runsForColor);
     if (!quick && runsForColor.length) {
       toolpaths.push({
         color: palette[index],
@@ -2938,6 +3004,7 @@ function computeContourInstance(
   const outlineGroup = serialiseGroup(outlineOut);
   const outlinePath = outlineGroup.d;
   annotationSourceRuns.push(...outlineGroup.runs);
+  primaryRegistrationRuns.push(...outlineGroup.runs);
   if (!quick && outlineGroup.runs.length) {
     const matching = toolpaths.find(
       (group) => group.color.toLowerCase() === settings.color.toLowerCase(),
@@ -3084,6 +3151,20 @@ function computeContourInstance(
   }
   renderedPaths += maskOutline.runs.length;
   renderedNodes += maskOutline.runs.reduce((sum, run) => sum + run.length / 2, 0);
+  const registrationSourceRuns =
+    settings.misregistrationScope === 'all'
+      ? [
+          ...primaryRegistrationRuns,
+          ...clippedAnnotationRuns,
+          ...maskOutline.runs,
+          ...zoomGuideRuns,
+        ]
+      : primaryRegistrationRuns;
+  const registration = misregistrationArtwork(registrationSourceRuns, settings, W, H, quality);
+  artwork += registration.svg;
+  renderedPaths += registration.paths;
+  renderedNodes += registration.nodes;
+  if (!quick) toolpaths.push(...registration.groups);
   artwork = `${documentBackdrop(settings, W, H, blueprint)}${maskArtwork(settings, W, H, artwork)}${maskOutline.svg}${documentOverlay(settings, blueprint)}`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
@@ -3217,11 +3298,18 @@ ${background}${layers}${documentOverlay(settings, blueprint)}
   const groups = new Map<string, ContourToolpathGroup>();
   for (const result of results)
     for (const group of result.toolpaths) {
-      const key = group.color.toLowerCase();
+      const registrationCopy = group.label.startsWith('misregistration copy');
+      const key = registrationCopy
+        ? `${group.label}:${group.color}`.toLowerCase()
+        : group.color.toLowerCase();
       const existing = groups.get(key);
       if (existing) existing.runs.push(...group.runs);
       else
-        groups.set(key, { color: group.color, label: 'morphed contours', runs: [...group.runs] });
+        groups.set(key, {
+          color: group.color,
+          label: registrationCopy ? group.label : 'morphed contours',
+          runs: [...group.runs],
+        });
     }
   return {
     svg,

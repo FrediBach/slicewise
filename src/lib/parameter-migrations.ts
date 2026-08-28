@@ -169,6 +169,27 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   restored.sampleAndHoldMix = Number.isFinite(restored.sampleAndHoldMix)
     ? restored.sampleAndHoldMix
     : 100;
+  restored.misregistration = restored.misregistration === true;
+  restored.misregistrationCopies = Number.isFinite(restored.misregistrationCopies)
+    ? restored.misregistrationCopies
+    : 2;
+  restored.misregistrationOffset = Number.isFinite(restored.misregistrationOffset)
+    ? restored.misregistrationOffset
+    : 2;
+  restored.misregistrationRotation = Number.isFinite(restored.misregistrationRotation)
+    ? restored.misregistrationRotation
+    : 0.5;
+  restored.misregistrationScope = ['contours', 'all'].includes(
+    String(restored.misregistrationScope),
+  )
+    ? restored.misregistrationScope
+    : 'contours';
+  for (const [key, fallback] of [
+    ['misregistrationColor1', '#00a7e1'],
+    ['misregistrationColor2', '#ec008c'],
+    ['misregistrationColor3', '#ffd400'],
+  ] as const)
+    restored[key] = /^#[0-9a-f]{6}$/i.test(String(restored[key])) ? restored[key] : fallback;
   restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
     ? restored.lensFocalLength
     : 50;

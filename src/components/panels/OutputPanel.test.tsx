@@ -140,6 +140,21 @@ describe('OutputPanel sample-and-hold controls', () => {
   });
 });
 
+describe('OutputPanel misregistration controls', () => {
+  it('exposes physical copy transforms, scope, and pen colours', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Misregistration' })).not.toBeChecked();
+    expect(screen.getByRole('spinbutton', { name: 'Registration copies' })).toHaveValue(2);
+    expect(screen.getByRole('spinbutton', { name: 'Registration offset in mm' })).toHaveValue(2);
+    expect(screen.getByRole('spinbutton', { name: 'Registration rotation in °' })).toHaveValue(0.5);
+    expect(screen.getByLabelText('Copy scope')).toHaveValue('contours');
+    expect(screen.getByLabelText('Copy 1 colour')).toHaveValue('#00a7e1');
+    expect(screen.getByLabelText('Copy 2 colour')).toHaveValue('#ec008c');
+    expect(screen.getByLabelText('Copy 3 colour')).toHaveValue('#ffd400');
+  });
+});
+
 describe('OutputPanel composition boundaries', () => {
   it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
     render(<EffectsPanel />);

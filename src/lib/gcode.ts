@@ -23,6 +23,7 @@ export type GCodeOptions = {
       | 'kaleidoscope'
       | 'halftone'
       | 'chroma'
+      | 'misregistration'
       | 'humanizer'
       | 'yarnCurl'
       | 'blueprint'
@@ -140,6 +141,8 @@ export function generateGCode(
     lines.push('; Note: SVG dash styling is exported as continuous plotter paths');
   if (effects.chroma)
     lines.push('; Note: chromatic SVG offsets are exported as one base contour set');
+  if (effects.misregistration)
+    lines.push('; Misregistration: offset colour copies are included as physical pen groups');
   if (effects.humanizer)
     lines.push('; Humanizer: hand-drawn variations are included in these toolpaths');
   if (effects.yarnCurl)

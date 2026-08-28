@@ -1,6 +1,7 @@
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../../controls/FormControls';
 import { Section } from '../../ui/section';
 import { GlitchControls } from './GlitchControls';
+import { MisregistrationControls } from './MisregistrationControls';
 import { SampleAndHoldControls } from './SampleAndHoldControls';
 import { StaggeredSliceControls } from './StaggeredSliceControls';
 import { TileShuffleControls } from './TileShuffleControls';
@@ -49,6 +50,7 @@ export function EffectsPanel() {
         <WraparoundTearControls />
         <TileShuffleControls />
         <SampleAndHoldControls />
+        <MisregistrationControls />
         <Checkbox id="kaleidoscope" randomizable>
           Kaleidoscope
         </Checkbox>

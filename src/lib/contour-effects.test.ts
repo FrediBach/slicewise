@@ -537,6 +537,87 @@ describe('contour output effects', () => {
       expect(Number.isFinite(value)).toBe(true);
   });
 
+  it('exports misregistration copies as SVG layers and physical pen groups', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: true,
+      misregistration: true,
+      misregistrationCopies: 2,
+      misregistrationOffset: 3,
+      misregistrationRotation: 0.8,
+      misregistrationScope: 'contours',
+      misregistrationColor1: '#00a7e1',
+      misregistrationColor2: '#ec008c',
+    };
+    const baseline = computeContours(
+      makeContourMesh(),
+      { ...settings, misregistration: false },
+      false,
+    );
+    const result = computeContours(makeContourMesh(), settings, false);
+    const copies = result.toolpaths.filter((group) => group.label.startsWith('misregistration'));
+    const quick = computeContours(makeContourMesh(), settings, true);
+
+    expect(result.svg).toContain('id="misregistration"');
+    expect(result.svg).toContain('stroke="#00a7e1"');
+    expect(result.svg).toContain('stroke="#ec008c"');
+    expect(copies.map((group) => group.color)).toEqual(['#00a7e1', '#ec008c']);
+    expect(copies.every((group) => group.runs.length > 0)).toBe(true);
+    expect(result.toolpaths.length).toBe(baseline.toolpaths.length + 2);
+    expect(quick.svg).toContain('id="misregistration"');
+    expect(quick.toolpaths).toEqual([]);
+  });
+
+  it('can include plotter guides in the misregistration scope', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      misregistration: true,
+      misregistrationCopies: 1,
+      misregistrationOffset: 2,
+      misregistrationRotation: 0,
+      vectorZoom1Enabled: true,
+    };
+    const contours = computeContours(
+      makeContourMesh(),
+      { ...settings, misregistrationScope: 'contours' },
+      false,
+    );
+    const all = computeContours(
+      makeContourMesh(),
+      { ...settings, misregistrationScope: 'all' },
+      false,
+    );
+    const copyRuns = (result: typeof all) =>
+      result.toolpaths.find((group) => group.label === 'misregistration copy 1')?.runs.length ?? 0;
+
+    expect(copyRuns(all)).toBeGreaterThan(copyRuns(contours));
+  });
+
+  it('keeps each misregistration pen group distinct across morph instances', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        misregistration: true,
+        misregistrationCopies: 2,
+        misregistrationColor1: contourSettings.color,
+        morphEnabled: true,
+        morphSteps: 2,
+        morphTargets: { panX: 4 },
+      },
+      false,
+    );
+
+    expect(
+      result.toolpaths.filter((group) => group.label.startsWith('misregistration copy')),
+    ).toHaveLength(2);
+  });
+
   it('exports cropped vector zoom insets and plotter-real guides', () => {
     const settings = {
       ...contourSettings,

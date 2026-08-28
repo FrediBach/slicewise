@@ -260,6 +260,14 @@ const state: AppState = {
   sampleAndHoldSpacing: 2,
   sampleAndHoldLength: 4,
   sampleAndHoldMix: 100,
+  misregistration: false,
+  misregistrationCopies: 2,
+  misregistrationOffset: 2,
+  misregistrationRotation: 0.5,
+  misregistrationScope: 'contours',
+  misregistrationColor1: '#00a7e1',
+  misregistrationColor2: '#ec008c',
+  misregistrationColor3: '#ffd400',
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,
@@ -1102,6 +1110,9 @@ if (typeof document !== 'undefined') {
   bindPair('sampleAndHoldSpacing', 'sampleAndHoldSpacing');
   bindPair('sampleAndHoldLength', 'sampleAndHoldLength');
   bindPair('sampleAndHoldMix', 'sampleAndHoldMix');
+  bindPair('misregistrationCopies', 'misregistrationCopies', syncMisregistrationControls);
+  bindPair('misregistrationOffset', 'misregistrationOffset');
+  bindPair('misregistrationRotation', 'misregistrationRotation');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1802,6 +1813,28 @@ if (typeof document !== 'undefined') {
     setSingleControlDisabled('sampleAndHoldAxis', disabled, reason);
     $('sampleAndHoldAxisControl').classList.toggle('is-disabled', disabled);
   }
+  function syncMisregistrationControls(): void {
+    const disabled = !state.misregistration;
+    const reason = 'Turn on Misregistration to edit this parameter.';
+    for (const id of [
+      'misregistrationCopies',
+      'misregistrationOffset',
+      'misregistrationRotation',
+    ]) {
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    setSingleControlDisabled('misregistrationScope', disabled, reason);
+    $('misregistrationScopeControl').classList.toggle('is-disabled', disabled);
+    for (let index = 1; index <= 3; index++) {
+      const id = `misregistrationColor${index}`;
+      const colorDisabled = disabled || index > state.misregistrationCopies;
+      const colorReason = disabled ? reason : `Increase Registration copies to use copy ${index}.`;
+      setDisabled($<HTMLInputElement>(id), colorDisabled, colorReason);
+      setDisabled($<HTMLInputElement>(id + 'Hex'), colorDisabled, colorReason);
+      $(id + 'Control').classList.toggle('is-disabled', colorDisabled);
+    }
+  }
   function syncVectorZoomControls(): void {
     for (let index = 1; index <= 4; index++) {
       const prefix = `vectorZoom${index}`;
@@ -1935,6 +1968,31 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   syncSampleAndHoldControls();
+  $('misregistration').addEventListener('change', (event) => {
+    state.misregistration = inputTarget(event).checked;
+    syncMisregistrationControls();
+    redraw(false);
+  });
+  $('misregistrationScope').addEventListener('change', (event) => {
+    state.misregistrationScope = inputTarget(event).value;
+    redraw(false);
+  });
+  for (let index = 1; index <= 3; index++) {
+    const id = `misregistrationColor${index}`;
+    const applyColor = (value: string, quick: boolean): void => {
+      if (!/^#[0-9a-f]{6}$/i.test(value)) return;
+      dynamicState[id] = value;
+      $<HTMLInputElement>(id).value = value;
+      $<HTMLInputElement>(id + 'Hex').value = value;
+      $(`${id}Swatch`).style.background = value;
+      redraw(quick);
+    };
+    $(id).addEventListener('input', (event) => applyColor(inputTarget(event).value, true));
+    $(id + 'Hex').addEventListener('input', (event) => applyColor(inputTarget(event).value, true));
+    $(id).addEventListener('change', () => redraw(false));
+    $(id + 'Hex').addEventListener('change', () => redraw(false));
+  }
+  syncMisregistrationControls();
   for (let index = 1; index <= 4; index++) {
     const prefix = `vectorZoom${index}`;
     $(`${prefix}Enabled`).addEventListener('change', (event) => {
@@ -2340,6 +2398,9 @@ if (typeof document !== 'undefined') {
     ['sampleAndHoldSpacing', 'sampleAndHoldSpacing'],
     ['sampleAndHoldLength', 'sampleAndHoldLength'],
     ['sampleAndHoldMix', 'sampleAndHoldMix'],
+    ['misregistrationCopies', 'misregistrationCopies'],
+    ['misregistrationOffset', 'misregistrationOffset'],
+    ['misregistrationRotation', 'misregistrationRotation'],
     ['kaleidoscopeSegments', 'kaleidoscopeSegments'],
     ['kaleidoscopeRotation', 'kaleidoscopeRotation'],
     ['sw', 'sw'],
@@ -2391,6 +2452,7 @@ if (typeof document !== 'undefined') {
     'staggeredSlicesPattern',
     'wraparoundTearOrientation',
     'sampleAndHoldAxis',
+    'misregistrationScope',
     'blueprintStyle',
     'vectorZoom1Shape',
     'vectorZoom1Corner',
@@ -2421,6 +2483,7 @@ if (typeof document !== 'undefined') {
     'wraparoundTear',
     'tileShuffle',
     'sampleAndHold',
+    'misregistration',
     'kaleidoscope',
     'halftone',
     'chroma',
@@ -2480,6 +2543,13 @@ if (typeof document !== 'undefined') {
       $<HTMLInputElement>(`${prefix}ColorHex`).value = color;
       $(`${prefix}ColorSwatch`).style.background = color;
     }
+    for (let index = 1; index <= 3; index++) {
+      const id = `misregistrationColor${index}`;
+      const color = String(dynamicState[id]);
+      $<HTMLInputElement>(id).value = color;
+      $<HTMLInputElement>(id + 'Hex').value = color;
+      $(`${id}Swatch`).style.background = color;
+    }
     $('bed').style.background = previewBackground(state);
     $('pw').value = String(state.pw);
     $('ph').value = String(state.ph);
@@ -2499,6 +2569,7 @@ if (typeof document !== 'undefined') {
     syncWraparoundTearControls();
     syncTileShuffleControls();
     syncSampleAndHoldControls();
+    syncMisregistrationControls();
     syncKaleidoscopeControls();
     syncVectorZoomControls();
     syncHalftoneControls();
@@ -2866,6 +2937,7 @@ if (typeof document !== 'undefined') {
       wraparoundTear: 0.2,
       tileShuffle: 0.16,
       sampleAndHold: 0.2,
+      misregistration: 0.18,
       kaleidoscope: 0.2,
       vectorZoom1Enabled: 0.12,
       vectorZoom2Enabled: 0.06,
@@ -2968,6 +3040,24 @@ if (typeof document !== 'undefined') {
     randomizePair('sampleAndHoldMix', 'sampleAndHoldMix', () => randomInt(35, 100));
     randomizeSelect('sampleAndHoldAxis', 'sampleAndHoldAxis', ['y', 'y', 'x']);
     syncSampleAndHoldControls();
+    $('misregistration').checked = state.misregistration;
+    randomizePair('misregistrationCopies', 'misregistrationCopies', () => randomInt(1, 3));
+    randomizePair('misregistrationOffset', 'misregistrationOffset', () => randomIn(0.5, 5));
+    randomizePair('misregistrationRotation', 'misregistrationRotation', () => randomIn(0, 1.5));
+    randomizeSelect('misregistrationScope', 'misregistrationScope', [
+      'contours',
+      'contours',
+      'all',
+    ]);
+    const registrationPalette = ['#00a7e1', '#ec008c', '#ffd400', '#ef4444', '#2563eb'];
+    for (let index = 1; index <= 3; index++)
+      randomizeColor(
+        `misregistrationColor${index}`,
+        `misregistrationColor${index}`,
+        registrationPalette,
+        `misregistrationColor${index}Swatch`,
+      );
+    syncMisregistrationControls();
     $('kaleidoscope').checked = state.kaleidoscope;
     randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
     randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));

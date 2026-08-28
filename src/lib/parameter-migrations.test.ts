@@ -236,6 +236,32 @@ describe('parameter snapshot migrations', () => {
     });
   });
 
+  it('repairs missing or invalid misregistration settings', () => {
+    const restored = normalizeParameterSnapshot(
+      snapshot({
+        misregistration: undefined,
+        misregistrationCopies: Number.NaN,
+        misregistrationOffset: Number.NaN,
+        misregistrationRotation: Number.NaN,
+        misregistrationScope: 'invalid',
+        misregistrationColor1: 'cyan',
+        misregistrationColor2: '',
+        misregistrationColor3: undefined,
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      misregistration: false,
+      misregistrationCopies: 2,
+      misregistrationOffset: 2,
+      misregistrationRotation: 0.5,
+      misregistrationScope: 'contours',
+      misregistrationColor1: '#00a7e1',
+      misregistrationColor2: '#ec008c',
+      misregistrationColor3: '#ffd400',
+    });
+  });
+
   it('repairs invalid optical, wavefront, and vector-zoom values', () => {
     const restored = normalizeParameterSnapshot(
       snapshot({
