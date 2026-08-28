@@ -75,6 +75,20 @@ describe('OutputPanel block-glitch controls', () => {
   });
 });
 
+describe('OutputPanel scan-band controls', () => {
+  it('exposes deterministic plotter-safe band controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Scan-band glitch' })).not.toBeChecked();
+    expect(screen.getByLabelText('Band orientation')).toHaveValue('horizontal');
+    expect(screen.getByRole('spinbutton', { name: 'Bands' })).toHaveValue(12);
+    expect(screen.getByRole('spinbutton', { name: 'Band thickness in %' })).toHaveValue(55);
+    expect(screen.getByRole('spinbutton', { name: 'Affected bands in %' })).toHaveValue(50);
+    expect(screen.getByRole('spinbutton', { name: 'Band displacement in mm' })).toHaveValue(6);
+    expect(screen.getByRole('spinbutton', { name: 'Band seed' })).toHaveValue(2);
+  });
+});
+
 describe('OutputPanel composition boundaries', () => {
   it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
     render(<EffectsPanel />);

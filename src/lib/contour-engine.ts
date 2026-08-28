@@ -2,6 +2,7 @@
 
 import { clipRunToRect } from './toolpaths';
 import { applyBlockGlitch, resolveGlitchBlocks, type BlockGlitchSettings } from './block-glitch';
+import { resolveScanBands, type ScanBandGlitchSettings } from './scan-band-glitch';
 import { kaleidoscopeRun, type KaleidoscopeSettings } from './kaleidoscope';
 import { createMapAnnotations } from './mapAnnotations';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
@@ -79,7 +80,12 @@ export interface LineIndexColor {
 }
 
 export interface ContourSettings
-  extends BlockGlitchSettings, GenerativeMaskSettings, KaleidoscopeSettings, VectorZoomSettings {
+  extends
+    BlockGlitchSettings,
+    ScanBandGlitchSettings,
+    GenerativeMaskSettings,
+    KaleidoscopeSettings,
+    VectorZoomSettings {
   az: number;
   el: number;
   roll: number;
@@ -1556,6 +1562,13 @@ function deterministicDrawingNumber(
       settings.blockGlitchDirection,
       settings.blockGlitchClearDestination,
       settings.blockGlitchSeed,
+      settings.scanBandGlitch,
+      settings.scanBandGlitchCount,
+      settings.scanBandGlitchThickness,
+      settings.scanBandGlitchDisplacement,
+      settings.scanBandGlitchDensity,
+      settings.scanBandGlitchOrientation,
+      settings.scanBandGlitchSeed,
       settings.blueprintStyle,
       settings.maskEnabled,
       settings.maskOutline,
@@ -2292,6 +2305,7 @@ function computeLineArtInstance(
     : settings.quality;
   const vectorZooms = resolveVectorZooms(settings, W, H, settings.margin);
   const glitchBlocks = resolveGlitchBlocks(settings, W, H, settings.margin);
+  const scanBands = resolveScanBands(settings, W, H, settings.margin);
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
   const { palette, indexedPalette, gradientCount } = colorPlan(settings, offsets.length - 1);
   const pathDataByColor = palette.map(() => '');
@@ -2348,7 +2362,8 @@ function computeLineArtInstance(
       glitchBlocks,
       settings.blockGlitchClearDestination,
     );
-    const clippedRuns = glitchedRuns.flatMap((run) =>
+    const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
+    const clippedRuns = scanGlitchedRuns.flatMap((run) =>
       kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
         clipArtworkRun(candidate, settings, W, H),
       ),
@@ -2512,6 +2527,7 @@ function computeContourInstance(
     H = settings.ph;
   const vectorZooms = resolveVectorZooms(settings, W, H, settings.margin);
   const glitchBlocks = resolveGlitchBlocks(settings, W, H, settings.margin);
+  const scanBands = resolveScanBands(settings, W, H, settings.margin);
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
   const [focalLength, distortion] = resolveLens(settings);
   const perspective = clamp(settings.lensPerspective ?? 0, 0, 100);
@@ -2822,7 +2838,8 @@ function computeContourInstance(
         glitchBlocks,
         settings.blockGlitchClearDestination,
       );
-      const clippedRuns = glitchedRuns.flatMap((run) =>
+      const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
+      const clippedRuns = scanGlitchedRuns.flatMap((run) =>
         kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
           clipArtworkRun(candidate, settings, W, H),
         ),

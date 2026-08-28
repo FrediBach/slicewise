@@ -76,6 +76,7 @@ Coverage currently measures the focused core under active test:
 - `polyline-styling.ts`
 - `render-settings.ts`
 - `scalar-fields.ts`
+- `scan-band-glitch.ts`
 - `slicer-export.ts`
 - `svg-mesh.ts`
 - `toolpaths.ts`

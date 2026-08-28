@@ -301,6 +301,9 @@ describe('contour output effects', () => {
         blockGlitch: true,
         blockGlitchCount: 5,
         blockGlitchSeed: 19,
+        scanBandGlitch: true,
+        scanBandGlitchCount: 8,
+        scanBandGlitchSeed: 23,
         blueprint: true,
         topographicMap: true,
       },
@@ -384,6 +387,35 @@ describe('contour output effects', () => {
       blockGlitchSeed: 73,
     };
     const baseline = computeContours(makeContourMesh(), { ...settings, blockGlitch: false }, false);
+    const first = computeContours(makeContourMesh(), settings, false);
+    const second = computeContours(makeContourMesh(), settings, false);
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.toolpaths).toEqual(second.toolpaths);
+    expect(first.toolpaths).not.toEqual(baseline.toolpaths);
+    expect(first.paths).toBeGreaterThan(0);
+    for (const value of first.toolpaths.flatMap((group) => group.runs).flat())
+      expect(Number.isFinite(value)).toBe(true);
+  });
+
+  it('exports deterministic scan-band geometry to SVG and plotter runs', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      scanBandGlitch: true,
+      scanBandGlitchCount: 24,
+      scanBandGlitchThickness: 80,
+      scanBandGlitchDisplacement: 12,
+      scanBandGlitchDensity: 75,
+      scanBandGlitchOrientation: 'horizontal',
+      scanBandGlitchSeed: 37,
+    };
+    const baseline = computeContours(
+      makeContourMesh(),
+      { ...settings, scanBandGlitch: false },
+      false,
+    );
     const first = computeContours(makeContourMesh(), settings, false);
     const second = computeContours(makeContourMesh(), settings, false);
 

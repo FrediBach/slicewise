@@ -126,6 +126,30 @@ describe('parameter snapshot migrations', () => {
     });
   });
 
+  it('repairs missing or invalid scan-band settings', () => {
+    const restored = normalizeParameterSnapshot(
+      snapshot({
+        scanBandGlitch: undefined,
+        scanBandGlitchCount: Number.NaN,
+        scanBandGlitchThickness: Number.NaN,
+        scanBandGlitchDisplacement: Number.NaN,
+        scanBandGlitchDensity: Number.NaN,
+        scanBandGlitchOrientation: 'diagonal',
+        scanBandGlitchSeed: Number.NaN,
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      scanBandGlitch: false,
+      scanBandGlitchCount: 12,
+      scanBandGlitchThickness: 55,
+      scanBandGlitchDisplacement: 6,
+      scanBandGlitchDensity: 50,
+      scanBandGlitchOrientation: 'horizontal',
+      scanBandGlitchSeed: 2,
+    });
+  });
+
   it('repairs invalid optical, wavefront, and vector-zoom values', () => {
     const restored = normalizeParameterSnapshot(
       snapshot({

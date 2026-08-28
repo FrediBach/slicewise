@@ -81,6 +81,27 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   restored.blockGlitchSeed = Number.isFinite(restored.blockGlitchSeed)
     ? restored.blockGlitchSeed
     : 1;
+  restored.scanBandGlitch = restored.scanBandGlitch === true;
+  restored.scanBandGlitchCount = Number.isFinite(restored.scanBandGlitchCount)
+    ? restored.scanBandGlitchCount
+    : 12;
+  restored.scanBandGlitchThickness = Number.isFinite(restored.scanBandGlitchThickness)
+    ? restored.scanBandGlitchThickness
+    : 55;
+  restored.scanBandGlitchDisplacement = Number.isFinite(restored.scanBandGlitchDisplacement)
+    ? restored.scanBandGlitchDisplacement
+    : 6;
+  restored.scanBandGlitchDensity = Number.isFinite(restored.scanBandGlitchDensity)
+    ? restored.scanBandGlitchDensity
+    : 50;
+  restored.scanBandGlitchOrientation = ['horizontal', 'vertical'].includes(
+    String(restored.scanBandGlitchOrientation),
+  )
+    ? restored.scanBandGlitchOrientation
+    : 'horizontal';
+  restored.scanBandGlitchSeed = Number.isFinite(restored.scanBandGlitchSeed)
+    ? restored.scanBandGlitchSeed
+    : 2;
   restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
     ? restored.lensFocalLength
     : 50;
