@@ -59,6 +59,28 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   restored.lineIndexColors = restored.lineIndexColors?.length
     ? restored.lineIndexColors
     : [{ index: 1, color: '#ef4444', series: 'single', reverse: false }];
+  restored.blockGlitch = restored.blockGlitch === true;
+  restored.blockGlitchCount = Number.isFinite(restored.blockGlitchCount)
+    ? restored.blockGlitchCount
+    : 3;
+  restored.blockGlitchWidth = Number.isFinite(restored.blockGlitchWidth)
+    ? restored.blockGlitchWidth
+    : 18;
+  restored.blockGlitchHeight = Number.isFinite(restored.blockGlitchHeight)
+    ? restored.blockGlitchHeight
+    : 6;
+  restored.blockGlitchDisplacement = Number.isFinite(restored.blockGlitchDisplacement)
+    ? restored.blockGlitchDisplacement
+    : 8;
+  restored.blockGlitchDirection = ['horizontal', 'vertical', 'both'].includes(
+    String(restored.blockGlitchDirection),
+  )
+    ? restored.blockGlitchDirection
+    : 'horizontal';
+  restored.blockGlitchClearDestination = restored.blockGlitchClearDestination === true;
+  restored.blockGlitchSeed = Number.isFinite(restored.blockGlitchSeed)
+    ? restored.blockGlitchSeed
+    : 1;
   restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
     ? restored.lensFocalLength
     : 50;

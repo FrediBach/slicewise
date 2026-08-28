@@ -100,6 +100,32 @@ describe('parameter snapshot migrations', () => {
     ]);
   });
 
+  it('repairs missing or invalid block-glitch settings', () => {
+    const restored = normalizeParameterSnapshot(
+      snapshot({
+        blockGlitch: undefined,
+        blockGlitchCount: Number.NaN,
+        blockGlitchWidth: Number.NaN,
+        blockGlitchHeight: Number.NaN,
+        blockGlitchDisplacement: Number.NaN,
+        blockGlitchDirection: 'diagonal-only',
+        blockGlitchClearDestination: undefined,
+        blockGlitchSeed: Number.NaN,
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      blockGlitch: false,
+      blockGlitchCount: 3,
+      blockGlitchWidth: 18,
+      blockGlitchHeight: 6,
+      blockGlitchDisplacement: 8,
+      blockGlitchDirection: 'horizontal',
+      blockGlitchClearDestination: false,
+      blockGlitchSeed: 1,
+    });
+  });
+
   it('repairs invalid optical, wavefront, and vector-zoom values', () => {
     const restored = normalizeParameterSnapshot(
       snapshot({

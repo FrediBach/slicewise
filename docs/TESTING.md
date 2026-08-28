@@ -58,6 +58,7 @@ When fixing a bug, first add the smallest test that reproduces it at the closest
 
 Coverage currently measures the focused core under active test:
 
+- `block-glitch.ts`
 - `colorPair.ts`
 - `contour-engine.ts`
 - `demo-meshes/index.ts`

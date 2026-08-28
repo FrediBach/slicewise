@@ -222,6 +222,14 @@ const state: AppState = {
   sliceLfoModulationCycles: 1,
   sliceLfoModulationPhase: 0,
   explodeAmount: 0,
+  blockGlitch: false,
+  blockGlitchCount: 3,
+  blockGlitchWidth: 18,
+  blockGlitchHeight: 6,
+  blockGlitchDisplacement: 8,
+  blockGlitchDirection: 'horizontal',
+  blockGlitchClearDestination: false,
+  blockGlitchSeed: 1,
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,
@@ -1039,6 +1047,11 @@ if (typeof document !== 'undefined') {
   bindPair('humanizerAmount', 'humanizerAmount');
   bindPair('yarnCutPercent', 'yarnCutPercent');
   bindPair('yarnCurlSize', 'yarnCurlSize');
+  bindPair('blockGlitchCount', 'blockGlitchCount');
+  bindPair('blockGlitchWidth', 'blockGlitchWidth');
+  bindPair('blockGlitchHeight', 'blockGlitchHeight');
+  bindPair('blockGlitchDisplacement', 'blockGlitchDisplacement');
+  bindPair('blockGlitchSeed', 'blockGlitchSeed');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1649,6 +1662,26 @@ if (typeof document !== 'undefined') {
       $(id + 'Control').classList.toggle('is-disabled', !state.kaleidoscope);
     }
   }
+  function syncBlockGlitchControls(): void {
+    const disabled = !state.blockGlitch;
+    const reason = 'Turn on Block glitch to edit this parameter.';
+    for (const id of [
+      'blockGlitchCount',
+      'blockGlitchWidth',
+      'blockGlitchHeight',
+      'blockGlitchDisplacement',
+      'blockGlitchSeed',
+    ]) {
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    setSingleControlDisabled('blockGlitchDirection', disabled, reason);
+    $('blockGlitchDirectionControl').classList.toggle('is-disabled', disabled);
+    setSingleControlDisabled('blockGlitchClearDestination', disabled, reason);
+    $('blockGlitchClearDestination')
+      .closest('.checkbox-control')
+      ?.classList.toggle('is-disabled', disabled);
+  }
   function syncVectorZoomControls(): void {
     for (let index = 1; index <= 4; index++) {
       const prefix = `vectorZoom${index}`;
@@ -1717,6 +1750,20 @@ if (typeof document !== 'undefined') {
     syncKaleidoscopeControls();
     redraw(false);
   });
+  $('blockGlitch').addEventListener('change', (event) => {
+    state.blockGlitch = inputTarget(event).checked;
+    syncBlockGlitchControls();
+    redraw(false);
+  });
+  $('blockGlitchDirection').addEventListener('change', (event) => {
+    state.blockGlitchDirection = inputTarget(event).value;
+    redraw(false);
+  });
+  $('blockGlitchClearDestination').addEventListener('change', (event) => {
+    state.blockGlitchClearDestination = inputTarget(event).checked;
+    redraw(false);
+  });
+  syncBlockGlitchControls();
   for (let index = 1; index <= 4; index++) {
     const prefix = `vectorZoom${index}`;
     $(`${prefix}Enabled`).addEventListener('change', (event) => {
@@ -2097,6 +2144,11 @@ if (typeof document !== 'undefined') {
     ['sliceLfoModulationCycles', 'sliceLfoModulationCycles'],
     ['sliceLfoModulationPhase', 'sliceLfoModulationPhase'],
     ['explodeAmount', 'explodeAmount'],
+    ['blockGlitchCount', 'blockGlitchCount'],
+    ['blockGlitchWidth', 'blockGlitchWidth'],
+    ['blockGlitchHeight', 'blockGlitchHeight'],
+    ['blockGlitchDisplacement', 'blockGlitchDisplacement'],
+    ['blockGlitchSeed', 'blockGlitchSeed'],
     ['kaleidoscopeSegments', 'kaleidoscopeSegments'],
     ['kaleidoscopeRotation', 'kaleidoscopeRotation'],
     ['sw', 'sw'],
@@ -2142,6 +2194,7 @@ if (typeof document !== 'undefined') {
     'sliceLfoWaveform',
     'sliceLfoModulationMode',
     'lineWeightMode',
+    'blockGlitchDirection',
     'blueprintStyle',
     'vectorZoom1Shape',
     'vectorZoom1Corner',
@@ -2165,6 +2218,8 @@ if (typeof document !== 'undefined') {
     'maskOutline',
     'gradientEnabled',
     'lineIndexColorEnabled',
+    'blockGlitch',
+    'blockGlitchClearDestination',
     'kaleidoscope',
     'halftone',
     'chroma',
@@ -2237,6 +2292,7 @@ if (typeof document !== 'undefined') {
     syncSliceLfoControls();
     syncLineWeightControls();
     syncMaskControls();
+    syncBlockGlitchControls();
     syncKaleidoscopeControls();
     syncVectorZoomControls();
     syncHalftoneControls();
@@ -2598,6 +2654,7 @@ if (typeof document !== 'undefined') {
 
     const effectChances = {
       gradientEnabled: 0.24,
+      blockGlitch: 0.25,
       kaleidoscope: 0.2,
       vectorZoom1Enabled: 0.12,
       vectorZoom2Enabled: 0.06,
@@ -2631,6 +2688,20 @@ if (typeof document !== 'undefined') {
       );
     }
     $('halftone').checked = state.halftone;
+    $('blockGlitch').checked = state.blockGlitch;
+    randomizePair('blockGlitchCount', 'blockGlitchCount', () => randomInt(1, 8));
+    randomizePair('blockGlitchWidth', 'blockGlitchWidth', () => randomInt(8, 32));
+    randomizePair('blockGlitchHeight', 'blockGlitchHeight', () => randomInt(2, 16));
+    randomizePair('blockGlitchDisplacement', 'blockGlitchDisplacement', () => randomIn(2, 24));
+    randomizePair('blockGlitchSeed', 'blockGlitchSeed', () => randomInt(0, 9999));
+    randomizeSelect('blockGlitchDirection', 'blockGlitchDirection', [
+      'horizontal',
+      'horizontal',
+      'vertical',
+      'both',
+    ]);
+    randomizeCheckbox('blockGlitchClearDestination', 'blockGlitchClearDestination', 0.35);
+    syncBlockGlitchControls();
     $('kaleidoscope').checked = state.kaleidoscope;
     randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
     randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));

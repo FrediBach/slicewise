@@ -60,6 +60,21 @@ describe('OutputPanel kaleidoscope controls', () => {
   });
 });
 
+describe('OutputPanel block-glitch controls', () => {
+  it('exposes deterministic plotter-safe block controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Block glitch' })).not.toBeChecked();
+    expect(screen.getByRole('spinbutton', { name: 'Blocks' })).toHaveValue(3);
+    expect(screen.getByRole('spinbutton', { name: 'Block width in %' })).toHaveValue(18);
+    expect(screen.getByRole('spinbutton', { name: 'Block height in %' })).toHaveValue(6);
+    expect(screen.getByRole('spinbutton', { name: 'Displacement in mm' })).toHaveValue(8);
+    expect(screen.getByLabelText('Direction')).toHaveValue('horizontal');
+    expect(screen.getByRole('spinbutton', { name: 'Seed' })).toHaveValue(1);
+    expect(screen.getByRole('checkbox', { name: 'Clear destination' })).not.toBeChecked();
+  });
+});
+
 describe('OutputPanel composition boundaries', () => {
   it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
     render(<EffectsPanel />);
