@@ -79,6 +79,7 @@ Coverage currently measures the focused core under active test:
 - `scan-band-glitch.ts`
 - `slicer-export.ts`
 - `svg-mesh.ts`
+- `staggered-slices.ts`
 - `toolpaths.ts`
 - `vector-zoom.ts`
 - `FormControls.tsx`

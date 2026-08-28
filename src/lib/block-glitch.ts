@@ -186,3 +186,25 @@ export function applyBlockGlitch(
   );
   return [...baseRuns, ...displacedRuns];
 }
+
+/** Optimized cut-and-move path for adjacent slices whose union is one rectangle. */
+export function applyContiguousSliceGlitch(
+  runs: readonly number[][],
+  slices: readonly ResolvedGlitchBlock[],
+): number[][] {
+  if (!slices.length) return runs.map((run) => run.slice());
+  const region = { ...slices[0] };
+  for (let index = 1; index < slices.length; index++) {
+    region.left = Math.min(region.left, slices[index].left);
+    region.top = Math.min(region.top, slices[index].top);
+    region.right = Math.max(region.right, slices[index].right);
+    region.bottom = Math.max(region.bottom, slices[index].bottom);
+  }
+  const baseRuns = runs.flatMap((run) => clipRun(run, region, false));
+  const displacedRuns = slices.flatMap((slice) =>
+    runs.flatMap((run) =>
+      clipRun(run, slice, true).map((fragment) => translateRun(fragment, slice.dx, slice.dy)),
+    ),
+  );
+  return [...baseRuns, ...displacedRuns];
+}

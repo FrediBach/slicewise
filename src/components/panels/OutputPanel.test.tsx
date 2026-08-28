@@ -89,6 +89,20 @@ describe('OutputPanel scan-band controls', () => {
   });
 });
 
+describe('OutputPanel staggered-slice controls', () => {
+  it('exposes structured plotter-safe slice controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Staggered slices' })).not.toBeChecked();
+    expect(screen.getByLabelText('Slice orientation')).toHaveValue('horizontal');
+    expect(screen.getByLabelText('Stagger pattern')).toHaveValue('ramp');
+    expect(screen.getByRole('spinbutton', { name: 'Slices' })).toHaveValue(12);
+    expect(screen.getByRole('spinbutton', { name: 'Region extent in %' })).toHaveValue(70);
+    expect(screen.getByRole('spinbutton', { name: 'Maximum stagger in mm' })).toHaveValue(10);
+    expect(screen.getByRole('spinbutton', { name: 'Stagger seed' })).toHaveValue(3);
+  });
+});
+
 describe('OutputPanel composition boundaries', () => {
   it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
     render(<EffectsPanel />);

@@ -237,6 +237,13 @@ const state: AppState = {
   scanBandGlitchDensity: 50,
   scanBandGlitchOrientation: 'horizontal',
   scanBandGlitchSeed: 2,
+  staggeredSlices: false,
+  staggeredSlicesCount: 12,
+  staggeredSlicesExtent: 70,
+  staggeredSlicesDisplacement: 10,
+  staggeredSlicesOrientation: 'horizontal',
+  staggeredSlicesPattern: 'ramp',
+  staggeredSlicesSeed: 3,
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,
@@ -1064,6 +1071,10 @@ if (typeof document !== 'undefined') {
   bindPair('scanBandGlitchDisplacement', 'scanBandGlitchDisplacement');
   bindPair('scanBandGlitchDensity', 'scanBandGlitchDensity');
   bindPair('scanBandGlitchSeed', 'scanBandGlitchSeed');
+  bindPair('staggeredSlicesCount', 'staggeredSlicesCount');
+  bindPair('staggeredSlicesExtent', 'staggeredSlicesExtent');
+  bindPair('staggeredSlicesDisplacement', 'staggeredSlicesDisplacement');
+  bindPair('staggeredSlicesSeed', 'staggeredSlicesSeed');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1710,6 +1721,26 @@ if (typeof document !== 'undefined') {
     setSingleControlDisabled('scanBandGlitchOrientation', disabled, reason);
     $('scanBandGlitchOrientationControl').classList.toggle('is-disabled', disabled);
   }
+  function syncStaggeredSliceControls(): void {
+    const disabled = !state.staggeredSlices;
+    const reason = 'Turn on Staggered slices to edit this parameter.';
+    for (const id of [
+      'staggeredSlicesCount',
+      'staggeredSlicesExtent',
+      'staggeredSlicesDisplacement',
+    ]) {
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    for (const id of ['staggeredSlicesOrientation', 'staggeredSlicesPattern']) {
+      setSingleControlDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    const seedDisabled = disabled || state.staggeredSlicesPattern !== 'seeded';
+    const seedReason = disabled ? reason : 'Choose Seeded irregular to edit this parameter.';
+    setControlPairDisabled('staggeredSlicesSeed', seedDisabled, seedReason);
+    $('staggeredSlicesSeedControl').classList.toggle('is-disabled', seedDisabled);
+  }
   function syncVectorZoomControls(): void {
     for (let index = 1; index <= 4; index++) {
       const prefix = `vectorZoom${index}`;
@@ -1802,6 +1833,21 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   syncScanBandGlitchControls();
+  $('staggeredSlices').addEventListener('change', (event) => {
+    state.staggeredSlices = inputTarget(event).checked;
+    syncStaggeredSliceControls();
+    redraw(false);
+  });
+  $('staggeredSlicesOrientation').addEventListener('change', (event) => {
+    state.staggeredSlicesOrientation = inputTarget(event).value;
+    redraw(false);
+  });
+  $('staggeredSlicesPattern').addEventListener('change', (event) => {
+    state.staggeredSlicesPattern = inputTarget(event).value;
+    syncStaggeredSliceControls();
+    redraw(false);
+  });
+  syncStaggeredSliceControls();
   for (let index = 1; index <= 4; index++) {
     const prefix = `vectorZoom${index}`;
     $(`${prefix}Enabled`).addEventListener('change', (event) => {
@@ -2192,6 +2238,10 @@ if (typeof document !== 'undefined') {
     ['scanBandGlitchDisplacement', 'scanBandGlitchDisplacement'],
     ['scanBandGlitchDensity', 'scanBandGlitchDensity'],
     ['scanBandGlitchSeed', 'scanBandGlitchSeed'],
+    ['staggeredSlicesCount', 'staggeredSlicesCount'],
+    ['staggeredSlicesExtent', 'staggeredSlicesExtent'],
+    ['staggeredSlicesDisplacement', 'staggeredSlicesDisplacement'],
+    ['staggeredSlicesSeed', 'staggeredSlicesSeed'],
     ['kaleidoscopeSegments', 'kaleidoscopeSegments'],
     ['kaleidoscopeRotation', 'kaleidoscopeRotation'],
     ['sw', 'sw'],
@@ -2239,6 +2289,8 @@ if (typeof document !== 'undefined') {
     'lineWeightMode',
     'blockGlitchDirection',
     'scanBandGlitchOrientation',
+    'staggeredSlicesOrientation',
+    'staggeredSlicesPattern',
     'blueprintStyle',
     'vectorZoom1Shape',
     'vectorZoom1Corner',
@@ -2265,6 +2317,7 @@ if (typeof document !== 'undefined') {
     'blockGlitch',
     'blockGlitchClearDestination',
     'scanBandGlitch',
+    'staggeredSlices',
     'kaleidoscope',
     'halftone',
     'chroma',
@@ -2339,6 +2392,7 @@ if (typeof document !== 'undefined') {
     syncMaskControls();
     syncBlockGlitchControls();
     syncScanBandGlitchControls();
+    syncStaggeredSliceControls();
     syncKaleidoscopeControls();
     syncVectorZoomControls();
     syncHalftoneControls();
@@ -2702,6 +2756,7 @@ if (typeof document !== 'undefined') {
       gradientEnabled: 0.24,
       blockGlitch: 0.25,
       scanBandGlitch: 0.22,
+      staggeredSlices: 0.2,
       kaleidoscope: 0.2,
       vectorZoom1Enabled: 0.12,
       vectorZoom2Enabled: 0.06,
@@ -2763,6 +2818,24 @@ if (typeof document !== 'undefined') {
       'vertical',
     ]);
     syncScanBandGlitchControls();
+    $('staggeredSlices').checked = state.staggeredSlices;
+    randomizePair('staggeredSlicesCount', 'staggeredSlicesCount', () => randomInt(4, 20));
+    randomizePair('staggeredSlicesExtent', 'staggeredSlicesExtent', () => randomInt(35, 100));
+    randomizePair('staggeredSlicesDisplacement', 'staggeredSlicesDisplacement', () =>
+      randomIn(3, 24),
+    );
+    randomizePair('staggeredSlicesSeed', 'staggeredSlicesSeed', () => randomInt(0, 9999));
+    randomizeSelect('staggeredSlicesOrientation', 'staggeredSlicesOrientation', [
+      'horizontal',
+      'horizontal',
+      'vertical',
+    ]);
+    randomizeSelect('staggeredSlicesPattern', 'staggeredSlicesPattern', [
+      'ramp',
+      'alternating',
+      'seeded',
+    ]);
+    syncStaggeredSliceControls();
     $('kaleidoscope').checked = state.kaleidoscope;
     randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
     randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));

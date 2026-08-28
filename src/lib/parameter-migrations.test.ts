@@ -150,6 +150,30 @@ describe('parameter snapshot migrations', () => {
     });
   });
 
+  it('repairs missing or invalid staggered-slice settings', () => {
+    const restored = normalizeParameterSnapshot(
+      snapshot({
+        staggeredSlices: undefined,
+        staggeredSlicesCount: Number.NaN,
+        staggeredSlicesExtent: Number.NaN,
+        staggeredSlicesDisplacement: Number.NaN,
+        staggeredSlicesOrientation: 'diagonal',
+        staggeredSlicesPattern: 'unsupported',
+        staggeredSlicesSeed: Number.NaN,
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      staggeredSlices: false,
+      staggeredSlicesCount: 12,
+      staggeredSlicesExtent: 70,
+      staggeredSlicesDisplacement: 10,
+      staggeredSlicesOrientation: 'horizontal',
+      staggeredSlicesPattern: 'ramp',
+      staggeredSlicesSeed: 3,
+    });
+  });
+
   it('repairs invalid optical, wavefront, and vector-zoom values', () => {
     const restored = normalizeParameterSnapshot(
       snapshot({

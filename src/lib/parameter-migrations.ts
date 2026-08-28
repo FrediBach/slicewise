@@ -102,6 +102,29 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   restored.scanBandGlitchSeed = Number.isFinite(restored.scanBandGlitchSeed)
     ? restored.scanBandGlitchSeed
     : 2;
+  restored.staggeredSlices = restored.staggeredSlices === true;
+  restored.staggeredSlicesCount = Number.isFinite(restored.staggeredSlicesCount)
+    ? restored.staggeredSlicesCount
+    : 12;
+  restored.staggeredSlicesExtent = Number.isFinite(restored.staggeredSlicesExtent)
+    ? restored.staggeredSlicesExtent
+    : 70;
+  restored.staggeredSlicesDisplacement = Number.isFinite(restored.staggeredSlicesDisplacement)
+    ? restored.staggeredSlicesDisplacement
+    : 10;
+  restored.staggeredSlicesOrientation = ['horizontal', 'vertical'].includes(
+    String(restored.staggeredSlicesOrientation),
+  )
+    ? restored.staggeredSlicesOrientation
+    : 'horizontal';
+  restored.staggeredSlicesPattern = ['ramp', 'alternating', 'seeded'].includes(
+    String(restored.staggeredSlicesPattern),
+  )
+    ? restored.staggeredSlicesPattern
+    : 'ramp';
+  restored.staggeredSlicesSeed = Number.isFinite(restored.staggeredSlicesSeed)
+    ? restored.staggeredSlicesSeed
+    : 3;
   restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
     ? restored.lensFocalLength
     : 50;

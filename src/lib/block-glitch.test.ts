@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyBlockGlitch,
+  applyContiguousSliceGlitch,
   resolveGlitchBlocks,
   type BlockGlitchSettings,
   type ResolvedGlitchBlock,
@@ -90,5 +91,19 @@ describe('block glitch geometry', () => {
     expect(result).toEqual(source);
     expect(result).not.toBe(source);
     expect(result[0]).not.toBe(source[0]);
+  });
+
+  it('cuts a contiguous slice region from the base in one pass', () => {
+    const slices: ResolvedGlitchBlock[] = [
+      { left: 2, top: 0, right: 4, bottom: 10, dx: -1, dy: 0 },
+      { left: 4, top: 0, right: 6, bottom: 10, dx: 2, dy: 0 },
+    ];
+
+    expect(applyContiguousSliceGlitch([[0, 5, 10, 5]], slices)).toEqual([
+      [0, 5, 2, 5],
+      [6, 5, 10, 5],
+      [1, 5, 3, 5],
+      [6, 5, 8, 5],
+    ]);
   });
 });

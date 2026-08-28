@@ -1,6 +1,7 @@
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../../controls/FormControls';
 import { Section } from '../../ui/section';
 import { GlitchControls } from './GlitchControls';
+import { StaggeredSliceControls } from './StaggeredSliceControls';
 import { VectorZoomControls } from './VectorZoomControls';
 
 function TopographicMapControl() {
@@ -41,6 +42,7 @@ export function EffectsPanel() {
           doubled.
         </p>
         <GlitchControls />
+        <StaggeredSliceControls />
         <Checkbox id="kaleidoscope" randomizable>
           Kaleidoscope
         </Checkbox>

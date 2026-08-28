@@ -73,6 +73,12 @@ const hardeningSettings = {
   scanBandGlitchDensity: 45,
   scanBandGlitchOrientation: 'horizontal',
   scanBandGlitchSeed: 29,
+  staggeredSlices: true,
+  staggeredSlicesCount: 7,
+  staggeredSlicesExtent: 75,
+  staggeredSlicesDisplacement: 6,
+  staggeredSlicesOrientation: 'horizontal',
+  staggeredSlicesPattern: 'alternating',
   clipToArtboard: true,
   maskEnabled: true,
   maskOutline: true,
@@ -263,5 +269,5 @@ describe('non-Euclidean release compatibility', () => {
     expect(exact.svg).toContain('id="technical-annotations"');
     expect(finiteOutput(exact.svg)).toBe(true);
     assertBothPlotterProfiles(exact, settings);
-  });
+  }, 10_000);
 });
