@@ -91,6 +91,31 @@ describe('contour output effects', () => {
     expect(result.toolpaths.every((group) => /^#[0-9a-f]{6}$/i.test(group.color))).toBe(true);
   });
 
+  it('renders an oscilloscope screen as SVG and G-code centreline geometry', () => {
+    const result = computeContours(
+      makeContourMesh(),
+      {
+        ...contourSettings,
+        hide: false,
+        sil: false,
+        oscilloscope: true,
+        oscilloscopeSpacing: 5,
+        oscilloscopeIntensity: 70,
+      },
+      false,
+    );
+
+    expect(result.svg).toContain('id="oscilloscope-screen"');
+    expect(result.svg).not.toMatch(/<filter|filter=|blur/i);
+    expect(result.toolpaths.flatMap((group) => group.runs).length).toBeGreaterThan(20);
+    expect(
+      result.toolpaths
+        .flatMap((group) => group.runs)
+        .flat()
+        .every(Number.isFinite),
+    ).toBe(true);
+  });
+
   it('overrides selected one-based line indexes with their assigned colours', () => {
     const result = computeContours(
       makeContourMesh(),

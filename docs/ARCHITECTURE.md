@@ -63,6 +63,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `contour-engine.ts` is the pure rendering core. It calculates scalar fields, delegates projection math to `projection.ts`, optionally warps slice fields with in-plane LFOs, adaptively subdivides nonlinear intersections, slices triangles, and explicitly extracts two-source Voronoi boundaries where nearest-source labels differ. It then chains line segments, performs visibility and silhouette work, and returns SVG plus grouped centreline toolpaths. Output effects compose in a fixed order: geometry effects and clipping, path colour/weight styling, halftone styling, chromatic copies, map annotations, then document overlays. Mesh contours, imported SVG centrelines, and generated hyperbolic tilings share those composition rules. It must not read the DOM.
 - `generative-mask.ts` evaluates the deterministic superellipse and dual angular-LFO output mask, creates its SVG boundary, and clips polylines for SVG/G-code parity. Fractional oscillator counts crossfade adjacent integer harmonics so morphing never opens the closed boundary.
 - `kaleidoscope.ts` clips finished polylines to a radial wedge and alternately mirrors them around the artboard centre, preserving identical geometry for SVG and G-code.
+- `oscilloscope.ts` derives a rounded screen frame, horizontally sampled scanlines, deterministic trace interference, and offset persistence echoes from finished contour runs. It returns only finite polylines, shared by SVG and G-code without filters or raster effects.
 - `slicer-worker.ts` is deliberately small: it stores the current transferable mesh or line-art source, invokes `computeContours`, and reports results or errors. Line art transfers packed 3D points and run offsets plus a source-kind discriminator.
 - `generativeMesh.ts` generates indexed meshes from implicit fields. Its worker transfers array buffers rather than cloning large arrays.
 - `svg-mesh.ts` converts filled SVG artwork into extruded mesh geometry or pruned medial/scale-axis centreline polylines.
@@ -137,7 +138,7 @@ Implement import parsing in `mesh.ts` or procedural demo geometry in `demo-meshe
 
 ### Add a contour algorithm or output effect
 
-Implement deterministic, DOM-free work in `contour-engine.ts` or a focused helper such as `toolpaths.ts`. Pass configuration in the settings snapshot and return any export metadata with the render result. Browser-specific toggles and enable/disable behavior remain in `slicer.ts`.
+Implement deterministic, DOM-free work in `contour-engine.ts` or a focused helper such as `toolpaths.ts` or `oscilloscope.ts`. Pass configuration in the settings snapshot and return any export metadata with the render result. Browser-specific toggles and enable/disable behavior remain in `slicer.ts`.
 
 ### Add an export format
 

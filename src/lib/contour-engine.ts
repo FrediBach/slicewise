@@ -3,6 +3,7 @@
 import { clipRunToRect } from './toolpaths';
 import { kaleidoscopeRun, type KaleidoscopeSettings } from './kaleidoscope';
 import { createMapAnnotations } from './mapAnnotations';
+import { createOscilloscopeEffect } from './oscilloscope';
 import { previewCurveQuality, previewLineCount, previewMorphSteps } from './preview-detail';
 import {
   cameraBasis,
@@ -157,6 +158,9 @@ export interface ContourSettings extends GenerativeMaskSettings, KaleidoscopeSet
   yarnCurl: boolean;
   yarnCutPercent: number;
   yarnCurlSize: number;
+  oscilloscope: boolean;
+  oscilloscopeSpacing: number;
+  oscilloscopeIntensity: number;
   blueprint: boolean;
   blueprintStyle: string;
   topographicMap: boolean;
@@ -3088,7 +3092,7 @@ function computeContourInstance(
         const sharp =
           clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
         d += serialiseRun(clipped, quality, sharp);
-        if (!quick || settings.topographicMap) plotRuns.push(clipped);
+        if (!quick || settings.topographicMap || settings.oscilloscope) plotRuns.push(clipped);
         nodes += clipped.length / 2;
         paths++;
       }
@@ -3235,6 +3239,27 @@ function computeContourInstance(
     renderedNodes *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
   }
   artwork = contours;
+  if (settings.oscilloscope) {
+    const effect = createOscilloscopeEffect(annotationSourceRuns, W, H, settings.margin, settings);
+    const effectRuns = [...effect.scanlines, ...effect.echoes, effect.frame].flatMap((run) =>
+      clipArtworkRun(run, settings, W, H),
+    );
+    let effectPath = '';
+    for (const run of effectRuns) {
+      if (run.length < 4) continue;
+      effectPath += serialiseRun(run, quality, sharpVertices(run));
+      renderedPaths++;
+      renderedNodes += run.length / 2;
+    }
+    if (effectPath)
+      artwork += `<path id="oscilloscope-screen" d="${effectPath}" fill="none" stroke="${effectiveAnnotationColor(settings)}" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    if (!quick && effectRuns.length) {
+      const color = effectiveAnnotationColor(settings);
+      const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
+      if (matching) matching.runs.push(...effectRuns);
+      else toolpaths.push({ color, label: 'oscilloscope screen', runs: effectRuns });
+    }
+  }
   if (mapAnnotations) {
     artwork += mapAnnotations.svg;
     renderedPaths += mapAnnotations.paths;

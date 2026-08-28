@@ -59,3 +59,13 @@ describe('OutputPanel kaleidoscope controls', () => {
     expect(screen.getByRole('spinbutton', { name: 'Rotation in °' })).toHaveValue(0);
   });
 });
+
+describe('OutputPanel oscilloscope controls', () => {
+  it('exposes plotter-safe scanline controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Oscilloscope screen' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'Scan spacing in mm' })).toHaveValue(4);
+    expect(screen.getByRole('spinbutton', { name: 'Trace intensity in %' })).toHaveValue(65);
+  });
+});

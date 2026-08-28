@@ -317,6 +317,37 @@ export function EffectsPanel() {
             Opens random contour lines and curls their new ends in stable, organic directions.
           </p>
         </div>
+        <Checkbox id="oscilloscope" randomizable>
+          Oscilloscope screen
+        </Checkbox>
+        <div className="effect-controls">
+          <ValueControl
+            id="oscilloscopeSpacing"
+            label="Scan spacing"
+            min="1"
+            max="10"
+            step="0.1"
+            value="4"
+            unit="mm"
+            disabled
+            disabledReason="Turn on Oscilloscope screen to edit this parameter."
+          />
+          <ValueControl
+            id="oscilloscopeIntensity"
+            label="Trace intensity"
+            min="0"
+            max="100"
+            step="1"
+            value="65"
+            unit="%"
+            disabled
+            disabledReason="Turn on Oscilloscope screen to edit this parameter."
+          />
+          <p className="gradient-note blueprint-note">
+            Adds a rounded line frame, displaced scanlines and offset trace echoes. Every mark is a
+            plotter-ready path; the effect uses no blur or raster filters.
+          </p>
+        </div>
         <Checkbox id="blueprint" randomizable>
           Technical blueprint
         </Checkbox>

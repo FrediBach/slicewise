@@ -274,6 +274,9 @@ const state: AppState = {
   yarnCurl: false,
   yarnCutPercent: 15,
   yarnCurlSize: 100,
+  oscilloscope: false,
+  oscilloscopeSpacing: 4,
+  oscilloscopeIntensity: 65,
   blueprint: false,
   blueprintStyle: 'blue',
   topographicMap: false,
@@ -485,6 +488,9 @@ if (typeof document !== 'undefined') {
       yarnCurl,
       yarnCutPercent,
       yarnCurlSize,
+      oscilloscope,
+      oscilloscopeSpacing,
+      oscilloscopeIntensity,
       blueprint,
       blueprintStyle,
       topographicMap,
@@ -605,6 +611,9 @@ if (typeof document !== 'undefined') {
       yarnCurl,
       yarnCutPercent,
       yarnCurlSize,
+      oscilloscope,
+      oscilloscopeSpacing,
+      oscilloscopeIntensity,
       blueprint,
       blueprintStyle,
       topographicMap,
@@ -1236,6 +1245,8 @@ if (typeof document !== 'undefined') {
   bindPair('humanizerAmount', 'humanizerAmount');
   bindPair('yarnCutPercent', 'yarnCutPercent');
   bindPair('yarnCurlSize', 'yarnCurlSize');
+  bindPair('oscilloscopeSpacing', 'oscilloscopeSpacing');
+  bindPair('oscilloscopeIntensity', 'oscilloscopeIntensity');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1867,6 +1878,16 @@ if (typeof document !== 'undefined') {
       $(id + 'Control').classList.toggle('is-disabled', !state.yarnCurl);
     }
   }
+  function syncOscilloscopeControls(): void {
+    for (const id of ['oscilloscopeSpacing', 'oscilloscopeIntensity']) {
+      setControlPairDisabled(
+        id,
+        !state.oscilloscope,
+        'Turn on Oscilloscope screen to edit this parameter.',
+      );
+      $(id + 'Control').classList.toggle('is-disabled', !state.oscilloscope);
+    }
+  }
   function syncBlueprintControls(): void {
     setSingleControlDisabled(
       'blueprintStyle',
@@ -1898,6 +1919,11 @@ if (typeof document !== 'undefined') {
   $('yarnCurl').addEventListener('change', (e) => {
     state.yarnCurl = inputTarget(e).checked;
     syncYarnCurlControls();
+    redraw(false);
+  });
+  $('oscilloscope').addEventListener('change', (e) => {
+    state.oscilloscope = inputTarget(e).checked;
+    syncOscilloscopeControls();
     redraw(false);
   });
   $('gradientEnabled').addEventListener('change', (e) => {
@@ -2258,6 +2284,8 @@ if (typeof document !== 'undefined') {
     ['humanizerAmount', 'humanizerAmount'],
     ['yarnCutPercent', 'yarnCutPercent'],
     ['yarnCurlSize', 'yarnCurlSize'],
+    ['oscilloscopeSpacing', 'oscilloscopeSpacing'],
+    ['oscilloscopeIntensity', 'oscilloscopeIntensity'],
     ['morphSteps', 'morphSteps'],
     ['morphStepsY', 'morphStepsY'],
   ];
@@ -2290,6 +2318,7 @@ if (typeof document !== 'undefined') {
     'chroma',
     'humanizer',
     'yarnCurl',
+    'oscilloscope',
     'blueprint',
     'topographicMap',
     'morphEnabled',
@@ -2443,6 +2472,13 @@ if (typeof document !== 'undefined') {
       : 100;
     restored.curvatureIncludeZero = restored.curvatureIncludeZero !== false;
     restored.explodeAmount = Number.isFinite(restored.explodeAmount) ? restored.explodeAmount : 0;
+    restored.oscilloscope = Boolean(restored.oscilloscope);
+    restored.oscilloscopeSpacing = Number.isFinite(restored.oscilloscopeSpacing)
+      ? restored.oscilloscopeSpacing
+      : 4;
+    restored.oscilloscopeIntensity = Number.isFinite(restored.oscilloscopeIntensity)
+      ? restored.oscilloscopeIntensity
+      : 65;
     if (!Number.isFinite(restored.lensDistortion)) {
       const legacyCurve: Readonly<Record<string, number>> = {
         clean: 0,
@@ -2487,6 +2523,7 @@ if (typeof document !== 'undefined') {
     syncChromaAmount();
     syncHumanizerControls();
     syncYarnCurlControls();
+    syncOscilloscopeControls();
     syncBlueprintControls();
     syncMorphControls();
     const morphTargetsById: Record<string, string | number> = {},
@@ -2843,6 +2880,7 @@ if (typeof document !== 'undefined') {
       chroma: 0.18,
       humanizer: 0.3,
       yarnCurl: 0.25,
+      oscilloscope: 0.2,
       blueprint: 0.16,
       topographicMap: 0.18,
     } satisfies Partial<Record<keyof AppState, number>>;
@@ -2884,7 +2922,11 @@ if (typeof document !== 'undefined') {
     $('yarnCurl').checked = state.yarnCurl;
     randomizePair('yarnCutPercent', 'yarnCutPercent', () => randomInt(5, 300));
     randomizePair('yarnCurlSize', 'yarnCurlSize', () => randomInt(65, 175));
+    $('oscilloscope').checked = state.oscilloscope;
+    randomizePair('oscilloscopeSpacing', 'oscilloscopeSpacing', () => randomIn(2.5, 6));
+    randomizePair('oscilloscopeIntensity', 'oscilloscopeIntensity', () => randomInt(35, 90));
     syncYarnCurlControls();
+    syncOscilloscopeControls();
     $('blueprint').checked = state.blueprint;
     if (shouldRandomize('blueprint')) {
       state.blueprintStyle = randomItem(['blue', 'blue', 'blue', 'black']);
