@@ -194,6 +194,28 @@ describe('parameter snapshot migrations', () => {
     });
   });
 
+  it('repairs missing or invalid tile-shuffle settings', () => {
+    const restored = normalizeParameterSnapshot(
+      snapshot({
+        tileShuffle: undefined,
+        tileShuffleRows: Number.NaN,
+        tileShuffleColumns: Number.NaN,
+        tileShuffleExtent: Number.NaN,
+        tileShuffleAffected: Number.NaN,
+        tileShuffleSeed: Number.NaN,
+      }),
+    );
+
+    expect(restored).toMatchObject({
+      tileShuffle: false,
+      tileShuffleRows: 4,
+      tileShuffleColumns: 4,
+      tileShuffleExtent: 80,
+      tileShuffleAffected: 50,
+      tileShuffleSeed: 4,
+    });
+  });
+
   it('repairs invalid optical, wavefront, and vector-zoom values', () => {
     const restored = normalizeParameterSnapshot(
       snapshot({

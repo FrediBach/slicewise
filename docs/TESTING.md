@@ -80,6 +80,7 @@ Coverage currently measures the focused core under active test:
 - `slicer-export.ts`
 - `svg-mesh.ts`
 - `staggered-slices.ts`
+- `tile-shuffle.ts`
 - `toolpaths.ts`
 - `vector-zoom.ts`
 - `wraparound-tear.ts`

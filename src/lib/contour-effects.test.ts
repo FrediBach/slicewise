@@ -486,6 +486,30 @@ describe('contour output effects', () => {
       expect(Number.isFinite(value)).toBe(true);
   });
 
+  it('exports deterministic tile-shuffle geometry to SVG and plotter runs', () => {
+    const settings = {
+      ...contourSettings,
+      hide: false,
+      sil: false,
+      tileShuffle: true,
+      tileShuffleRows: 4,
+      tileShuffleColumns: 5,
+      tileShuffleExtent: 85,
+      tileShuffleAffected: 70,
+      tileShuffleSeed: 53,
+    };
+    const baseline = computeContours(makeContourMesh(), { ...settings, tileShuffle: false }, false);
+    const first = computeContours(makeContourMesh(), settings, false);
+    const second = computeContours(makeContourMesh(), settings, false);
+
+    expect(first.svg).toBe(second.svg);
+    expect(first.toolpaths).toEqual(second.toolpaths);
+    expect(first.toolpaths).not.toEqual(baseline.toolpaths);
+    expect(first.paths).toBeGreaterThan(0);
+    for (const value of first.toolpaths.flatMap((group) => group.runs).flat())
+      expect(Number.isFinite(value)).toBe(true);
+  });
+
   it('exports cropped vector zoom insets and plotter-real guides', () => {
     const settings = {
       ...contourSettings,

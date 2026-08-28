@@ -249,6 +249,12 @@ const state: AppState = {
   wraparoundTearPosition: 50,
   wraparoundTearSize: 18,
   wraparoundTearShift: 20,
+  tileShuffle: false,
+  tileShuffleRows: 4,
+  tileShuffleColumns: 4,
+  tileShuffleExtent: 80,
+  tileShuffleAffected: 50,
+  tileShuffleSeed: 4,
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,
@@ -1083,6 +1089,11 @@ if (typeof document !== 'undefined') {
   bindPair('wraparoundTearPosition', 'wraparoundTearPosition');
   bindPair('wraparoundTearSize', 'wraparoundTearSize');
   bindPair('wraparoundTearShift', 'wraparoundTearShift');
+  bindPair('tileShuffleRows', 'tileShuffleRows');
+  bindPair('tileShuffleColumns', 'tileShuffleColumns');
+  bindPair('tileShuffleExtent', 'tileShuffleExtent');
+  bindPair('tileShuffleAffected', 'tileShuffleAffected');
+  bindPair('tileShuffleSeed', 'tileShuffleSeed');
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -1759,6 +1770,20 @@ if (typeof document !== 'undefined') {
     setSingleControlDisabled('wraparoundTearOrientation', disabled, reason);
     $('wraparoundTearOrientationControl').classList.toggle('is-disabled', disabled);
   }
+  function syncTileShuffleControls(): void {
+    const disabled = !state.tileShuffle;
+    const reason = 'Turn on Tile shuffle to edit this parameter.';
+    for (const id of [
+      'tileShuffleRows',
+      'tileShuffleColumns',
+      'tileShuffleExtent',
+      'tileShuffleAffected',
+      'tileShuffleSeed',
+    ]) {
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+  }
   function syncVectorZoomControls(): void {
     for (let index = 1; index <= 4; index++) {
       const prefix = `vectorZoom${index}`;
@@ -1876,6 +1901,12 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   syncWraparoundTearControls();
+  $('tileShuffle').addEventListener('change', (event) => {
+    state.tileShuffle = inputTarget(event).checked;
+    syncTileShuffleControls();
+    redraw(false);
+  });
+  syncTileShuffleControls();
   for (let index = 1; index <= 4; index++) {
     const prefix = `vectorZoom${index}`;
     $(`${prefix}Enabled`).addEventListener('change', (event) => {
@@ -2273,6 +2304,11 @@ if (typeof document !== 'undefined') {
     ['wraparoundTearPosition', 'wraparoundTearPosition'],
     ['wraparoundTearSize', 'wraparoundTearSize'],
     ['wraparoundTearShift', 'wraparoundTearShift'],
+    ['tileShuffleRows', 'tileShuffleRows'],
+    ['tileShuffleColumns', 'tileShuffleColumns'],
+    ['tileShuffleExtent', 'tileShuffleExtent'],
+    ['tileShuffleAffected', 'tileShuffleAffected'],
+    ['tileShuffleSeed', 'tileShuffleSeed'],
     ['kaleidoscopeSegments', 'kaleidoscopeSegments'],
     ['kaleidoscopeRotation', 'kaleidoscopeRotation'],
     ['sw', 'sw'],
@@ -2351,6 +2387,7 @@ if (typeof document !== 'undefined') {
     'scanBandGlitch',
     'staggeredSlices',
     'wraparoundTear',
+    'tileShuffle',
     'kaleidoscope',
     'halftone',
     'chroma',
@@ -2427,6 +2464,7 @@ if (typeof document !== 'undefined') {
     syncScanBandGlitchControls();
     syncStaggeredSliceControls();
     syncWraparoundTearControls();
+    syncTileShuffleControls();
     syncKaleidoscopeControls();
     syncVectorZoomControls();
     syncHalftoneControls();
@@ -2792,6 +2830,7 @@ if (typeof document !== 'undefined') {
       scanBandGlitch: 0.22,
       staggeredSlices: 0.2,
       wraparoundTear: 0.2,
+      tileShuffle: 0.16,
       kaleidoscope: 0.2,
       vectorZoom1Enabled: 0.12,
       vectorZoom2Enabled: 0.06,
@@ -2881,6 +2920,13 @@ if (typeof document !== 'undefined') {
       'vertical',
     ]);
     syncWraparoundTearControls();
+    $('tileShuffle').checked = state.tileShuffle;
+    randomizePair('tileShuffleRows', 'tileShuffleRows', () => randomInt(2, 7));
+    randomizePair('tileShuffleColumns', 'tileShuffleColumns', () => randomInt(2, 7));
+    randomizePair('tileShuffleExtent', 'tileShuffleExtent', () => randomInt(40, 100));
+    randomizePair('tileShuffleAffected', 'tileShuffleAffected', () => randomInt(20, 85));
+    randomizePair('tileShuffleSeed', 'tileShuffleSeed', () => randomInt(0, 9999));
+    syncTileShuffleControls();
     $('kaleidoscope').checked = state.kaleidoscope;
     randomizePair('kaleidoscopeSegments', 'kaleidoscopeSegments', () => randomInt(4, 12));
     randomizePair('kaleidoscopeRotation', 'kaleidoscopeRotation', () => randomInt(-180, 180));

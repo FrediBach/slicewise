@@ -9,6 +9,7 @@ import {
 } from './block-glitch';
 import { resolveScanBands, type ScanBandGlitchSettings } from './scan-band-glitch';
 import { resolveStaggeredSlices, type StaggeredSliceSettings } from './staggered-slices';
+import { applyTileShuffle, resolveTileShuffle, type TileShuffleSettings } from './tile-shuffle';
 import {
   applyWraparoundTear,
   resolveWraparoundTear,
@@ -96,6 +97,7 @@ export interface ContourSettings
     ScanBandGlitchSettings,
     StaggeredSliceSettings,
     WraparoundTearSettings,
+    TileShuffleSettings,
     GenerativeMaskSettings,
     KaleidoscopeSettings,
     VectorZoomSettings {
@@ -1594,6 +1596,12 @@ function deterministicDrawingNumber(
       settings.wraparoundTearPosition,
       settings.wraparoundTearSize,
       settings.wraparoundTearShift,
+      settings.tileShuffle,
+      settings.tileShuffleRows,
+      settings.tileShuffleColumns,
+      settings.tileShuffleExtent,
+      settings.tileShuffleAffected,
+      settings.tileShuffleSeed,
       settings.blueprintStyle,
       settings.maskEnabled,
       settings.maskOutline,
@@ -2333,6 +2341,7 @@ function computeLineArtInstance(
   const scanBands = resolveScanBands(settings, W, H, settings.margin);
   const staggeredSlices = resolveStaggeredSlices(settings, W, H, settings.margin);
   const wraparoundTear = resolveWraparoundTear(settings, W, H, settings.margin);
+  const shuffledTiles = resolveTileShuffle(settings, W, H, settings.margin);
   const tolerance = 0.06 * Math.pow(0.72, clamp(Math.round(quality), 1, 10) - 1);
   const { palette, indexedPalette, gradientCount } = colorPlan(settings, offsets.length - 1);
   const pathDataByColor = palette.map(() => '');
@@ -2392,7 +2401,8 @@ function computeLineArtInstance(
     const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
     const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
     const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
-    const clippedRuns = wrappedRuns.flatMap((run) =>
+    const shuffledRuns = applyTileShuffle(wrappedRuns, shuffledTiles);
+    const clippedRuns = shuffledRuns.flatMap((run) =>
       kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
         clipArtworkRun(candidate, settings, W, H),
       ),
@@ -2559,6 +2569,7 @@ function computeContourInstance(
   const scanBands = resolveScanBands(settings, W, H, settings.margin);
   const staggeredSlices = resolveStaggeredSlices(settings, W, H, settings.margin);
   const wraparoundTear = resolveWraparoundTear(settings, W, H, settings.margin);
+  const shuffledTiles = resolveTileShuffle(settings, W, H, settings.margin);
   const cam = cameraBasis(settings.az, settings.el, settings.roll);
   const [focalLength, distortion] = resolveLens(settings);
   const perspective = clamp(settings.lensPerspective ?? 0, 0, 100);
@@ -2872,7 +2883,8 @@ function computeContourInstance(
       const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
       const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
       const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
-      const clippedRuns = wrappedRuns.flatMap((run) =>
+      const shuffledRuns = applyTileShuffle(wrappedRuns, shuffledTiles);
+      const clippedRuns = shuffledRuns.flatMap((run) =>
         kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
           clipArtworkRun(candidate, settings, W, H),
         ),

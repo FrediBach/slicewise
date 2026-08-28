@@ -140,6 +140,22 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   restored.wraparoundTearShift = Number.isFinite(restored.wraparoundTearShift)
     ? restored.wraparoundTearShift
     : 20;
+  restored.tileShuffle = restored.tileShuffle === true;
+  restored.tileShuffleRows = Number.isFinite(restored.tileShuffleRows)
+    ? restored.tileShuffleRows
+    : 4;
+  restored.tileShuffleColumns = Number.isFinite(restored.tileShuffleColumns)
+    ? restored.tileShuffleColumns
+    : 4;
+  restored.tileShuffleExtent = Number.isFinite(restored.tileShuffleExtent)
+    ? restored.tileShuffleExtent
+    : 80;
+  restored.tileShuffleAffected = Number.isFinite(restored.tileShuffleAffected)
+    ? restored.tileShuffleAffected
+    : 50;
+  restored.tileShuffleSeed = Number.isFinite(restored.tileShuffleSeed)
+    ? restored.tileShuffleSeed
+    : 4;
   restored.lensFocalLength = Number.isFinite(restored.lensFocalLength)
     ? restored.lensFocalLength
     : 50;

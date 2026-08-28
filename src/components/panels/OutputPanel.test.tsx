@@ -115,6 +115,19 @@ describe('OutputPanel wraparound-tear controls', () => {
   });
 });
 
+describe('OutputPanel tile-shuffle controls', () => {
+  it('exposes deterministic grid permutation controls', () => {
+    render(<EffectsPanel />);
+
+    expect(screen.getByRole('checkbox', { name: 'Tile shuffle' })).not.toBeChecked();
+    expect(screen.getByRole('spinbutton', { name: 'Tile rows' })).toHaveValue(4);
+    expect(screen.getByRole('spinbutton', { name: 'Tile columns' })).toHaveValue(4);
+    expect(screen.getByRole('spinbutton', { name: 'Shuffle region extent in %' })).toHaveValue(80);
+    expect(screen.getByRole('spinbutton', { name: 'Affected tiles in %' })).toHaveValue(50);
+    expect(screen.getByRole('spinbutton', { name: 'Shuffle seed' })).toHaveValue(4);
+  });
+});
+
 describe('OutputPanel composition boundaries', () => {
   it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
     render(<EffectsPanel />);

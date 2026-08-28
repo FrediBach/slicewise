@@ -57,7 +57,8 @@ Complexity describes the expected geometry implementation effort, not the visual
 ## Recommended first effect: Block displacement
 
 Implementation status: available in Slicewise as **Block glitch**. **Scan-band glitch** is also
-available as the second catalog effect, followed by **Staggered slices** and **Wraparound tear**.
+available as the second catalog effect, followed by **Staggered slices**, **Wraparound tear**, and
+**Tile shuffle**.
 
 Block displacement is the best first addition because it matches the initial cut-and-move concept,
 has an immediately recognizable result, and establishes reusable rectangle clipping and deterministic
