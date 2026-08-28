@@ -46,6 +46,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `App.tsx` is the composition root. It bootstraps the browser runtime and arranges panels, actions, and the preview workspace.
 - `components/panels/*` groups markup by product feature. Panels should remain declarative and retain the DOM IDs consumed by the runtime.
 - Complex panel subsections live in feature-named subdirectories such as `components/panels/contours/`. These components may reorganize declarative markup, but the runtime-facing control IDs, hidden wrapper IDs, defaults, and custom-event contracts remain stable.
+- `components/panels/OutputPanel.tsx` is a compatibility barrel for the independently owned appearance, canvas, effects, vector-zoom, and export components under `components/panels/output/`. Callers should keep using the barrel unless they need one focused component in isolation.
 - Top-level parameter groups use native `details` accordions through `components/ui/section.tsx`. Collapsing a group only changes its presentation; its controls remain mounted so `lib/slicer.ts` can keep binding to their stable IDs.
 - `components/controls/FormControls.tsx` contains shared numeric, colour, checkbox, morph, and randomization controls.
 - `components/controls/GradientChooser.tsx` owns editable gradient-stop state.
@@ -72,6 +73,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `toolpaths.ts` owns rectangular clipping, near-endpoint joining, greedy run ordering, and reversible 2-opt refinement.
 - `gcode.ts` converts grouped toolpaths into machine instructions, applies an export-time clipping safety net, and owns plotter-profile defaults.
 - `slicer-export.ts` maps browser runtime state into SVG/G-code export artifacts and safe download names. It is DOM-free; `slicer.ts` remains responsible only for waiting for a current render, clipboard access, and initiating downloads.
+- `render-settings.ts` is the exhaustive browser-state-to-worker-settings adapter. Its key list is compile-time checked against `ContourSettings`, omits runtime/request-only fields, derives the document title, and detaches mutable morph maps.
 - `colorPair.ts` creates random ink/background combinations and ink-anchored harmonic gradients in OKLCH while enforcing contrast and gamut constraints.
 - `mapAnnotations.ts` derives deterministic, plotter-safe elevation labels, generated locations, map symbols, and single-line lettering from finished contour runs.
 

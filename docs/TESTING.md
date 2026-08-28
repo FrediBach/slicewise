@@ -45,6 +45,7 @@ Prioritize observable contracts and failure-prone transformations:
 - G-code: coordinate systems, path ordering, feeds, pen changes, and sanitized comments.
 - Export assembly: runtime-profile mapping, MIME/extension selection, effect metadata, and safe filenames.
 - React controls: user interactions and the custom events consumed by `slicer.ts`.
+- Render snapshots: exhaustive worker keys, omission of browser-only state, derived metadata, and detached mutable values.
 
 Avoid snapshots of entire panels. They are noisy and do not prove that controls remain connected to the imperative runtime. Prefer assertions about accessible controls, event payloads, and exported data.
 

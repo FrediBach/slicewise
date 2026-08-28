@@ -2,7 +2,7 @@
 
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { AppearancePanel, EffectsPanel } from './OutputPanel';
+import { AppearancePanel, CanvasPanel, EffectsPanel, ExportPanel } from './OutputPanel';
 
 describe('OutputPanel line-weight controls', () => {
   it('exposes randomization locks and numeric morph controls', () => {
@@ -57,5 +57,30 @@ describe('OutputPanel kaleidoscope controls', () => {
     expect(screen.getByRole('checkbox', { name: 'Kaleidoscope' })).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'Segments' })).toHaveValue(6);
     expect(screen.getByRole('spinbutton', { name: 'Rotation in °' })).toHaveValue(0);
+  });
+});
+
+describe('OutputPanel composition boundaries', () => {
+  it('keeps all generated vector-zoom slots mounted with unique runtime IDs', () => {
+    render(<EffectsPanel />);
+
+    for (let index = 1; index <= 4; index++) {
+      expect(screen.getByRole('checkbox', { name: `Enable zoom ${index}` })).not.toBeChecked();
+      expect(document.getElementById(`vectorZoom${index}Controls`)).toBeInTheDocument();
+      expect(screen.getAllByLabelText('Inset corner')[index - 1]).toBeDisabled();
+    }
+  });
+
+  it('preserves the canvas and export controls through the panel barrel', () => {
+    const { unmount } = render(<CanvasPanel />);
+    expect(screen.getByLabelText('Paper size')).toHaveValue('custom');
+    expect(screen.getByLabelText('Artboard width')).toHaveValue(210);
+    expect(screen.getByLabelText('Clip paths to artboard')).toBeChecked();
+
+    unmount();
+    render(<ExportPanel />);
+    expect(screen.getByLabelText('File type')).toHaveValue('svg');
+    expect(screen.getByLabelText('Machine')).toHaveValue('uunatek3');
+    expect(document.getElementById('gcodeControls')).toBeInTheDocument();
   });
 });
