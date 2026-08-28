@@ -32,6 +32,8 @@ Select controls show a short information banner for the active option. The banne
 
 Imported meshes are welded, centred on their bounding-box midpoint, and uniformly normalized to a bounding-sphere radius of 1. Original model units therefore do not determine output size; artboard, margin, scale, and offsets do.
 
+Built-in demo meshes include Torus knot, Ripple sphere, Rounded cube, Soft diamond, Ring torus, Twisted bloom, Hourglass, Tetrapod, and Radish. They are deterministic, closed procedural meshes and initially use Z-up orientation.
+
 ## Morph
 
 | Parameter (ID)                          | Type and default     | What it does                                                                                                                                                                                                                                                                      |

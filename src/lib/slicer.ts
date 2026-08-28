@@ -15,7 +15,14 @@ import {
   HYPERBOLIC_TILING_DEFAULTS,
   isHyperbolicPair,
 } from './hyperbolic-tiling';
-import { radialColumnDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from './demo-meshes';
+import {
+  radialColumnDemo,
+  radishDemo,
+  ringTorus,
+  sphereDemo,
+  tetrapodDemo,
+  torusKnot,
+} from './demo-meshes';
 import { parseOBJ, parsePLY, parseSTL, vertexNormals, weld } from './mesh';
 import {
   initialPreviewPerformance,
@@ -964,6 +971,7 @@ if (typeof document !== 'undefined') {
     twist: { name: 'demo · twisted bloom', create: () => radialColumnDemo('twist') },
     hourglass: { name: 'demo · hourglass', create: () => radialColumnDemo('hourglass') },
     tetrapod: { name: 'demo · tetrapod', create: () => tetrapodDemo() },
+    radish: { name: 'demo · radish', create: () => radishDemo() },
   };
   function loadDemo(id: string, announce = true): void {
     const demo = demos[id];

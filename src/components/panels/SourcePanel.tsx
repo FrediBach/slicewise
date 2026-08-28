@@ -28,6 +28,7 @@ export function SourcePanel() {
           twist: 'Loads a twisted, petal-like form with rotational symmetry.',
           hourglass: 'Loads a pinched rotational form with a narrow waist.',
           tetrapod: 'Loads a four-lobed branching form with complex overlaps.',
+          radish: 'Loads a rounded radish-like form with a deep upper cleft and tapered root.',
           upload: 'Uses the model or SVG artwork loaded from this device.',
         }}
       >
@@ -44,6 +45,7 @@ export function SourcePanel() {
           <option value="twist">Twisted bloom</option>
           <option value="hourglass">Hourglass</option>
           <option value="tetrapod">Tetrapod</option>
+          <option value="radish">Radish</option>
         </optgroup>
         <option value="upload" hidden>
           Uploaded model

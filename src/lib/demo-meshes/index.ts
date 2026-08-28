@@ -2,6 +2,42 @@ import type { ParsedMesh } from '../mesh';
 
 type Vec3 = number[];
 
+export function radishDemo(segments = 160, rings = 96): ParsedMesh {
+  const verts: number[] = [];
+  const tris: number[] = [];
+  const radishPoint = (u: number, v: number): Vec3 => {
+    const radius = Math.pow(Math.sin(u), 3);
+    return [
+      radius * Math.cos(v),
+      radius * Math.sin(v) * 0.68,
+      (13 * Math.cos(u) - 5 * Math.cos(2 * u) - 2 * Math.cos(3 * u) - Math.cos(4 * u)) / 16,
+    ];
+  };
+
+  const top = verts.length / 3;
+  verts.push(...radishPoint(0, 0));
+  for (let i = 1; i < rings; i++) {
+    const u = (i / rings) * Math.PI;
+    for (let j = 0; j < segments; j++) verts.push(...radishPoint(u, (j / segments) * Math.PI * 2));
+  }
+  const bottom = verts.length / 3;
+  verts.push(...radishPoint(Math.PI, 0));
+
+  for (let j = 0; j < segments; j++) tris.push(top, 1 + j, 1 + ((j + 1) % segments));
+  for (let i = 0; i < rings - 2; i++)
+    for (let j = 0; j < segments; j++) {
+      const a = 1 + i * segments + j;
+      const b = 1 + i * segments + ((j + 1) % segments);
+      const c = a + segments;
+      const d = b + segments;
+      tris.push(a, c, d, a, d, b);
+    }
+  const lastRing = 1 + (rings - 2) * segments;
+  for (let j = 0; j < segments; j++)
+    tris.push(bottom, lastRing + ((j + 1) % segments), lastRing + j);
+  return { verts: Float64Array.from(verts), tris: Uint32Array.from(tris) };
+}
+
 export function torusKnot(p = 2, q = 3, R = 1, r = 0.26, tubeSeg = 360, radSeg = 28): ParsedMesh {
   const verts: number[] = [],
     tris: number[] = [];

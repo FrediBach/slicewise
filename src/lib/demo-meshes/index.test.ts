@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { radialColumnDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from '.';
+import { radialColumnDemo, radishDemo, ringTorus, sphereDemo, tetrapodDemo, torusKnot } from '.';
+import { weld } from '../mesh';
+import { getMeshTopology } from '../mesh-topology';
 
 describe('procedural demo meshes', () => {
   it.each([
@@ -11,6 +13,7 @@ describe('procedural demo meshes', () => {
     ['twisted column', () => radialColumnDemo('twist', 12, 6)],
     ['hourglass', () => radialColumnDemo('hourglass', 12, 6)],
     ['tetrapod', () => tetrapodDemo(12, 6)],
+    ['radish', () => radishDemo(12, 8)],
   ])('creates finite, indexed %s geometry', (_name, create) => {
     const mesh = create();
     const vertexCount = mesh.verts.length / 3;
@@ -20,5 +23,14 @@ describe('procedural demo meshes', () => {
     expect(mesh.tris.length % 3).toBe(0);
     expect(Array.from(mesh.verts).every(Number.isFinite)).toBe(true);
     expect(Math.max(...mesh.tris)).toBeLessThan(vertexCount);
+  });
+
+  it('creates closed manifold radish geometry', () => {
+    const mesh = weld(radishDemo(20, 12));
+    const topology = getMeshTopology(mesh);
+
+    expect(topology.boundaryEdges).toHaveLength(0);
+    expect(topology.nonManifoldEdges).toHaveLength(0);
+    expect(topology.componentCount).toBe(1);
   });
 });
