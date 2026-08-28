@@ -1,5 +1,4 @@
 'use strict';
-import { generateGCode } from './gcode';
 import { createColorGradient, createColorPair } from './colorPair';
 import {
   type ContourMesh,
@@ -34,6 +33,7 @@ import {
 } from './preview-detail';
 import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
 import { setDisabled, setDisabledPair } from './control-state';
+import { createCurrentExport, createExportFilename, createGCodeExport } from './slicer-export';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -3146,67 +3146,23 @@ if (typeof document !== 'undefined') {
   });
 
   /* export */
-  function currentGCode(): string {
-    return generateGCode(
-      state.toolpaths,
-      { width: state.pw, height: state.ph },
-      {
-        name: state.name,
-        drawFeed: state.drawFeed,
-        travelFeed: state.travelFeed,
-        penUp: state.penUp,
-        penDown: state.penDown,
-        zFeed: state.zFeed,
-        machine: state.gcodeProfile === 'uunatek3' ? 'UUNA TEK 3.0 A3' : 'Generic Z-axis plotter',
-        origin: state.gcodeProfile === 'uunatek3' ? 'rear-left' : 'bottom-left',
-        clipToArtboard: state.clipToArtboard,
-        optimizeTravel: state.optimizeTravel,
-        mergeTolerance: state.mergeTolerance,
-        effects: {
-          kaleidoscope: state.kaleidoscope,
-          halftone: state.halftone,
-          chroma: state.chroma,
-          humanizer: state.humanizer,
-          yarnCurl: state.yarnCurl,
-          blueprint: state.blueprint,
-          topographicMap: state.topographicMap,
-          vectorZoom:
-            state.vectorZoom1Enabled ||
-            state.vectorZoom2Enabled ||
-            state.vectorZoom3Enabled ||
-            state.vectorZoom4Enabled,
-        },
-      },
-    );
-  }
-  type CurrentExport = { content: string; extension: 'svg' | 'gcode'; type: string };
-  function currentExport(): CurrentExport {
-    if (state.exportFormat === 'gcode')
-      return { content: currentGCode(), extension: 'gcode', type: 'text/x-gcode' };
-    return { content: state.svg, extension: 'svg', type: 'image/svg+xml' };
-  }
   function updateExportSize(): void {
     if (!state.svg) return;
     const bytes =
       state.exportFormat === 'gcode'
-        ? new TextEncoder().encode(currentGCode()).byteLength
+        ? new TextEncoder().encode(createGCodeExport(state)).byteLength
         : state.svgBytes;
     $('rSize').textContent = (bytes / 1024).toFixed(1) + ' kB';
   }
   $('save').addEventListener('click', async () => {
     try {
       await waitForCurrentRender();
-      const exported = currentExport();
+      const exported = createCurrentExport(state);
       if (!exported.content) return;
-      const base =
-        state.name
-          .replace(/\.[^.]+$/, '')
-          .replace(/[^\w-]+/g, '-')
-          .replace(/^-|-$/g, '') || 'contours';
       const blob = new Blob([exported.content], { type: exported.type });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = base + '-contours.' + exported.extension;
+      a.download = createExportFilename(state.name, exported.extension);
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       toast('Saved ' + a.download);
@@ -3217,7 +3173,7 @@ if (typeof document !== 'undefined') {
   $('copy').addEventListener('click', async () => {
     try {
       await waitForCurrentRender();
-      const exported = currentExport();
+      const exported = createCurrentExport(state);
       await navigator.clipboard.writeText(exported.content);
       toast(exported.extension === 'svg' ? 'SVG markup copied' : 'G-code copied');
     } catch (error) {

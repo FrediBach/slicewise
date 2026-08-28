@@ -45,6 +45,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `main.tsx` mounts the application and loads global styles.
 - `App.tsx` is the composition root. It bootstraps the browser runtime and arranges panels, actions, and the preview workspace.
 - `components/panels/*` groups markup by product feature. Panels should remain declarative and retain the DOM IDs consumed by the runtime.
+- Complex panel subsections live in feature-named subdirectories such as `components/panels/contours/`. These components may reorganize declarative markup, but the runtime-facing control IDs, hidden wrapper IDs, defaults, and custom-event contracts remain stable.
 - Top-level parameter groups use native `details` accordions through `components/ui/section.tsx`. Collapsing a group only changes its presentation; its controls remain mounted so `lib/slicer.ts` can keep binding to their stable IDs.
 - `components/controls/FormControls.tsx` contains shared numeric, colour, checkbox, morph, and randomization controls.
 - `components/controls/GradientChooser.tsx` owns editable gradient-stop state.
@@ -60,7 +61,8 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `mesh-geodesics.ts` computes deterministic single- and multi-source shortest paths over the cached weighted edge graph. Multi-source solves also return nearest-seed vertex labels; equal-distance ties select the lower seed vertex independent of source order. Unreachable vertices retain `Infinity` and label `−1`. Directional seeds use the normalized model-space extreme with vertex index as the tie-break. These values are **surface graph distances**, not continuous exact geodesics.
 - `mesh-curvature.ts` computes cached Gaussian curvature from area-normalized angle defect and signed mean curvature from the cotangent Laplacian and oriented vertex normals. Scalar-only smoothing is deterministic and cached by method/iteration count. Boundary, isolated, degenerate, and non-manifold vertices are masked rather than converted into extreme values.
 - `hyperbolic-tiling.ts` generates deterministic regular `{p,q}` tilings in the Poincaré disk. It constructs the central polygon from its hyperbolic circumradius, reflects polygons across diameter or orthogonal-circle geodesics, deduplicates tiles and unoriented edges with stable quantized keys, enforces a fixed edge cap, and samples arcs into transferable line-art runs.
-- `contour-engine.ts` is the pure rendering core. It calculates scalar fields, delegates projection math to `projection.ts`, optionally warps slice fields with in-plane LFOs, adaptively subdivides nonlinear intersections, slices triangles, and explicitly extracts two-source Voronoi boundaries where nearest-source labels differ. It then chains line segments, performs visibility and silhouette work, and returns SVG plus grouped centreline toolpaths. Output effects compose in a fixed order: geometry effects and clipping, path colour/weight styling, halftone styling, chromatic copies, map annotations, then document overlays. Mesh contours, imported SVG centrelines, and generated hyperbolic tilings share those composition rules. It must not read the DOM.
+- `contour-engine.ts` is the pure rendering coordinator. It calculates scalar fields, delegates projection math to `projection.ts`, optionally warps slice fields with in-plane LFOs, adaptively subdivides nonlinear intersections, slices triangles, and explicitly extracts two-source Voronoi boundaries where nearest-source labels differ. It then chains line segments, performs visibility and silhouette work, and returns SVG plus grouped centreline toolpaths. Output effects compose in a fixed order: geometry effects and clipping, path colour/weight styling, halftone styling, chromatic copies, map annotations, then document overlays. Mesh contours, imported SVG centrelines, and generated hyperbolic tilings share those composition rules. It must not read the DOM.
+- `polyline-styling.ts` owns deterministic post-processing of finished 2D runs: sharp-corner detection, Ramer–Douglas–Peucker simplification, coordinate-seeded Humanizer displacement, and Yarn cut-and-curl selection and geometry. Keeping these transformations outside the contour coordinator makes them independently testable and reusable by future source types.
 - `generative-mask.ts` evaluates the deterministic superellipse and dual angular-LFO output mask, creates its SVG boundary, and clips polylines for SVG/G-code parity. Fractional oscillator counts crossfade adjacent integer harmonics so morphing never opens the closed boundary.
 - `kaleidoscope.ts` clips finished polylines to a radial wedge and alternately mirrors them around the artboard centre, preserving identical geometry for SVG and G-code.
 - `vector-zoom.ts` crops rectangular or circular source regions, clears destination windows, uniformly scales vector detail into corner insets, and constructs segmented dashed borders and leaders for identical SVG/G-code output.
@@ -69,6 +71,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `svg-mesh.ts` converts filled SVG artwork into extruded mesh geometry or pruned medial/scale-axis centreline polylines.
 - `toolpaths.ts` owns rectangular clipping, near-endpoint joining, greedy run ordering, and reversible 2-opt refinement.
 - `gcode.ts` converts grouped toolpaths into machine instructions, applies an export-time clipping safety net, and owns plotter-profile defaults.
+- `slicer-export.ts` maps browser runtime state into SVG/G-code export artifacts and safe download names. It is DOM-free; `slicer.ts` remains responsible only for waiting for a current render, clipboard access, and initiating downloads.
 - `colorPair.ts` creates random ink/background combinations and ink-anchored harmonic gradients in OKLCH while enforcing contrast and gamut constraints.
 - `mapAnnotations.ts` derives deterministic, plotter-safe elevation labels, generated locations, map symbols, and single-line lettering from finished contour runs.
 
@@ -140,9 +143,13 @@ Implement import parsing in `mesh.ts` or procedural demo geometry in `demo-meshe
 
 Implement deterministic, DOM-free work in `contour-engine.ts` or a focused helper such as `toolpaths.ts`. Pass configuration in the settings snapshot and return any export metadata with the render result. Browser-specific toggles and enable/disable behavior remain in `slicer.ts`.
 
+Finished-polyline transformations belong in `polyline-styling.ts` when they do not need mesh, scalar-field, projection, or document context. Effects that change the common clipping/composition order should stay coordinated by `contour-engine.ts` and call a focused helper.
+
 ### Add an export format
 
 Keep serialization in a focused library module like `gcode.ts`. Let `slicer.ts` choose the serializer and handle browser download or clipboard APIs.
+
+Machine/profile mapping and file metadata belong in `slicer-export.ts`; controller-neutral instruction generation belongs in `gcode.ts`.
 
 ## Verification
 

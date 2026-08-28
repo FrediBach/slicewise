@@ -41,7 +41,9 @@ Prioritize observable contracts and failure-prone transformations:
 - Parsers: accepted variants, triangulation, malformed input, and useful errors.
 - Geometry: topology, normalization, winding, determinism, and finite output.
 - Contours: valid SVG, non-empty toolpaths, morph instances, and effect-specific output.
+- Polyline styling: corner preservation, deterministic seeding, closure, finite output, and density/count boundaries.
 - G-code: coordinate systems, path ordering, feeds, pen changes, and sanitized comments.
+- Export assembly: runtime-profile mapping, MIME/extension selection, effect metadata, and safe filenames.
 - React controls: user interactions and the custom events consumed by `slicer.ts`.
 
 Avoid snapshots of entire panels. They are noisy and do not prove that controls remain connected to the imperative runtime. Prefer assertions about accessible controls, event payloads, and exported data.
@@ -66,7 +68,9 @@ Coverage currently measures the focused core under active test:
 - `mesh-geodesics.ts`
 - `mesh-topology.ts`
 - `projection.ts`
+- `polyline-styling.ts`
 - `scalar-fields.ts`
+- `slicer-export.ts`
 - `svg-mesh.ts`
 - `toolpaths.ts`
 - `vector-zoom.ts`
@@ -74,5 +78,15 @@ Coverage currently measures the focused core under active test:
 - `GradientChooser.tsx`
 
 This avoids presenting untested declarative panel markup as the same risk category as geometry and export logic. Coverage enforces a regression floor of 85% statements, 70% branches, 80% functions, and 85% lines across this focused scope. Raising coverage should still come from useful behavior rather than assertions written only to pad a percentage. Expand the configured scope when adding meaningful tests for another subsystem.
+
+## Refactoring large modules
+
+Use three layers of confidence when extracting behavior from `contour-engine.ts` or `slicer.ts`:
+
+1. Add focused tests for the new pure module, including determinism and boundary inputs.
+2. Keep or extend the nearest integration test that exercises the same behavior through `computeContours` or the export adapter.
+3. Run the full suite and production build to catch worker, serialization, and module-graph regressions.
+
+Prefer moving one cohesive pipeline stage at a time. Avoid tests that duplicate the implementation line for line; specify inputs, output geometry or metadata, ordering, and invariants such as finite coordinates and closed loops.
 
 The HTML report is generated under `coverage/` and is ignored by Git.

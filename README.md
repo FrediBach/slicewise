@@ -59,12 +59,14 @@ src/
 │   └── ui/                    Small visual primitives
 ├── lib/
 │   ├── contour-engine.ts      DOM-free mesh-to-SVG contour pipeline
+│   ├── polyline-styling.ts    Deterministic simplification and run effects
 │   ├── projection.ts          Projection warps and adaptive nonlinear paths
 │   ├── scalar-fields.ts       Planar, curved, geodesic, and curvature fields
 │   ├── hyperbolic-tiling.ts   Poincaré-disk tiling line-art generator
 │   ├── demo-meshes/           Built-in procedural mesh generators
 │   ├── mesh.ts                Mesh parsers, normalization, and normals
 │   ├── slicer.ts              Browser state, bindings, history, and export flow
+│   ├── slicer-export.ts       DOM-free export/profile assembly
 │   ├── slicer-worker.ts       Contour worker message adapter
 │   ├── generativeMesh.ts      Implicit-field mesh generation
 │   ├── generative-mesh-worker.ts
@@ -80,6 +82,7 @@ src/
 - [Architecture](./docs/ARCHITECTURE.md) describes runtime data flow, module boundaries, worker behavior, and extension guidance.
 - [Parameter reference](./docs/PARAMETERS.md) documents user-facing controls, defaults, ranges, and export behavior.
 - [Testing guide](./docs/TESTING.md) covers test conventions, fixtures, coverage, and verification commands.
+- [Evolution guide](./docs/EVOLUTION.md) records current pressure points, extraction seams, and the checklist for the next product push.
 - [Non-Euclidean recipes](./docs/NON_EUCLIDEAN_RECIPES.md) gives starting settings for Möbius, wavefront, intrinsic, curvature, and tiling studies.
 
 Contributor and coding-agent guidance lives in [AGENTS.md](./AGENTS.md).

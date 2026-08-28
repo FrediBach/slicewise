@@ -40,6 +40,14 @@ import {
   type MeshScalarField,
   type ResolvedScalarFieldFeatures,
 } from './scalar-fields';
+import {
+  cutYarnPolyline,
+  humanizePolyline,
+  polylineHash,
+  selectYarnPolylines,
+  sharpVertices,
+  simplifyPolyline,
+} from './polyline-styling';
 
 type NumericArray = ArrayLike<number> & Iterable<number>;
 type Vec2 = [x: number, y: number];
@@ -1867,388 +1875,6 @@ function chromaticLayers(
 }
 
 /* ------------------------------------ Ramer–Douglas–Peucker (iterative) */
-function sharpVertices(run: NumericArray): Uint8Array {
-  const n = run.length / 2;
-  const sharp = new Uint8Array(n);
-  const closed =
-    n > 3 && Math.hypot(run[0] - run[(n - 1) * 2], run[1] - run[(n - 1) * 2 + 1]) < 1e-5;
-  const count = closed ? n - 1 : n;
-  const threshold = (35 * Math.PI) / 180;
-  const point = (i: number): Vec2 => {
-    if (closed) i = ((i % count) + count) % count;
-    else i = clamp(i, 0, count - 1);
-    return [run[i * 2], run[i * 2 + 1]];
-  };
-  for (let i = closed ? 0 : 1; i < (closed ? count : count - 1); i++) {
-    const a = point(i - 1),
-      b = point(i),
-      c = point(i + 1);
-    const ux = b[0] - a[0],
-      uy = b[1] - a[1],
-      vx = c[0] - b[0],
-      vy = c[1] - b[1];
-    const den = Math.hypot(ux, uy) * Math.hypot(vx, vy);
-    if (!den) continue;
-    const turn = Math.atan2(Math.abs(ux * vy - uy * vx), ux * vx + uy * vy);
-    if (turn >= threshold) sharp[i] = 1;
-  }
-  if (closed) sharp[n - 1] = sharp[0];
-  return sharp;
-}
-
-function simplify(run: Polyline, tol: number): { run: Polyline; sharp: Uint8Array } {
-  const n = run.length / 2;
-  const sourceSharp = sharpVertices(run);
-  if (n < 3) return { run, sharp: sourceSharp };
-  const keep = new Uint8Array(n);
-  keep[0] = keep[n - 1] = 1;
-  for (let i = 1; i < n - 1; i++) if (sourceSharp[i]) keep[i] = 1;
-  const stack: Array<[number, number]> = [[0, n - 1]];
-  const t2 = tol * tol;
-  while (stack.length) {
-    const [i0, i1] = stack.pop()!;
-    if (i1 - i0 < 2) continue;
-    const x0 = run[i0 * 2],
-      y0 = run[i0 * 2 + 1],
-      x1 = run[i1 * 2],
-      y1 = run[i1 * 2 + 1];
-    const dx = x1 - x0,
-      dy = y1 - y0,
-      dd = dx * dx + dy * dy;
-    let far = -1,
-      best = t2;
-    for (let i = i0 + 1; i < i1; i++) {
-      const px = run[i * 2] - x0,
-        py = run[i * 2 + 1] - y0;
-      let d;
-      if (dd === 0) d = px * px + py * py;
-      else {
-        const t = clamp((px * dx + py * dy) / dd, 0, 1);
-        const ex = px - dx * t,
-          ey = py - dy * t;
-        d = ex * ex + ey * ey;
-      }
-      if (d > best) {
-        best = d;
-        far = i;
-      }
-    }
-    if (far > 0) {
-      keep[far] = 1;
-      stack.push([i0, far], [far, i1]);
-    }
-  }
-  const out: number[] = [],
-    sharp: number[] = [];
-  for (let i = 0; i < n; i++)
-    if (keep[i]) {
-      out.push(run[i * 2], run[i * 2 + 1]);
-      sharp.push(sourceSharp[i]);
-    }
-  return { run: out, sharp: Uint8Array.from(sharp) };
-}
-
-/* --------------------------------------- deterministic hand-drawn wobble */
-function humanizeRun(run: Polyline, amount: number, salt = 0): Polyline {
-  const strength = clamp(Number(amount) || 0, 0, 100) / 100;
-  const count = run.length / 2;
-  if (!strength || count < 2) return run;
-  const closed =
-    count > 3 &&
-    Math.hypot(run[0] - run[(count - 1) * 2], run[1] - run[(count - 1) * 2 + 1]) < 1e-5;
-  const uniqueCount = closed ? count - 1 : count;
-  if (uniqueCount < 2) return run;
-
-  // Coordinate-derived phases keep the character stable across redraws and
-  // exports, while the salt prevents neighbouring contours moving in unison.
-  let hash = (0x811c9dc5 ^ salt) >>> 0;
-  const sampleCount = Math.min(uniqueCount, 8);
-  for (let i = 0; i < sampleCount; i++) {
-    hash ^= Math.round(run[i * 2] * 1000);
-    hash = Math.imul(hash, 0x01000193);
-    hash ^= Math.round(run[i * 2 + 1] * 1000);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  const random = (): number => {
-    hash ^= hash << 13;
-    hash ^= hash >>> 17;
-    hash ^= hash << 5;
-    return (hash >>> 0) / 4294967296;
-  };
-  const phases = [random(), random(), random(), random()].map((value) => value * Math.PI * 2);
-  const amplitude = 0.08 + strength * 0.62;
-  const spacing = 4.8 - strength * 2.2;
-  const points: number[] = [];
-  let distance = 0;
-  const segmentCount = closed ? uniqueCount : uniqueCount - 1;
-  for (let i = 0; i < segmentCount; i++) {
-    const next = (i + 1) % uniqueCount;
-    const x0 = run[i * 2],
-      y0 = run[i * 2 + 1],
-      x1 = run[next * 2],
-      y1 = run[next * 2 + 1];
-    const dx = x1 - x0,
-      dy = y1 - y0,
-      length = Math.hypot(dx, dy);
-    if (!length) continue;
-    const divisions = Math.max(1, Math.ceil(length / spacing));
-    for (let part = 0; part < divisions; part++) {
-      const t = part / divisions,
-        s = distance + length * t;
-      const nx = -dy / length,
-        ny = dx / length,
-        tx = dx / length,
-        ty = dy / length;
-      const normal =
-        amplitude *
-        (0.58 * Math.sin(s * 0.19 + phases[0]) +
-          0.29 * Math.sin(s * 0.47 + phases[1]) +
-          0.13 * Math.sin(s * 1.07 + phases[2]));
-      const along = amplitude * 0.13 * Math.sin(s * 0.31 + phases[3]);
-      points.push(x0 + dx * t + nx * normal + tx * along, y0 + dy * t + ny * normal + ty * along);
-    }
-    distance += length;
-  }
-  if (!closed) {
-    const i = uniqueCount - 2,
-      x0 = run[i * 2],
-      y0 = run[i * 2 + 1],
-      x1 = run[(i + 1) * 2],
-      y1 = run[(i + 1) * 2 + 1];
-    const dx = x1 - x0,
-      dy = y1 - y0,
-      length = Math.hypot(dx, dy) || 1,
-      s = distance;
-    const normal =
-      amplitude *
-      (0.58 * Math.sin(s * 0.19 + phases[0]) +
-        0.29 * Math.sin(s * 0.47 + phases[1]) +
-        0.13 * Math.sin(s * 1.07 + phases[2]));
-    const along = amplitude * 0.13 * Math.sin(s * 0.31 + phases[3]);
-    points.push(
-      x1 - (dy / length) * normal + (dx / length) * along,
-      y1 + (dx / length) * normal + (dy / length) * along,
-    );
-  } else if (points.length >= 2) points.push(points[0], points[1]);
-  return points.length >= 4 ? points : run;
-}
-
-/* ------------------------------------- cut contours into curled yarn ends */
-function polylineDistances(run: NumericArray): number[] {
-  const distances = [0];
-  for (let i = 2; i < run.length; i += 2)
-    distances.push(distances.at(-1)! + Math.hypot(run[i] - run[i - 2], run[i + 1] - run[i - 1]));
-  return distances;
-}
-
-function pointAlong(run: NumericArray, distances: readonly number[], distance: number): Vec2 {
-  const total = distances.at(-1) || 0;
-  const target = clamp(distance, 0, total);
-  let index = 1;
-  while (index < distances.length && distances[index] < target) index++;
-  if (index >= distances.length) return [run[run.length - 2], run[run.length - 1]];
-  const start = distances[index - 1],
-    span = distances[index] - start,
-    t = span ? (target - start) / span : 0;
-  return [
-    run[(index - 1) * 2] + (run[index * 2] - run[(index - 1) * 2]) * t,
-    run[(index - 1) * 2 + 1] + (run[index * 2 + 1] - run[(index - 1) * 2 + 1]) * t,
-  ];
-}
-
-function slicePolyline(
-  run: Polyline,
-  distances: readonly number[],
-  startDistance: number,
-  endDistance: number,
-): Polyline {
-  const start = pointAlong(run, distances, startDistance);
-  const end = pointAlong(run, distances, endDistance);
-  const sliced: Polyline = [...start];
-  for (let i = 1; i + 1 < distances.length; i++)
-    if (distances[i] > startDistance && distances[i] < endDistance)
-      sliced.push(run[i * 2], run[i * 2 + 1]);
-  sliced.push(...end);
-  return sliced;
-}
-
-interface YarnCurlStyle {
-  replacementLength: number;
-  drawnLength: number;
-  turn: number;
-  direction: number;
-  irregularity: number;
-  phase: number;
-}
-
-function curlRunEnd(run: Polyline, atStart: boolean, style: YarnCurlStyle): Polyline {
-  const distances = polylineDistances(run);
-  const total = distances.at(-1) || 0;
-  if (total < 2) return run;
-  const replacementLength = Math.min(total * 0.48, style.replacementLength);
-  const drawnLength = Math.min(total * 0.9, style.drawnLength);
-  const anchorDistance = atStart ? replacementLength : total - replacementLength;
-  const anchor = pointAlong(run, distances, anchorDistance);
-  const epsilon = Math.min(0.3, replacementLength * 0.12);
-  const before = pointAlong(run, distances, Math.max(0, anchorDistance - epsilon));
-  const after = pointAlong(run, distances, Math.min(total, anchorDistance + epsilon));
-  const dx = after[0] - before[0],
-    dy = after[1] - before[1],
-    length = Math.hypot(dx, dy) || 1,
-    outward = Math.atan2(dy / length, dx / length) + (atStart ? Math.PI : 0);
-  const samples = clamp(Math.ceil(drawnLength / 0.65), 14, 42);
-  const stepLength = drawnLength / samples;
-  const curl: Polyline = [...anchor];
-  let x = anchor[0],
-    y = anchor[1];
-  for (let part = 1; part <= samples; part++) {
-    const u = (part - 0.5) / samples;
-    // Integrating a changing heading produces a true sweeping curl. Each end
-    // gets an independent length, radius, total turn, handedness and wobble.
-    const turnProgress = Math.pow(u, 0.72);
-    const wobble =
-      style.irregularity * Math.sin(style.phase + u * Math.PI * 2.3) * Math.sin(u * Math.PI);
-    const angle = outward + style.direction * style.turn * turnProgress + wobble;
-    const spacingVariation = 1 + 0.13 * Math.sin(style.phase * 0.7 + u * Math.PI * 3.1);
-    x += Math.cos(angle) * stepLength * spacingVariation;
-    y += Math.sin(angle) * stepLength * spacingVariation;
-    curl.push(x, y);
-  }
-  if (atStart) {
-    const reversedCurl: Polyline = [];
-    for (let i = curl.length - 2; i >= 0; i -= 2) reversedCurl.push(curl[i], curl[i + 1]);
-    const remainder = slicePolyline(run, distances, anchorDistance, total);
-    return [...reversedCurl, ...remainder.slice(2)];
-  }
-  const remainder = slicePolyline(run, distances, 0, anchorDistance);
-  return [...remainder.slice(0, -2), ...curl];
-}
-
-function hashPolyline(run: NumericArray, salt = 0): number {
-  let hash = (0x811c9dc5 ^ salt) >>> 0;
-  const stride = Math.max(2, Math.floor(run.length / 12 / 2) * 2);
-  for (let i = 0; i < run.length; i += stride) {
-    hash ^= Math.round(run[i] * 100);
-    hash = Math.imul(hash, 0x01000193);
-    hash ^= Math.round(run[i + 1] * 100);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
-}
-
-function yarnCutRun(
-  run: Polyline,
-  seed: number,
-  sizePercent: number,
-  requestedCuts: number,
-): Polyline[] {
-  const distances = polylineDistances(run);
-  const total = distances.at(-1) || 0;
-  const cutCount = Math.min(Math.max(1, Math.round(requestedCuts)), Math.floor(total / 6));
-  if (total < 12 || cutCount < 1) return [run];
-  let hash = seed || 1;
-  const random = (): number => {
-    hash ^= hash << 13;
-    hash ^= hash >>> 17;
-    hash ^= hash << 5;
-    return (hash >>> 0) / 4294967296;
-  };
-  const size = clamp(Number(sizePercent) || 100, 25, 250) / 100;
-  const randomCurlStyle = (): YarnCurlStyle => ({
-    replacementLength: (5 + random() * 11) * size,
-    drawnLength: (9 + random() * 19) * size,
-    turn: ((100 + random() * 240) * Math.PI) / 180,
-    direction: random() < 0.5 ? -1 : 1,
-    irregularity: ((5 + random() * 24) * Math.PI) / 180,
-    phase: random() * Math.PI * 2,
-  });
-  const closed = run.length >= 8 && Math.hypot(run[0] - run.at(-2)!, run[1] - run.at(-1)!) < 1e-5;
-  type YarnCut = {
-    leftDistance: number;
-    rightDistance: number;
-    leftStyle: YarnCurlStyle;
-    rightStyle: YarnCurlStyle;
-  };
-  if (!closed) {
-    const cuts: YarnCut[] = [];
-    const start = total * 0.1;
-    const span = total * 0.8;
-    for (let index = 0; index < cutCount; index++) {
-      const centre = start + ((index + 0.2 + random() * 0.6) / cutCount) * span;
-      const gap = Math.min(total / (cutCount * 5), 0.8 + random() * 3.7);
-      cuts.push({
-        leftDistance: centre - gap / 2,
-        rightDistance: centre + gap / 2,
-        leftStyle: randomCurlStyle(),
-        rightStyle: randomCurlStyle(),
-      });
-    }
-    cuts.sort((a, b) => a.leftDistance - b.leftDistance);
-    const pieces: Polyline[] = [];
-    const first = slicePolyline(run, distances, 0, cuts[0].leftDistance);
-    pieces.push(curlRunEnd(first, false, cuts[0].leftStyle));
-    for (let index = 0; index + 1 < cuts.length; index++) {
-      const current = cuts[index];
-      const next = cuts[index + 1];
-      const middle = slicePolyline(run, distances, current.rightDistance, next.leftDistance);
-      pieces.push(curlRunEnd(curlRunEnd(middle, true, current.rightStyle), false, next.leftStyle));
-    }
-    const lastCut = cuts.at(-1)!;
-    const last = slicePolyline(run, distances, lastCut.rightDistance, total);
-    pieces.push(curlRunEnd(last, true, lastCut.rightStyle));
-    return pieces;
-  }
-  const offset = random() / cutCount;
-  const cuts: YarnCut[] = [];
-  for (let index = 0; index < cutCount; index++) {
-    const centre = (((index + 0.2 + random() * 0.6) / cutCount + offset) % 1) * total;
-    const gap = Math.min(total / (cutCount * 5), 0.8 + random() * 3.7);
-    cuts.push({
-      leftDistance: Math.max(0, centre - gap / 2),
-      rightDistance: Math.min(total, centre + gap / 2),
-      leftStyle: randomCurlStyle(),
-      rightStyle: randomCurlStyle(),
-    });
-  }
-  cuts.sort((a, b) => a.leftDistance - b.leftDistance);
-  const pieces: Polyline[] = [];
-  for (let index = 0; index < cuts.length; index++) {
-    const current = cuts[index];
-    const next = cuts[(index + 1) % cuts.length];
-    const middle =
-      index + 1 < cuts.length
-        ? slicePolyline(run, distances, current.rightDistance, next.leftDistance)
-        : [
-            ...slicePolyline(run, distances, current.rightDistance, total),
-            ...slicePolyline(run, distances, 0, next.leftDistance).slice(2),
-          ];
-    pieces.push(curlRunEnd(curlRunEnd(middle, true, current.rightStyle), false, next.leftStyle));
-  }
-  return pieces;
-}
-
-function selectYarnRuns(runs: readonly Polyline[], percent: number): Map<Polyline, number> {
-  const eligible: Array<{ run: Polyline; score: number; length: number }> = [];
-  for (let index = 0; index < runs.length; index++) {
-    const run = runs[index];
-    const length = polylineDistances(run).at(-1) || 0;
-    if (length >= 12) eligible.push({ run, length, score: hashPolyline(run, index * 0x9e3779b9) });
-  }
-  eligible.sort((a, b) => a.score - b.score);
-  const selected = new Map<Polyline, number>();
-  const normalizedPercent = clamp(Number(percent) || 0, 0, 500);
-  const cutsPerLine = Math.floor(normalizedPercent / 100);
-  const remainder = normalizedPercent % 100;
-  const extraCuts = remainder ? Math.max(1, Math.round((eligible.length * remainder) / 100)) : 0;
-  for (let index = 0; index < eligible.length; index++) {
-    const candidate = eligible[index];
-    const requested = cutsPerLine + (index < extraCuts ? 1 : 0);
-    const feasible = Math.min(requested, Math.floor(candidate.length / 6));
-    if (feasible > 0) selected.set(candidate.run, feasible);
-  }
-  return selected;
-}
-
 /* ------------------------------------------ adaptive SVG curve output */
 function serialiseRun(run: NumericArray, quality: number, sharp: NumericArray): string {
   const n = run.length / 2;
@@ -2679,7 +2305,7 @@ function computeLineArtInstance(
     }
   }
   const yarnRuns = settings.yarnCurl
-    ? selectYarnRuns(
+    ? selectYarnPolylines(
         sourceRuns.map(({ run }) => run),
         settings.yarnCutPercent,
       )
@@ -2690,9 +2316,9 @@ function computeLineArtInstance(
     salt = 0;
   for (let runIndex = 0; runIndex < sourceRuns.length; runIndex++) {
     const { run: raw, sourceIndex } = sourceRuns[runIndex];
-    const simplified = simplify(raw, tolerance);
+    const simplified = simplifyPolyline(raw, tolerance);
     const styled = settings.humanizer
-      ? humanizeRun(simplified.run, settings.humanizerAmount, salt++)
+      ? humanizePolyline(simplified.run, settings.humanizerAmount, salt++)
       : simplified.run;
     const colorIndex =
       indexedPalette.get(sourceIndex) ??
@@ -2705,7 +2331,7 @@ function computeLineArtInstance(
         : 0);
     const cutCount = yarnRuns?.get(raw) || 0;
     const processedRuns = cutCount
-      ? yarnCutRun(styled, hashPolyline(raw), settings.yarnCurlSize, cutCount)
+      ? cutYarnPolyline(styled, polylineHash(raw), settings.yarnCurlSize, cutCount)
       : [styled];
     const clippedRuns = processedRuns.flatMap((run) =>
       kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
@@ -3157,7 +2783,7 @@ function computeContourInstance(
     toneGroups.flatMap((weightGroups) => weightGroups.flat()),
   );
   const yarnRuns = settings.yarnCurl
-    ? selectYarnRuns(sourceContourRuns, settings.yarnCutPercent)
+    ? selectYarnPolylines(sourceContourRuns, settings.yarnCutPercent)
     : null;
   let nodes = 0,
     paths = 0;
@@ -3166,14 +2792,14 @@ function computeContourInstance(
     let d = '';
     const plotRuns: Polyline[] = [];
     for (const raw of runs) {
-      const simplified = simplify(raw, tolerance);
+      const simplified = simplifyPolyline(raw, tolerance);
       const run = settings.humanizer
-        ? humanizeRun(simplified.run, settings.humanizerAmount, humanizerSalt++)
+        ? humanizePolyline(simplified.run, settings.humanizerAmount, humanizerSalt++)
         : simplified.run;
       if (run.length < 4) continue;
       const cutCount = yarnRuns?.get(raw) || 0;
       const processedRuns = cutCount
-        ? yarnCutRun(run, hashPolyline(raw), settings.yarnCurlSize, cutCount)
+        ? cutYarnPolyline(run, polylineHash(raw), settings.yarnCurlSize, cutCount)
         : [run];
       const clippedRuns = processedRuns.flatMap((run) =>
         kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>

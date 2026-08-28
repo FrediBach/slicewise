@@ -56,4 +56,26 @@ describe('ContoursPanel slice-field controls', () => {
     ).toHaveAttribute('min', '80');
     expect(screen.getByLabelText('Include zero curvature')).toBeChecked();
   });
+
+  it('keeps runtime-owned field groups and LFO controls mounted with stable defaults', () => {
+    render(<ContoursPanel />);
+
+    for (const id of [
+      'customAxis',
+      'wavefrontControls',
+      'cylinderAxisControls',
+      'geodesicControls',
+      'geodesicSecondSeedControls',
+      'curvatureControls',
+    ]) {
+      expect(document.getElementById(id)).toBeInTheDocument();
+    }
+    expect(screen.getByLabelText('Modulate slice planes')).not.toBeChecked();
+    expect(
+      screen.getByLabelText('LFO amplitude', { selector: 'input[type="range"]' }),
+    ).toBeDisabled();
+    expect(screen.getByLabelText('Waveform')).toBeDisabled();
+    expect(screen.getByLabelText('Modulate LFO')).not.toBeChecked();
+    expect(screen.getByLabelText('Mode')).toBeDisabled();
+  });
 });

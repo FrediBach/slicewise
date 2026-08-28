@@ -13,7 +13,7 @@ export default defineConfig({
       reporter: ['text', 'html'],
       reportsDirectory: 'coverage',
       include: [
-        'src/lib/{colorPair,contour-engine,gcode,generativeMesh,hyperbolic-tiling,mapAnnotations,mesh,mesh-curvature,mesh-geodesics,mesh-topology,projection,scalar-fields,svg-mesh,toolpaths,vector-zoom}.ts',
+        'src/lib/{colorPair,contour-engine,gcode,generativeMesh,hyperbolic-tiling,mapAnnotations,mesh,mesh-curvature,mesh-geodesics,mesh-topology,polyline-styling,projection,scalar-fields,slicer-export,svg-mesh,toolpaths,vector-zoom}.ts',
         'src/lib/demo-meshes/index.ts',
         'src/components/controls/{FormControls,GradientChooser}.tsx',
       ],
