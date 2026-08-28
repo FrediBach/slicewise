@@ -380,11 +380,14 @@ describe('contour output effects', () => {
       vectorZoom1Corner: 'top-right' as const,
       vectorZoom1Size: 38,
       vectorZoom1Margin: 8,
+      vectorZoom1Color: '#ef4444',
     };
     const baseline = computeContours(makeContourMesh(), contourSettings, false);
     const result = computeContours(makeContourMesh(), settings, false);
 
     expect(result.svg).toContain('id="vector-zoom-guides"');
+    expect(result.svg).toContain('stroke="#ef4444"');
+    expect(result.toolpaths.some((group) => group.color === '#ef4444')).toBe(true);
     expect(result.toolpaths.flatMap((group) => group.runs).length).toBeGreaterThan(
       baseline.toolpaths.flatMap((group) => group.runs).length,
     );

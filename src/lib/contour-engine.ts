@@ -25,6 +25,7 @@ import {
   applyVectorZooms,
   resolveVectorZooms,
   vectorZoomGuides,
+  type ResolvedVectorZoom,
   type VectorZoomSettings,
 } from './vector-zoom';
 import {
@@ -1563,6 +1564,7 @@ function deterministicDrawingNumber(
       settings.vectorZoom1Corner,
       settings.vectorZoom1Size,
       settings.vectorZoom1Margin,
+      settings.vectorZoom1Color,
       settings.vectorZoom2Enabled,
       settings.vectorZoom2Shape,
       settings.vectorZoom2CenterX,
@@ -1572,6 +1574,7 @@ function deterministicDrawingNumber(
       settings.vectorZoom2Corner,
       settings.vectorZoom2Size,
       settings.vectorZoom2Margin,
+      settings.vectorZoom2Color,
       settings.vectorZoom3Enabled,
       settings.vectorZoom3Shape,
       settings.vectorZoom3CenterX,
@@ -1581,6 +1584,7 @@ function deterministicDrawingNumber(
       settings.vectorZoom3Corner,
       settings.vectorZoom3Size,
       settings.vectorZoom3Margin,
+      settings.vectorZoom3Color,
       settings.vectorZoom4Enabled,
       settings.vectorZoom4Shape,
       settings.vectorZoom4CenterX,
@@ -1590,6 +1594,7 @@ function deterministicDrawingNumber(
       settings.vectorZoom4Corner,
       settings.vectorZoom4Size,
       settings.vectorZoom4Margin,
+      settings.vectorZoom4Color,
     ],
     morph: [
       settings.morphEnabled,
@@ -1768,6 +1773,21 @@ function clipArtworkRun(
         clipRunToGenerativeMask(candidate, settings, width, height, settings.margin),
       )
     : artboardRuns;
+}
+
+function clippedVectorZoomGuideGroups(
+  zooms: readonly ResolvedVectorZoom[],
+  settings: ContourSettings,
+  width: number,
+  height: number,
+): Array<{ color: string; runs: Polyline[] }> {
+  const clippedGroups: Array<{ color: string; runs: Polyline[] }> = [];
+  for (const group of vectorZoomGuides(zooms, settings.sw).groups) {
+    const runs: Polyline[] = [];
+    for (const run of group.runs) runs.push(...clipArtworkRun(run, settings, width, height));
+    if (runs.length) clippedGroups.push({ color: group.color, runs });
+  }
+  return clippedGroups;
 }
 
 function maskArtwork(
@@ -2758,15 +2778,17 @@ function computeLineArtInstance(
     renderedPaths += mapAnnotations.paths;
     renderedNodes += mapAnnotations.nodes;
   }
-  const zoomGuides = vectorZoomGuides(vectorZooms, settings.sw);
-  const zoomGuideRuns = [...zoomGuides.dashedRuns, ...zoomGuides.outlineRuns].flatMap((run) =>
-    clipArtworkRun(run, settings, W, H),
-  );
+  const zoomGuideGroups = clippedVectorZoomGuideGroups(vectorZooms, settings, W, H);
+  const zoomGuideRuns = zoomGuideGroups.flatMap((group) => group.runs);
   if (zoomGuideRuns.length) {
-    const guideData = zoomGuideRuns
-      .map((run) => serialiseRun(run, quality, sharpVertices(run)))
-      .join('');
-    artwork += `<g id="vector-zoom-guides" fill="none" stroke="${effectiveAnnotationColor(settings)}" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round"><path d="${guideData}"/></g>`;
+    artwork += `<g id="vector-zoom-guides" fill="none" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round">${zoomGuideGroups
+      .map(
+        (group) =>
+          `<path stroke="${group.color}" d="${group.runs
+            .map((run) => serialiseRun(run, quality, sharpVertices(run)))
+            .join('')}"/>`,
+      )
+      .join('')}</g>`;
     renderedPaths += zoomGuideRuns.length;
     renderedNodes += zoomGuideRuns.reduce((sum, run) => sum + run.length / 2, 0);
   }
@@ -2811,12 +2833,19 @@ ${artwork}
     if (matching) matching.runs.push(...maskOutline.runs);
     else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
   }
-  if (!quick && zoomGuideRuns.length) {
-    const color = effectiveAnnotationColor(settings);
-    const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
-    if (matching) matching.runs.push(...zoomGuideRuns);
-    else toolpaths.push({ color, label: 'vector zoom guides', runs: zoomGuideRuns });
-  }
+  if (!quick)
+    for (const guideGroup of zoomGuideGroups) {
+      const matching = toolpaths.find(
+        (group) => group.color.toLowerCase() === guideGroup.color.toLowerCase(),
+      );
+      if (matching) matching.runs.push(...guideGroup.runs);
+      else
+        toolpaths.push({
+          color: guideGroup.color,
+          label: 'vector zoom guides',
+          runs: guideGroup.runs,
+        });
+    }
   return {
     svg,
     toolpaths,
@@ -3237,16 +3266,21 @@ function computeContourInstance(
     if (matching) matching.runs.push(...maskOutline.runs);
     else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
   }
-  const zoomGuides = vectorZoomGuides(vectorZooms, settings.sw);
-  const zoomGuideRuns = [...zoomGuides.dashedRuns, ...zoomGuides.outlineRuns].flatMap((run) =>
-    clipArtworkRun(run, settings, W, H),
-  );
-  if (!quick && zoomGuideRuns.length) {
-    const color = effectiveAnnotationColor(settings);
-    const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
-    if (matching) matching.runs.push(...zoomGuideRuns);
-    else toolpaths.push({ color, label: 'vector zoom guides', runs: zoomGuideRuns });
-  }
+  const zoomGuideGroups = clippedVectorZoomGuideGroups(vectorZooms, settings, W, H);
+  const zoomGuideRuns = zoomGuideGroups.flatMap((group) => group.runs);
+  if (!quick)
+    for (const guideGroup of zoomGuideGroups) {
+      const matching = toolpaths.find(
+        (group) => group.color.toLowerCase() === guideGroup.color.toLowerCase(),
+      );
+      if (matching) matching.runs.push(...guideGroup.runs);
+      else
+        toolpaths.push({
+          color: guideGroup.color,
+          label: 'vector zoom guides',
+          runs: guideGroup.runs,
+        });
+    }
   let artwork: string,
     renderedPaths = paths,
     renderedNodes = nodes;
@@ -3319,10 +3353,14 @@ function computeContourInstance(
     renderedNodes += mapAnnotations.nodes;
   }
   if (zoomGuideRuns.length) {
-    const guideData = zoomGuideRuns
-      .map((run) => serialiseRun(run, quality, sharpVertices(run)))
-      .join('');
-    artwork += `<g id="vector-zoom-guides" fill="none" stroke="${effectiveAnnotationColor(settings)}" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round"><path d="${guideData}"/></g>`;
+    artwork += `<g id="vector-zoom-guides" fill="none" stroke-width="${fmt(settings.sw)}" stroke-linecap="round" stroke-linejoin="round">${zoomGuideGroups
+      .map(
+        (group) =>
+          `<path stroke="${group.color}" d="${group.runs
+            .map((run) => serialiseRun(run, quality, sharpVertices(run)))
+            .join('')}"/>`,
+      )
+      .join('')}</g>`;
     renderedPaths += zoomGuideRuns.length;
     renderedNodes += zoomGuideRuns.reduce((sum, run) => sum + run.length / 2, 0);
   }

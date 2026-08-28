@@ -11,6 +11,7 @@ export interface VectorZoomSettings {
   vectorZoom1Corner?: VectorZoomCorner;
   vectorZoom1Size?: number;
   vectorZoom1Margin?: number;
+  vectorZoom1Color?: string;
   vectorZoom2Enabled?: boolean;
   vectorZoom2Shape?: VectorZoomShape;
   vectorZoom2CenterX?: number;
@@ -20,6 +21,7 @@ export interface VectorZoomSettings {
   vectorZoom2Corner?: VectorZoomCorner;
   vectorZoom2Size?: number;
   vectorZoom2Margin?: number;
+  vectorZoom2Color?: string;
   vectorZoom3Enabled?: boolean;
   vectorZoom3Shape?: VectorZoomShape;
   vectorZoom3CenterX?: number;
@@ -29,6 +31,7 @@ export interface VectorZoomSettings {
   vectorZoom3Corner?: VectorZoomCorner;
   vectorZoom3Size?: number;
   vectorZoom3Margin?: number;
+  vectorZoom3Color?: string;
   vectorZoom4Enabled?: boolean;
   vectorZoom4Shape?: VectorZoomShape;
   vectorZoom4CenterX?: number;
@@ -38,6 +41,7 @@ export interface VectorZoomSettings {
   vectorZoom4Corner?: VectorZoomCorner;
   vectorZoom4Size?: number;
   vectorZoom4Margin?: number;
+  vectorZoom4Color?: string;
 }
 
 type Point = [x: number, y: number];
@@ -53,11 +57,13 @@ export type ResolvedVectorZoom = {
   source: Region;
   target: Region;
   scale: number;
+  color: string;
 };
 
 export type VectorZoomGuides = {
   dashedRuns: number[][];
   outlineRuns: number[][];
+  groups: Array<{ color: string; runs: number[][] }>;
 };
 
 const clamp = (value: number, min: number, max: number): number =>
@@ -86,6 +92,9 @@ export function resolveVectorZooms(
   margin: number,
 ): ResolvedVectorZoom[] {
   const zooms: ResolvedVectorZoom[] = [];
+  const inheritedColor = String(
+    (settings as unknown as Record<string, unknown>).color || '#15181a',
+  );
   for (let index = 1; index <= 4; index++) {
     if (!setting(settings, index, 'Enabled')) continue;
     const shape = setting(settings, index, 'Shape') === 'circle' ? 'circle' : 'rectangle';
@@ -111,6 +120,8 @@ export function resolveVectorZooms(
       0,
       Math.min(width, height) * 0.45,
     );
+    const requestedColor = String(setting(settings, index, 'Color') || inheritedColor);
+    const color = /^#[0-9a-f]{6}$/i.test(requestedColor) ? requestedColor : '#15181a';
     const requestedCorner = String(setting(settings, index, 'Corner') || 'top-right');
     const corner: VectorZoomCorner = [
       'top-left',
@@ -131,7 +142,7 @@ export function resolveVectorZooms(
         ? Math.min(edgeMargin, Math.max(0, height - targetRy * 2)) + targetRy
         : height - Math.min(edgeMargin, Math.max(0, height - targetRy * 2)) - targetRy,
     };
-    zooms.push({ source, target, scale });
+    zooms.push({ source, target, scale, color });
   }
   return zooms;
 }
@@ -316,12 +327,16 @@ export function vectorZoomGuides(
   const gapLength = dashLength * 0.65;
   const dashedRuns: number[][] = [];
   const outlineRuns: number[][] = [];
+  const groups: Array<{ color: string; runs: number[][] }> = [];
   for (const zoom of zooms) {
-    dashedRuns.push(...dashRun(boundary(zoom.source), dashLength, gapLength));
+    const zoomDashedRuns = dashRun(boundary(zoom.source), dashLength, gapLength);
     const sourceEnd = boundaryPointToward(zoom.source, [zoom.target.cx, zoom.target.cy]);
     const targetEnd = boundaryPointToward(zoom.target, [zoom.source.cx, zoom.source.cy]);
-    dashedRuns.push(...dashRun([...sourceEnd, ...targetEnd], dashLength, gapLength));
-    outlineRuns.push(boundary(zoom.target));
+    zoomDashedRuns.push(...dashRun([...sourceEnd, ...targetEnd], dashLength, gapLength));
+    const zoomOutlineRuns = [boundary(zoom.target)];
+    dashedRuns.push(...zoomDashedRuns);
+    outlineRuns.push(...zoomOutlineRuns);
+    groups.push({ color: zoom.color, runs: [...zoomDashedRuns, ...zoomOutlineRuns] });
   }
-  return { dashedRuns, outlineRuns };
+  return { dashedRuns, outlineRuns, groups };
 }

@@ -231,6 +231,7 @@ const state: AppState = {
   vectorZoom1Corner: 'top-right',
   vectorZoom1Size: 30,
   vectorZoom1Margin: 14,
+  vectorZoom1Color: '#15181a',
   vectorZoom2Enabled: false,
   vectorZoom2Shape: 'rectangle',
   vectorZoom2CenterX: 55,
@@ -240,6 +241,7 @@ const state: AppState = {
   vectorZoom2Corner: 'top-left',
   vectorZoom2Size: 30,
   vectorZoom2Margin: 14,
+  vectorZoom2Color: '#15181a',
   vectorZoom3Enabled: false,
   vectorZoom3Shape: 'circle',
   vectorZoom3CenterX: 45,
@@ -249,6 +251,7 @@ const state: AppState = {
   vectorZoom3Corner: 'bottom-right',
   vectorZoom3Size: 30,
   vectorZoom3Margin: 14,
+  vectorZoom3Color: '#15181a',
   vectorZoom4Enabled: false,
   vectorZoom4Shape: 'circle',
   vectorZoom4CenterX: 55,
@@ -258,6 +261,7 @@ const state: AppState = {
   vectorZoom4Corner: 'bottom-left',
   vectorZoom4Size: 30,
   vectorZoom4Margin: 14,
+  vectorZoom4Color: '#15181a',
   spiral: false,
   hide: true,
   sil: true,
@@ -653,6 +657,7 @@ if (typeof document !== 'undefined') {
       vectorZoom1Corner: state.vectorZoom1Corner,
       vectorZoom1Size: state.vectorZoom1Size,
       vectorZoom1Margin: state.vectorZoom1Margin,
+      vectorZoom1Color: state.vectorZoom1Color,
       vectorZoom2Enabled: state.vectorZoom2Enabled,
       vectorZoom2Shape: state.vectorZoom2Shape,
       vectorZoom2CenterX: state.vectorZoom2CenterX,
@@ -662,6 +667,7 @@ if (typeof document !== 'undefined') {
       vectorZoom2Corner: state.vectorZoom2Corner,
       vectorZoom2Size: state.vectorZoom2Size,
       vectorZoom2Margin: state.vectorZoom2Margin,
+      vectorZoom2Color: state.vectorZoom2Color,
       vectorZoom3Enabled: state.vectorZoom3Enabled,
       vectorZoom3Shape: state.vectorZoom3Shape,
       vectorZoom3CenterX: state.vectorZoom3CenterX,
@@ -671,6 +677,7 @@ if (typeof document !== 'undefined') {
       vectorZoom3Corner: state.vectorZoom3Corner,
       vectorZoom3Size: state.vectorZoom3Size,
       vectorZoom3Margin: state.vectorZoom3Margin,
+      vectorZoom3Color: state.vectorZoom3Color,
       vectorZoom4Enabled: state.vectorZoom4Enabled,
       vectorZoom4Shape: state.vectorZoom4Shape,
       vectorZoom4CenterX: state.vectorZoom4CenterX,
@@ -680,6 +687,7 @@ if (typeof document !== 'undefined') {
       vectorZoom4Corner: state.vectorZoom4Corner,
       vectorZoom4Size: state.vectorZoom4Size,
       vectorZoom4Margin: state.vectorZoom4Margin,
+      vectorZoom4Color: state.vectorZoom4Color,
       documentTitle: state.name,
       morphEnabled,
       morphSteps,
@@ -1937,6 +1945,9 @@ if (typeof document !== 'undefined') {
       const heightReason = circle ? 'Circle areas use Area width as their diameter.' : reason;
       setControlPairDisabled(`${prefix}Height`, !enabled || circle, heightReason);
       $(`${prefix}HeightControl`).classList.toggle('is-disabled', !enabled || circle);
+      setDisabled($<HTMLInputElement>(`${prefix}Color`), !enabled, reason);
+      setDisabled($<HTMLInputElement>(`${prefix}ColorHex`), !enabled, reason);
+      $(`${prefix}ColorControl`).classList.toggle('is-disabled', !enabled);
     }
   }
   function syncChromaAmount(): void {
@@ -1999,6 +2010,22 @@ if (typeof document !== 'undefined') {
       dynamicState[`${prefix}Corner`] = inputTarget(event).value;
       redraw(false);
     });
+    const applyGuideColor = (value: string, quick: boolean): void => {
+      if (!/^#[0-9a-f]{6}$/i.test(value)) return;
+      dynamicState[`${prefix}Color`] = value;
+      $<HTMLInputElement>(`${prefix}Color`).value = value;
+      $<HTMLInputElement>(`${prefix}ColorHex`).value = value;
+      $(`${prefix}ColorSwatch`).style.background = value;
+      redraw(quick);
+    };
+    $(`${prefix}Color`).addEventListener('input', (event) =>
+      applyGuideColor(inputTarget(event).value, true),
+    );
+    $(`${prefix}ColorHex`).addEventListener('input', (event) =>
+      applyGuideColor(inputTarget(event).value, true),
+    );
+    $(`${prefix}Color`).addEventListener('change', () => redraw(false));
+    $(`${prefix}ColorHex`).addEventListener('change', () => redraw(false));
   }
   syncVectorZoomControls();
   $('chroma').addEventListener('change', (e) => {
@@ -2489,6 +2516,11 @@ if (typeof document !== 'undefined') {
       ].includes(String(restoredValues[`${prefix}Corner`]))
         ? restoredValues[`${prefix}Corner`]
         : defaults.corner;
+      restoredValues[`${prefix}Color`] = /^#[0-9a-f]{6}$/i.test(
+        String(restoredValues[`${prefix}Color`]),
+      )
+        ? restoredValues[`${prefix}Color`]
+        : restored.color || '#15181a';
       for (const [suffix, fallback] of [
         ['CenterX', defaults.x],
         ['CenterY', defaults.y],
@@ -2636,6 +2668,13 @@ if (typeof document !== 'undefined') {
     $('backgroundColor').value = state.backgroundColor;
     $('backgroundColorHex').value = state.backgroundColor;
     $('backgroundSwatch').style.background = state.backgroundColor;
+    for (let index = 1; index <= 4; index++) {
+      const prefix = `vectorZoom${index}`;
+      const color = String(dynamicState[`${prefix}Color`]);
+      $<HTMLInputElement>(`${prefix}Color`).value = color;
+      $<HTMLInputElement>(`${prefix}ColorHex`).value = color;
+      $(`${prefix}ColorSwatch`).style.background = color;
+    }
     $('bed').style.background = previewBackground(state);
     $('pw').value = String(state.pw);
     $('ph').value = String(state.ph);
@@ -2793,13 +2832,18 @@ if (typeof document !== 'undefined') {
       );
     }
   }
-  function randomizeColor(id: string, key: string, colors: readonly string[]): void {
+  function randomizeColor(
+    id: string,
+    key: string,
+    colors: readonly string[],
+    swatchId = id === 'color' ? 'swatch' : 'backgroundSwatch',
+  ): void {
     if (!shouldRandomize(id)) return;
     const value = randomItem(colors);
     dynamicState[key] = value;
     $(id).value = value;
     $(id + 'Hex').value = value;
-    $(id === 'color' ? 'swatch' : 'backgroundSwatch').style.background = value;
+    $(swatchId).style.background = value;
     if (key === 'backgroundColor') $('bed').style.background = value;
     for (const [dimension, targets] of [
       [1, state.morphTargets],
@@ -3059,6 +3103,12 @@ if (typeof document !== 'undefined') {
       randomizePair(`${prefix}Height`, `${prefix}Height`, () => randomInt(8, 30));
       randomizePair(`${prefix}Size`, `${prefix}Size`, () => randomInt(20, 45));
       randomizePair(`${prefix}Margin`, `${prefix}Margin`, () => randomInt(4, 24));
+      randomizeColor(
+        `${prefix}Color`,
+        `${prefix}Color`,
+        [state.color, '#15181a', '#ef4444', '#2563eb', '#16a34a'],
+        `${prefix}ColorSwatch`,
+      );
     }
     syncVectorZoomControls();
     randomizePair('halftoneSize', 'halftoneSize', () => randomIn(1.2, 4.8));

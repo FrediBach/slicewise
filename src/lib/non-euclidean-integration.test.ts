@@ -78,6 +78,7 @@ const hardeningSettings = {
   vectorZoom1Corner: 'top-right',
   vectorZoom1Size: 28,
   vectorZoom1Margin: 9,
+  vectorZoom1Color: '#f97316',
   morphEnabled: true,
   morphSteps: 2,
   morphTargets: { zoom: 1.04, panX: 7 },

@@ -445,9 +445,19 @@ type ColorControlProps = RandomLockProps & {
   defaultValue: string;
   swatchId: string;
   morphable?: boolean;
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
-function ColorControl({ id, label, defaultValue, swatchId, morphable = true }: ColorControlProps) {
+function ColorControl({
+  id,
+  label,
+  defaultValue,
+  swatchId,
+  morphable = true,
+  disabled = false,
+  disabledReason,
+}: ColorControlProps) {
   const [morphMode, setMorphMode] = useState(0);
   const [target, setTarget] = useState(defaultValue);
   const [targetText, setTargetText] = useState(defaultValue);
@@ -574,7 +584,11 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }: C
   );
 
   return (
-    <div className={`control-row color-row${morphMode ? ' is-morphing' : ''}`} id={`${id}Control`}>
+    <div
+      className={`control-row color-row${morphMode ? ' is-morphing' : ''}${disabled ? ' is-disabled' : ''}`}
+      id={`${id}Control`}
+      title={disabled ? disabledReason : undefined}
+    >
       <div className="control-label">
         <label htmlFor={`${id}Hex`}>{label}</label>
         {morphable && (
@@ -595,9 +609,22 @@ function ColorControl({ id, label, defaultValue, swatchId, morphable = true }: C
       <div className="control-stack">
         <div className="color-control">
           <span className="swatch" id={swatchId} style={{ background: defaultValue }}>
-            <input type="color" id={id} defaultValue={defaultValue} />
+            <input
+              type="color"
+              id={id}
+              defaultValue={defaultValue}
+              disabled={disabled}
+              title={disabled ? disabledReason : undefined}
+            />
           </span>
-          <input type="text" id={`${id}Hex`} defaultValue={defaultValue} spellCheck="false" />
+          <input
+            type="text"
+            id={`${id}Hex`}
+            defaultValue={defaultValue}
+            spellCheck="false"
+            disabled={disabled}
+            title={disabled ? disabledReason : undefined}
+          />
         </div>
         {morphable && morphMode >= 1 && colorTarget(1, target, targetText, setTargetText)}
         {morphable && morphMode >= 2 && colorTarget(2, targetY, targetTextY, setTargetTextY)}
@@ -669,6 +696,7 @@ function Checkbox({
 export {
   BackgroundColorControl,
   Checkbox,
+  ColorControl,
   ControlLabel,
   FieldGroup,
   InkColorControl,

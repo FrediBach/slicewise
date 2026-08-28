@@ -79,6 +79,7 @@ describe('vector zoom', () => {
         vectorZoom1Height: 20,
         vectorZoom1Size: 40,
         vectorZoom1Margin: 18,
+        vectorZoom1Color: '#ef4444',
       },
       100,
       100,
@@ -87,5 +88,6 @@ describe('vector zoom', () => {
 
     expect(zoom.target.cx + zoom.target.rx).toBe(82);
     expect(zoom.target.cy - zoom.target.ry).toBe(18);
+    expect(zoom.color).toBe('#ef4444');
   });
 });

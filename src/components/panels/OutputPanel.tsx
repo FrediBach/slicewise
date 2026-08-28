@@ -2,6 +2,7 @@ import { Section } from '../ui/section';
 import {
   BackgroundColorControl,
   Checkbox,
+  ColorControl,
   ControlLabel,
   FieldGroup,
   InkColorControl,
@@ -142,6 +143,15 @@ function VectorZoomControls() {
                 step="1"
                 value="14"
                 unit="mm"
+                disabled
+                disabledReason={reason}
+              />
+              <ColorControl
+                id={`${prefix}Color`}
+                label="Guide colour"
+                defaultValue="#15181a"
+                swatchId={`${prefix}ColorSwatch`}
+                morphable={false}
                 disabled
                 disabledReason={reason}
               />
