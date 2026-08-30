@@ -28,7 +28,7 @@ export type UunaExpressiveMotion = {
   tipCompensation: boolean;
   contactZ: number;
   maximumPressDepth: number;
-  mode: 'constant';
+  mode: 'constant' | 'tapered';
   leadIn: number;
   leadOut: number;
   modulationDepth: number;
@@ -37,6 +37,9 @@ export type UunaExpressiveMotion = {
   preserveStrokeDirection: boolean;
   surfaceCompensation: { mode: 'off' };
 };
+
+export const EXPRESSIVE_RESAMPLE_STEP = 1;
+export const MINIMUM_PEN_ANGLE = 15;
 
 export function defaultUunaExpressiveMotion(contactZ = -3): UunaExpressiveMotion {
   return {
@@ -79,7 +82,164 @@ export function createConstantContactOperations(
         stroke: {
           sourceRun,
           reversed: false,
-          points: run.map(([x, y]) => ({ x, y, z: contactZ, pressure: 1 })),
+          points: run.map(([x, y]) => ({ x, y, z: contactZ, pressure: 0 })),
+        },
+      });
+      sourceRun += 1;
+    }
+  });
+  return operations;
+}
+
+type ExpressiveOperationOptions = Pick<
+  UunaExpressiveMotion,
+  | 'contactZ'
+  | 'curvatureRelief'
+  | 'leadIn'
+  | 'leadOut'
+  | 'maximumPressDepth'
+  | 'mode'
+  | 'modulationDepth'
+  | 'modulationPeriod'
+  | 'penAngle'
+  | 'surfaceCompensation'
+  | 'tiltDirection'
+  | 'tipCompensation'
+>;
+
+function finiteOr(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
+function smoothstep(value: number): number {
+  const t = clamp(value, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+export function compensateAngledTip(
+  x: number,
+  y: number,
+  z: number,
+  contactZ: number,
+  penAngle: number,
+  tiltDirection: number,
+  enabled: boolean,
+): readonly [number, number] {
+  if (!enabled) return [x, y];
+  const angle = clamp(finiteOr(penAngle, 90), MINIMUM_PEN_ANGLE, 90);
+  if (angle >= 89.999) return [x, y];
+  const pressDepth = Math.max(0, finiteOr(contactZ, 0) - finiteOr(z, contactZ));
+  const offset = pressDepth / Math.tan((angle * Math.PI) / 180);
+  const direction = (finiteOr(tiltDirection, 0) * Math.PI) / 180;
+  return [x - offset * Math.cos(direction), y - offset * Math.sin(direction)];
+}
+
+export function machinePointForPressure(
+  x: number,
+  y: number,
+  pressure: number,
+  options: ExpressiveOperationOptions,
+): MachinePoint {
+  const normalizedPressure = clamp(finiteOr(pressure, 0), 0, 1);
+  const contactZ = finiteOr(options.contactZ, -3);
+  const maximumPressDepth = Math.max(0, finiteOr(options.maximumPressDepth, 0));
+  const z = contactZ - normalizedPressure * maximumPressDepth;
+  const [compensatedX, compensatedY] = compensateAngledTip(
+    x,
+    y,
+    z,
+    contactZ,
+    options.penAngle,
+    options.tiltDirection,
+    options.tipCompensation,
+  );
+  return { x: compensatedX, y: compensatedY, z, pressure: normalizedPressure };
+}
+
+function resampleRun(run: number[][], maximumStep = EXPRESSIVE_RESAMPLE_STEP) {
+  if (run.length < 2) return { points: run, distances: run.map(() => 0), length: 0 };
+  const points: number[][] = [[run[0][0], run[0][1]]];
+  const distances = [0];
+  let travelled = 0;
+  for (let index = 1; index < run.length; index += 1) {
+    const from = run[index - 1];
+    const to = run[index];
+    const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+    if (length <= 0) continue;
+    const pieces = Math.max(1, Math.ceil(length / maximumStep));
+    for (let piece = 1; piece <= pieces; piece += 1) {
+      const t = piece / pieces;
+      travelled += length / pieces;
+      points.push([from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t]);
+      distances.push(travelled);
+    }
+  }
+  return { points, distances, length: travelled };
+}
+
+function taperedPressure(
+  distance: number,
+  length: number,
+  requestedLeadIn: number,
+  requestedLeadOut: number,
+): number {
+  if (length <= 0) return 0;
+  let leadIn = Math.max(0, finiteOr(requestedLeadIn, 0));
+  let leadOut = Math.max(0, finiteOr(requestedLeadOut, 0));
+  const requestedTotal = leadIn + leadOut;
+  if (requestedTotal > length) {
+    const scale = length / requestedTotal;
+    leadIn *= scale;
+    leadOut *= scale;
+  }
+  const entering = leadIn <= 0 ? 1 : smoothstep(distance / leadIn);
+  const leaving = leadOut <= 0 ? 1 : smoothstep((length - distance) / leadOut);
+  return Math.min(entering, leaving);
+}
+
+/** Build constant-contact or tapered expressive operations from ordered machine-space runs. */
+export function createExpressiveOperations(
+  groups: PreparedMachineGroup[],
+  penUp: number,
+  options: ExpressiveOperationOptions,
+): MachineOperation[] {
+  if (options.mode === 'constant')
+    return createConstantContactOperations(groups, penUp, finiteOr(options.contactZ, -3));
+
+  const operations: MachineOperation[] = [];
+  let sourceRun = 0;
+  groups.forEach((group, groupIndex) => {
+    if (groupIndex > 0) operations.push({ kind: 'pen-change', color: group.color });
+    for (const run of group.runs) {
+      const sampled = resampleRun(run);
+      const [start] = sampled.points;
+      if (!start || sampled.points.length < 2) continue;
+      operations.push({
+        kind: 'travel',
+        point: { x: start[0], y: start[1], z: penUp, pressure: 0 },
+      });
+      operations.push({
+        kind: 'stroke',
+        stroke: {
+          sourceRun,
+          reversed: false,
+          points: sampled.points.map(([x, y], index) =>
+            machinePointForPressure(
+              x,
+              y,
+              taperedPressure(
+                sampled.distances[index],
+                sampled.length,
+                options.leadIn,
+                options.leadOut,
+              ),
+              options,
+            ),
+          ),
         },
       });
       sourceRun += 1;

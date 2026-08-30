@@ -7,9 +7,12 @@ export type GCodeIssue = {
 
 export type GCodePathSegment = {
   from: readonly [number, number];
+  fromZ: number | null;
   kind: 'draw' | 'travel';
   line: number;
+  pressure: number;
   to: readonly [number, number];
+  toZ: number | null;
 };
 
 export type GCodeValidationOptions = {
@@ -28,6 +31,11 @@ export type GCodeValidationOptions = {
     | {
         kind: 'coordinated-xyz';
         contactZ: number;
+        maximumPressDepth: number;
+        mode: 'constant' | 'tapered';
+        penAngle: number;
+        tiltDirection: number;
+        tipCompensation: boolean;
         zConvention: 'negative-down' | 'positive-up';
       };
 };
@@ -46,6 +54,8 @@ export type GCodeValidationResult = {
     travelDistance: number;
     minimumZ: number | null;
     maximumZ: number | null;
+    maximumPressure: number;
+    maximumZSlope: number;
   };
   valid: boolean;
   warnings: GCodeIssue[];
@@ -125,9 +135,14 @@ export function validateGCode(
   let programLines = 0;
   let minimumZ: number | null = null;
   let maximumZ: number | null = null;
+  let maximumPressure = 0;
+  let maximumZSlope = 0;
   const coordinated = options.motion?.kind === 'coordinated-xyz';
   const contactZ =
     options.motion?.kind === 'coordinated-xyz' ? options.motion.contactZ : options.penDown;
+  const maximumPressDepth =
+    options.motion?.kind === 'coordinated-xyz' ? options.motion.maximumPressDepth : 0;
+  const minimumDrawZ = contactZ - maximumPressDepth;
 
   const addIssue = (
     severity: GCodeIssue['severity'],
@@ -135,6 +150,46 @@ export function validateGCode(
     line: number,
     message: string,
   ) => issues.push({ severity, code, line, message });
+  if (options.motion?.kind === 'coordinated-xyz') {
+    if (!Number.isFinite(contactZ))
+      addIssue('error', 'invalid-contact-z', 0, 'Contact Z must be finite.');
+    if (!Number.isFinite(maximumPressDepth) || maximumPressDepth < 0)
+      addIssue(
+        'error',
+        'invalid-press-depth',
+        0,
+        'Maximum press depth must be a finite non-negative value.',
+      );
+    if (
+      !Number.isFinite(options.motion.penAngle) ||
+      options.motion.penAngle < 15 ||
+      options.motion.penAngle > 90
+    )
+      addIssue(
+        'error',
+        'invalid-pen-angle',
+        0,
+        'Pen angle must be between 15° and 90° above the paper.',
+      );
+    if (
+      !Number.isFinite(options.motion.tiltDirection) ||
+      options.motion.tiltDirection < 0 ||
+      options.motion.tiltDirection >= 360
+    )
+      addIssue(
+        'error',
+        'invalid-tilt-direction',
+        0,
+        'Pen tilt direction must be at least 0° and less than 360°.',
+      );
+    if (contactZ > options.penUp + EPSILON)
+      addIssue(
+        'error',
+        'unsafe-contact-z',
+        0,
+        'Contact Z must not be above the configured pen-up Z.',
+      );
+  }
   if (
     options.machineWidth !== undefined &&
     options.machineHeight !== undefined &&
@@ -268,12 +323,12 @@ export function validateGCode(
       const nextZ = words.get('Z')!;
       minimumZ = minimumZ === null ? nextZ : Math.min(minimumZ, nextZ);
       maximumZ = maximumZ === null ? nextZ : Math.max(maximumZ, nextZ);
-      if (!approximatelyEqual(nextZ, contactZ))
+      if (nextZ < minimumDrawZ - EPSILON || nextZ > contactZ + EPSILON)
         addIssue(
           'error',
           'z-out-of-draw-range',
           line,
-          `Phase 1 constant-contact motion requires Z${contactZ}.`,
+          `Z${nextZ} is outside the configured drawing range ${minimumDrawZ}–${contactZ}.`,
         );
       if (pen !== 'down')
         addIssue('error', 'pen-not-down', line, 'Coordinated drawing requires contact first.');
@@ -282,6 +337,13 @@ export function validateGCode(
         addIssue('error', 'wrong-feed', line, `Expected draw feed ${options.drawFeed} mm/min.`);
       const planarDistance = Math.hypot(nextX - x, nextY - y);
       const spatialDistance = Math.hypot(nextX - x, nextY - y, nextZ - (z ?? nextZ));
+      const pressure =
+        maximumPressDepth <= EPSILON
+          ? 0
+          : Math.max(0, Math.min(1, (contactZ - nextZ) / maximumPressDepth));
+      maximumPressure = Math.max(maximumPressure, pressure);
+      if (planarDistance > EPSILON && z !== null)
+        maximumZSlope = Math.max(maximumZSlope, Math.abs(nextZ - z) / planarDistance);
       if (planarDistance > EPSILON && planarDistance < minimumDrawSegment)
         addIssue(
           'warning',
@@ -290,8 +352,18 @@ export function validateGCode(
           `Draw segment is only ${planarDistance.toFixed(3)} mm long.`,
         );
       if (planarDistance > EPSILON) {
-        segments.push({ from: [x, y], to: [nextX, nextY], kind: 'draw', line });
+        segments.push({
+          from: [x, y],
+          fromZ: z,
+          to: [nextX, nextY],
+          toZ: nextZ,
+          kind: 'draw',
+          line,
+          pressure,
+        });
         drawDistance += planarDistance;
+      }
+      if (spatialDistance > EPSILON) {
         drawDistance3d += spatialDistance;
         if (feed && feed > 0) estimatedSeconds += (spatialDistance / feed) * 60;
       }
@@ -326,7 +398,15 @@ export function validateGCode(
         `Draw segment is only ${distance.toFixed(3)} mm long.`,
       );
     if (distance > EPSILON) {
-      segments.push({ from: [x, y], to: [nextX, nextY], kind, line });
+      segments.push({
+        from: [x, y],
+        fromZ: z,
+        to: [nextX, nextY],
+        toZ: z,
+        kind,
+        line,
+        pressure: kind === 'draw' ? 1 : 0,
+      });
       if (kind === 'travel') travelDistance += distance;
       else {
         drawDistance += distance;
@@ -361,6 +441,8 @@ export function validateGCode(
       estimatedSeconds,
       minimumZ,
       maximumZ,
+      maximumPressure,
+      maximumZSlope,
     },
   };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultUunaExpressiveMotion } from './gcode-3d-toolpaths';
 import { generateGCode } from './gcode';
 import { validateGCode, type GCodeValidationOptions } from './gcode-validation';
 
@@ -11,6 +12,28 @@ const profile: GCodeValidationOptions = {
   travelFeed: 6000,
   zFeed: 2000,
 };
+const serializerProfile = {
+  penUp: profile.penUp,
+  penDown: profile.penDown,
+  drawFeed: profile.drawFeed,
+  travelFeed: profile.travelFeed,
+  zFeed: profile.zFeed,
+};
+const coordinatedValidation = (
+  overrides: Partial<
+    Extract<NonNullable<GCodeValidationOptions['motion']>, { kind: 'coordinated-xyz' }>
+  > = {},
+): Extract<NonNullable<GCodeValidationOptions['motion']>, { kind: 'coordinated-xyz' }> => ({
+  kind: 'coordinated-xyz',
+  contactZ: -3,
+  maximumPressDepth: 0,
+  mode: 'constant',
+  penAngle: 90,
+  tiltDirection: 0,
+  tipCompensation: true,
+  zConvention: 'negative-down',
+  ...overrides,
+});
 
 describe('validateGCode', () => {
   it('simulates valid generated output and reports useful plot statistics', () => {
@@ -20,7 +43,7 @@ describe('validateGCode', () => {
         { color: 'red', runs: [[30, 20, 40, 20]] },
       ],
       profile,
-      { ...profile, origin: 'rear-left', optimizeTravel: false },
+      { ...serializerProfile, origin: 'rear-left', optimizeTravel: false },
     );
 
     const result = validateGCode(output, profile);
@@ -109,7 +132,7 @@ describe('validateGCode', () => {
   });
 
   it('rejects an artboard larger than the selected machine working area', () => {
-    const output = generateGCode([], profile, { ...profile, origin: 'rear-left' });
+    const output = generateGCode([], profile, { ...serializerProfile, origin: 'rear-left' });
     const result = validateGCode(output, {
       ...profile,
       machineWidth: 80,
@@ -136,13 +159,16 @@ describe('validateGCode', () => {
 
   it('accepts coordinated XYZ at the configured constant contact height', () => {
     const output = generateGCode([{ color: 'black', runs: [[10, 10, 20, 20]] }], profile, {
-      ...profile,
+      ...serializerProfile,
       origin: 'rear-left',
-      motion: { kind: 'coordinated-xyz', contactZ: -2.5 },
+      motion: {
+        kind: 'coordinated-xyz',
+        settings: { ...defaultUunaExpressiveMotion(-2.5), enabled: true },
+      },
     });
     const result = validateGCode(output, {
       ...profile,
-      motion: { kind: 'coordinated-xyz', contactZ: -2.5, zConvention: 'negative-down' },
+      motion: coordinatedValidation({ contactZ: -2.5 }),
     });
 
     expect(result.valid).toBe(true);
@@ -169,8 +195,48 @@ describe('validateGCode', () => {
     expect(
       validateGCode(program, {
         ...profile,
-        motion: { kind: 'coordinated-xyz', contactZ: -3, zConvention: 'negative-down' },
+        motion: coordinatedValidation(),
       }).errors.map(({ code }) => code),
     ).toContain('z-out-of-draw-range');
+  });
+
+  it('tracks tapered pressure and rejects invalid physical setup values', () => {
+    const settings = {
+      ...defaultUunaExpressiveMotion(-3),
+      enabled: true,
+      mode: 'tapered' as const,
+      maximumPressDepth: 1,
+    };
+    const output = generateGCode([{ color: 'black', runs: [[10, 10, 20, 10]] }], profile, {
+      ...serializerProfile,
+      origin: 'rear-left',
+      motion: { kind: 'coordinated-xyz', settings },
+    });
+    const result = validateGCode(output, {
+      ...profile,
+      motion: coordinatedValidation({ mode: 'tapered', maximumPressDepth: 1 }),
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.stats.minimumZ).toBe(-4);
+    expect(result.stats.maximumPressure).toBe(1);
+    expect(result.stats.maximumZSlope).toBeGreaterThan(0);
+
+    const invalid = validateGCode(output, {
+      ...profile,
+      motion: coordinatedValidation({
+        mode: 'tapered',
+        maximumPressDepth: -1,
+        penAngle: 5,
+        tiltDirection: 360,
+      }),
+    });
+    expect(invalid.errors.map(({ code }) => code)).toEqual(
+      expect.arrayContaining([
+        'invalid-press-depth',
+        'invalid-pen-angle',
+        'invalid-tilt-direction',
+      ]),
+    );
   });
 });

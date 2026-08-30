@@ -1219,7 +1219,10 @@ select {
   vector-effect: non-scaling-stroke;
 }
 #gcodePreviewTravel,
-#gcodePreviewDraw {
+#gcodePreviewDraw,
+#gcodePreviewPressureLow,
+#gcodePreviewPressureMedium,
+#gcodePreviewPressureHigh {
   fill: none;
   vector-effect: non-scaling-stroke;
 }
@@ -1231,6 +1234,18 @@ select {
 #gcodePreviewDraw {
   stroke: #171a18;
   stroke-width: 1;
+}
+#gcodePreviewPressureLow {
+  stroke: #4b90a6;
+  stroke-width: 1;
+}
+#gcodePreviewPressureMedium {
+  stroke: #b97832;
+  stroke-width: 1.15;
+}
+#gcodePreviewPressureHigh {
+  stroke: #a22b4d;
+  stroke-width: 1.3;
 }
 #gcodePreviewOrigin {
   fill: #a22b25;
@@ -1256,6 +1271,11 @@ select {
 .gcode-preflight__travel::before {
   border-top-style: dashed !important;
   border-color: #8e95aa !important;
+}
+.gcode-preflight__pressure::before {
+  height: 2px;
+  border: 0 !important;
+  background: linear-gradient(90deg, #4b90a6, #b97832, #a22b4d);
 }
 .gcode-preflight p {
   margin: 5px 0 0;
@@ -1301,6 +1321,51 @@ select {
   display: block;
   margin-top: 7px;
   accent-color: var(--blue);
+}
+.uuna-angle-guide {
+  margin: 6px 8px 3px 0;
+  border: 1px solid #d8dbd6;
+  background: #f7f8f5;
+}
+.uuna-angle-guide svg {
+  display: block;
+  width: 100%;
+  height: 50px;
+}
+.uuna-angle-guide path {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.uuna-angle-guide__paper {
+  stroke: #9ca19a;
+}
+.uuna-angle-guide__pen {
+  stroke: #171a18;
+  stroke-width: 3;
+}
+.uuna-angle-guide__arc {
+  stroke: var(--blue);
+  stroke-width: 1;
+}
+.uuna-angle-guide text {
+  fill: #747973;
+  font-size: 7px;
+}
+.uuna-calibration {
+  width: calc(100% - 8px);
+  min-height: 28px;
+  margin-top: 7px;
+  border: 1px solid #bfc4bd;
+  background: white;
+  color: #555b55;
+  cursor: pointer;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.uuna-calibration:hover {
+  border-color: var(--ink);
+  color: var(--ink);
 }
 
 .actions {

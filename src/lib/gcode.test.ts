@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultUunaExpressiveMotion } from './gcode-3d-toolpaths';
 import { generateGCode, type ToolpathGroup } from './gcode';
 
 const group = (runs: number[][]): ToolpathGroup => ({
@@ -144,7 +145,10 @@ describe('generateGCode', () => {
         penDown: -3,
         zFeed: 2000,
         drawFeed: 3000,
-        motion: { kind: 'coordinated-xyz', contactZ: -2.5 },
+        motion: {
+          kind: 'coordinated-xyz',
+          settings: { ...defaultUunaExpressiveMotion(-2.5), enabled: true },
+        },
       },
     );
 
@@ -153,6 +157,33 @@ describe('generateGCode', () => {
     expect(output).toContain('G1 Z-2.5 F2000 ; pen contact');
     expect(output).toContain('G1 X3 Y4 Z-2.5 F3000');
     expect(output).toContain('G1 Z0 F2000 ; pen up');
+  });
+
+  it('serializes tapered pressure and fixed-angle setup metadata', () => {
+    const settings = {
+      ...defaultUunaExpressiveMotion(-3),
+      enabled: true,
+      mode: 'tapered' as const,
+      maximumPressDepth: 1,
+      penAngle: 45,
+      tiltDirection: 30,
+    };
+    const output = generateGCode(
+      [group([[10, 10, 20, 10]])],
+      { width: 30, height: 30 },
+      {
+        origin: 'rear-left',
+        penUp: 0,
+        motion: { kind: 'coordinated-xyz', settings },
+      },
+    );
+
+    expect(output).toContain('; Motion: coordinated XYZ · tapered pressure');
+    expect(output).toContain('; Pen angle: 45 degrees above paper; set holder manually');
+    expect(output).toContain('; Pen tilt direction: 30 degrees in machine coordinates');
+    expect(output).toContain('; Tip offset compensation: enabled');
+    expect(output).toContain('; Pressure ramps: 2 mm lead-in; 2 mm lead-out');
+    expect(output).toMatch(/G1 X\S+ Y\S+ Z-4 F1200/);
   });
 
   it('clips unsafe moves and joins nearby runs before plotting', () => {

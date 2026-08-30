@@ -184,6 +184,14 @@ describe('OutputPanel composition boundaries', () => {
     expect(document.getElementById('gcodeControls')).toBeInTheDocument();
     expect(document.getElementById('uunaExpressiveMotionEnabled')).not.toBeChecked();
     expect(document.getElementById('uunaExpressiveContactZN')).toHaveValue(-3);
+    expect(document.getElementById('uunaExpressiveMode')).toHaveValue('constant');
+    expect(document.getElementById('uunaExpressiveMaximumPressDepthN')).toHaveValue(0);
+    expect(document.getElementById('uunaExpressivePenAngleN')).toHaveValue(90);
+    expect(document.getElementById('uunaExpressiveTiltDirectionN')).toHaveValue(0);
+    expect(document.getElementById('uunaExpressiveTipCompensation')).toBeChecked();
+    expect(document.getElementById('uunaCalibrationDownload')).toHaveTextContent(
+      'Download calibration G-code',
+    );
     expect(document.getElementById('uunaExpressiveMotionControls')).toHaveAttribute('hidden');
     expect(document.getElementById('gcodePreflightStatus')).toHaveTextContent(
       'Waiting for an exact render',
@@ -195,6 +203,7 @@ describe('OutputPanel composition boundaries', () => {
       'aria-label',
       'Validated G-code drawing and pen-up travel preview',
     );
+    expect(document.getElementById('gcodePreviewPressureHigh')).toBeInTheDocument();
     expect(document.getElementById('gcodeSerialConnect')).toHaveTextContent('Connect');
     expect(document.getElementById('gcodeSerialSend')).toBeDisabled();
     expect(document.getElementById('gcodeSerialStop')).toBeDisabled();

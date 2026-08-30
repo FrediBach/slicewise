@@ -1,5 +1,6 @@
 import { type ContourToolpathGroup } from './contour-engine';
 import type { UunaExpressiveMotion } from './gcode-3d-toolpaths';
+import { createUunaCalibrationOperations, UUNA_CALIBRATION_SHEET } from './gcode-calibration';
 import { generateGCode } from './gcode';
 import { resolveGCodeMachineLayout, type GCodeLayoutRotation } from './gcode-layout';
 import { resolveGCodeProfile } from './gcode-profiles';
@@ -49,6 +50,7 @@ export type GCodeExportPreflight = {
   sheet: { width: number; height: number };
   sourceSheet: { width: number; height: number };
   validation: GCodeValidationResult;
+  expressiveMotion: UunaExpressiveMotion | null;
 };
 
 export function createGCodeExportPreflight(state: ExportState): GCodeExportPreflight {
@@ -61,6 +63,15 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
     profile.workingArea,
     state.gcodeAutoRotate,
   );
+  const expressiveMotion = expressiveMotionEnabled
+    ? {
+        ...state.uunaExpressiveMotion,
+        tiltDirection:
+          (state.uunaExpressiveMotion.tiltDirection +
+            (layout.rotation === 'clockwise-90' ? 90 : 0)) %
+          360,
+      }
+    : null;
   const content = generateGCode(layout.groups, layout.sheet, {
     name: state.name,
     drawFeed: state.drawFeed,
@@ -82,7 +93,7 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
     optimizeTravel: state.optimizeTravel,
     mergeTolerance: state.mergeTolerance,
     motion: expressiveMotionEnabled
-      ? { kind: 'coordinated-xyz', contactZ: state.uunaExpressiveMotion.contactZ }
+      ? { kind: 'coordinated-xyz', settings: expressiveMotion! }
       : undefined,
     effects: {
       kaleidoscope: state.kaleidoscope,
@@ -105,6 +116,7 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
     rotation: layout.rotation,
     sheet: layout.sheet,
     sourceSheet: layout.sourceSheet,
+    expressiveMotion,
     validation: validateGCode(content, {
       width: layout.sheet.width,
       height: layout.sheet.height,
@@ -118,7 +130,12 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
       motion: expressiveMotionEnabled
         ? {
             kind: 'coordinated-xyz',
-            contactZ: state.uunaExpressiveMotion.contactZ,
+            contactZ: expressiveMotion!.contactZ,
+            maximumPressDepth: expressiveMotion!.maximumPressDepth,
+            mode: expressiveMotion!.mode,
+            penAngle: expressiveMotion!.penAngle,
+            tiltDirection: expressiveMotion!.tiltDirection,
+            tipCompensation: expressiveMotion!.tipCompensation,
             zConvention: profile.capabilities.zConvention,
           }
         : undefined,
@@ -134,6 +151,64 @@ export function createGCodeExport(state: ExportState): string {
       `G-code preflight failed${firstError.line ? ` on line ${firstError.line}` : ''}: ${firstError.message}`,
     );
   return preflight.content;
+}
+
+export type UunaCalibrationExport = {
+  content: string;
+  sheet: typeof UUNA_CALIBRATION_SHEET;
+  validation: GCodeValidationResult;
+};
+
+export function createUunaCalibrationExport(state: ExportState): UunaCalibrationExport {
+  const profile = resolveGCodeProfile(state.gcodeProfile);
+  if (!profile.capabilities.coordinatedXYZ)
+    throw new Error('Select a UUNA TEK profile before exporting 3-axis calibration G-code.');
+  const settings = { ...state.uunaExpressiveMotion, enabled: true, mode: 'tapered' as const };
+  const operations = createUunaCalibrationOperations(state.penUp, settings);
+  const content = generateGCode([], UUNA_CALIBRATION_SHEET, {
+    name: 'UUNA TEK 3-axis calibration',
+    machine: profile.machine,
+    origin: profile.origin,
+    drawFeed: state.drawFeed,
+    travelFeed: state.travelFeed,
+    penUp: state.penUp,
+    penDown: state.penDown,
+    zFeed: state.zFeed,
+    clipToArtboard: false,
+    optimizeTravel: false,
+    comments: [
+      'Calibration: contact ladder at left; angle-offset crosses at upper-right; taper fan below',
+      'Calibration required: run pen-free first and begin with zero maximum press depth',
+    ],
+    motion: { kind: 'coordinated-xyz', settings, operations },
+  });
+  const validation = validateGCode(content, {
+    width: UUNA_CALIBRATION_SHEET.width,
+    height: UUNA_CALIBRATION_SHEET.height,
+    machineWidth: profile.workingArea?.width,
+    machineHeight: profile.workingArea?.height,
+    penUp: state.penUp,
+    penDown: state.penDown,
+    drawFeed: state.drawFeed,
+    travelFeed: state.travelFeed,
+    zFeed: state.zFeed,
+    motion: {
+      kind: 'coordinated-xyz',
+      contactZ: settings.contactZ,
+      maximumPressDepth: settings.maximumPressDepth,
+      mode: settings.mode,
+      penAngle: settings.penAngle,
+      tiltDirection: settings.tiltDirection,
+      tipCompensation: settings.tipCompensation,
+      zConvention: profile.capabilities.zConvention,
+    },
+  });
+  const firstError = validation.errors[0];
+  if (firstError)
+    throw new Error(
+      `Calibration preflight failed${firstError.line ? ` on line ${firstError.line}` : ''}: ${firstError.message}`,
+    );
+  return { content, sheet: UUNA_CALIBRATION_SHEET, validation };
 }
 
 export function createCurrentExport(state: ExportState): CurrentExport {

@@ -74,6 +74,7 @@ Coverage currently measures the focused core under active test:
 - `demo-meshes/index.ts`
 - `gcode.ts`
 - `gcode-3d-toolpaths.ts`
+- `gcode-calibration.ts`
 - `gcode-layout.ts`
 - `gcode-profiles.ts`
 - `grbl-serial.ts`

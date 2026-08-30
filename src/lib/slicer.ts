@@ -56,6 +56,7 @@ import {
   createCurrentExport,
   createExportFilename,
   createGCodeExportPreflight,
+  createUunaCalibrationExport,
   type GCodeExportPreflight,
 } from './slicer-export';
 import {
@@ -1285,13 +1286,15 @@ if (typeof document !== 'undefined') {
   bindExportPair('penUp', 'penUp');
   bindExportPair('penDown', 'penDown');
   bindExportPair('zFeed', 'zFeed');
-  function bindExpressiveContactZ(): void {
-    const slider = $('uunaExpressiveContactZ');
-    const number = $('uunaExpressiveContactZN');
+  type ExpressiveNumericKey =
+    'contactZ' | 'leadIn' | 'leadOut' | 'maximumPressDepth' | 'penAngle' | 'tiltDirection';
+  function bindExpressivePair(id: string, key: ExpressiveNumericKey): void {
+    const slider = $(id);
+    const number = $(id + 'N');
     const apply = (value: string, from: 's' | 'n'): void => {
       const next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
       if (Number.isNaN(next)) return;
-      state.uunaExpressiveMotion.contactZ = next;
+      state.uunaExpressiveMotion[key] = next;
       if (from !== 's') slider.value = String(next);
       if (from !== 'n') number.value = String(next);
       updateExportSize();
@@ -1299,7 +1302,12 @@ if (typeof document !== 'undefined') {
     slider.addEventListener('input', (event) => apply(inputTarget(event).value, 's'));
     number.addEventListener('input', (event) => apply(inputTarget(event).value, 'n'));
   }
-  bindExpressiveContactZ();
+  bindExpressivePair('uunaExpressiveContactZ', 'contactZ');
+  bindExpressivePair('uunaExpressiveMaximumPressDepth', 'maximumPressDepth');
+  bindExpressivePair('uunaExpressiveLeadIn', 'leadIn');
+  bindExpressivePair('uunaExpressiveLeadOut', 'leadOut');
+  bindExpressivePair('uunaExpressivePenAngle', 'penAngle');
+  bindExpressivePair('uunaExpressiveTiltDirection', 'tiltDirection');
   morphKeyById.set('color', 'color');
 
   function syncProjectionWarpControls(): void {
@@ -1586,10 +1594,21 @@ if (typeof document !== 'undefined') {
     const supported = resolveGCodeProfile(state.gcodeProfile).capabilities.coordinatedXYZ;
     $('uunaExpressiveMotionSection').hidden = !supported;
     $('uunaExpressiveMotionControls').hidden = !supported || !state.uunaExpressiveMotion.enabled;
+    $('uunaExpressivePressureControls').hidden = state.uunaExpressiveMotion.mode !== 'tapered';
   }
   $('uunaExpressiveMotionEnabled').addEventListener('change', (event) => {
     state.uunaExpressiveMotion.enabled = inputTarget(event).checked;
     syncExpressiveMotionControls();
+    updateExportSize();
+  });
+  $('uunaExpressiveMode').addEventListener('change', (event) => {
+    state.uunaExpressiveMotion.mode =
+      inputTarget(event).value === 'tapered' ? 'tapered' : 'constant';
+    syncExpressiveMotionControls();
+    updateExportSize();
+  });
+  $('uunaExpressiveTipCompensation').addEventListener('change', (event) => {
+    state.uunaExpressiveMotion.tipCompensation = inputTarget(event).checked;
     updateExportSize();
   });
   syncExpressiveMotionControls();
@@ -4251,10 +4270,17 @@ if (typeof document !== 'undefined') {
         1,
         Math.ceil(preflight.validation.stats.estimatedSeconds / 60),
       );
+      const expressive = preflight.expressiveMotion;
+      const expressiveWarning = expressive
+        ? `\n\nEXPRESSIVE 3-AXIS MOTION IS ENABLED. Set the holder to ${expressive.penAngle}° above the paper at ${expressive.tiltDirection}° machine direction. ` +
+          `The file uses Z ${preflight.validation.stats.minimumZ?.toFixed(1)}–${preflight.validation.stats.maximumZ?.toFixed(1)} mm with ${expressive.tipCompensation ? 'angled-tip compensation' : 'no tip compensation'}. ` +
+          'Calibration is required: run the calibration file and a pen-free dry run first.'
+        : '';
       const confirmed = window.confirm(
         `Send ${commandCount} commands to ${resolveGCodeProfile(state.gcodeProfile).machine}?\n\n` +
           `The plot is estimated to take about ${durationMinutes} minute${durationMinutes === 1 ? '' : 's'}. ` +
-          'Set the rear-left origin, secure the sheet, frame the job with the pen raised, and keep the emergency stop within reach.',
+          'Set the rear-left origin, secure the sheet, frame the job with the pen raised, and keep the emergency stop within reach.' +
+          expressiveWarning,
       );
       if (!confirmed) return;
 
@@ -4333,9 +4359,12 @@ if (typeof document !== 'undefined') {
       stats.minimumZ === null || stats.maximumZ === null
         ? ''
         : ` · Z ${stats.minimumZ.toFixed(1)}–${stats.maximumZ.toFixed(1)} mm`;
+    const pressureStats = preflight.expressiveMotion
+      ? ` · pressure ${Math.round(stats.maximumPressure * 100)}% · max Z slope ${stats.maximumZSlope.toFixed(2)}`
+      : '';
     $('gcodePreflightStats').textContent =
       `${stats.drawDistance.toFixed(1)} mm drawn · ${stats.travelDistance.toFixed(1)} mm travel · ` +
-      `${stats.penLifts} lifts${zRange} · about ${duration}`;
+      `${stats.penLifts} lifts${zRange}${pressureStats} · about ${duration}`;
     $('gcodePreflightLayout').textContent =
       preflight.rotation === 'clockwise-90'
         ? `Canvas ${preflight.sourceSheet.width} × ${preflight.sourceSheet.height} mm → machine ${preflight.sheet.width} × ${preflight.sheet.height} mm · rotated 90° clockwise`
@@ -4348,6 +4377,9 @@ if (typeof document !== 'undefined') {
     const svg = document.querySelector<SVGSVGElement>('#gcodePathPreview')!;
     const sheet = document.querySelector<SVGRectElement>('#gcodePreviewSheet')!;
     const draw = document.querySelector<SVGPathElement>('#gcodePreviewDraw')!;
+    const pressureLow = document.querySelector<SVGPathElement>('#gcodePreviewPressureLow')!;
+    const pressureMedium = document.querySelector<SVGPathElement>('#gcodePreviewPressureMedium')!;
+    const pressureHigh = document.querySelector<SVGPathElement>('#gcodePreviewPressureHigh')!;
     const travel = document.querySelector<SVGPathElement>('#gcodePreviewTravel')!;
     const origin = document.querySelector<SVGCircleElement>('#gcodePreviewOrigin')!;
     const padding = Math.max(preflight.sheet.width, preflight.sheet.height) * 0.025;
@@ -4357,9 +4389,12 @@ if (typeof document !== 'undefined') {
         : preflight.sheet.height - machineY;
     const drawCommands: string[] = [];
     const travelCommands: string[] = [];
-    for (const { from, to, kind } of validation.segments) {
+    const pressureCommands: [string[], string[], string[]] = [[], [], []];
+    for (const { from, to, kind, pressure } of validation.segments) {
       const command = `M${from[0]} ${screenY(from[1])}L${to[0]} ${screenY(to[1])}`;
-      (kind === 'draw' ? drawCommands : travelCommands).push(command);
+      if (kind === 'travel') travelCommands.push(command);
+      else if (!preflight.expressiveMotion) drawCommands.push(command);
+      else pressureCommands[pressure < 0.34 ? 0 : pressure < 0.67 ? 1 : 2].push(command);
     }
     svg.setAttribute(
       'viewBox',
@@ -4369,6 +4404,9 @@ if (typeof document !== 'undefined') {
     sheet.setAttribute('height', String(preflight.sheet.height));
     draw.setAttribute('d', drawCommands.join(''));
     travel.setAttribute('d', travelCommands.join(''));
+    pressureLow.setAttribute('d', pressureCommands[0].join(''));
+    pressureMedium.setAttribute('d', pressureCommands[1].join(''));
+    pressureHigh.setAttribute('d', pressureCommands[2].join(''));
     origin.setAttribute('cx', '0');
     origin.setAttribute('cy', String(screenY(0)));
     origin.setAttribute(
@@ -4387,6 +4425,20 @@ if (typeof document !== 'undefined') {
     }
     $('rSize').textContent = (bytes / 1024).toFixed(1) + ' kB';
   }
+  $('uunaCalibrationDownload').addEventListener('click', () => {
+    try {
+      const calibration = createUunaCalibrationExport(state);
+      const blob = new Blob([calibration.content], { type: 'text/x-gcode' });
+      const anchor = document.createElement('a');
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = 'uuna-tek-3-axis-calibration.gcode';
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+      toast('Saved ' + anchor.download);
+    } catch (error) {
+      toast(errorMessage(error));
+    }
+  });
   $('save').addEventListener('click', async () => {
     try {
       await waitForCurrentRender();

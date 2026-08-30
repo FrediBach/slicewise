@@ -5,6 +5,7 @@ import {
   createExportFilename,
   createGCodeExport,
   createGCodeExportPreflight,
+  createUunaCalibrationExport,
   type ExportState,
 } from './slicer-export';
 
@@ -149,6 +150,71 @@ describe('slicer export assembly', () => {
     expect(expressive).toContain('G1 X30 Y40 Z-2.5 F2400');
     expect(generic).not.toContain('coordinated XYZ');
     expect(generic).not.toMatch(/G1 X\S+ Y\S+ Z/);
+  });
+
+  it('applies tapered pressure, angled-tip compensation, and rotated tilt direction', () => {
+    const expressive = {
+      ...defaultUunaExpressiveMotion(-2),
+      enabled: true,
+      mode: 'tapered' as const,
+      maximumPressDepth: 1,
+      penAngle: 45,
+      tiltDirection: 30,
+    };
+    const preflight = createGCodeExportPreflight(
+      exportState({
+        pw: 297,
+        ph: 420,
+        toolpaths: [{ color: 'black', label: 'line', runs: [[10, 20, 20, 20]] }],
+        uunaExpressiveMotion: expressive,
+      }),
+    );
+
+    expect(preflight.rotation).toBe('clockwise-90');
+    expect(preflight.expressiveMotion?.tiltDirection).toBe(120);
+    expect(preflight.content).toContain('; Pen tilt direction: 120 degrees in machine coordinates');
+    expect(preflight.validation.stats.maximumPressure).toBe(1);
+    expect(preflight.validation.stats.minimumZ).toBe(-3);
+  });
+
+  it('blocks compensated carriage motion that leaves the machine sheet', () => {
+    expect(() =>
+      createGCodeExport(
+        exportState({
+          toolpaths: [{ color: 'black', label: 'edge', runs: [[0, 20, 10, 20]] }],
+          uunaExpressiveMotion: {
+            ...defaultUunaExpressiveMotion(-2),
+            enabled: true,
+            mode: 'tapered',
+            maximumPressDepth: 5,
+            penAngle: 15,
+            tiltDirection: 0,
+          },
+        }),
+      ),
+    ).toThrow(/X-.*outside/);
+  });
+
+  it('exports a preflight-validated UUNA calibration program', () => {
+    const calibration = createUunaCalibrationExport(
+      exportState({
+        uunaExpressiveMotion: {
+          ...defaultUunaExpressiveMotion(-2),
+          enabled: true,
+          mode: 'tapered',
+          maximumPressDepth: 1,
+        },
+      }),
+    );
+
+    expect(calibration.sheet).toEqual({ width: 120, height: 90 });
+    expect(calibration.validation.valid).toBe(true);
+    expect(calibration.validation.stats.maximumPressure).toBe(1);
+    expect(calibration.content).toContain('; Source: UUNA TEK 3-axis calibration');
+    expect(calibration.content).toContain('Calibration: contact ladder');
+    expect(() => createUunaCalibrationExport(exportState({ gcodeProfile: 'generic' }))).toThrow(
+      /Select a UUNA TEK profile/,
+    );
   });
 
   it('blocks export when runtime machine settings cannot pass preflight', () => {

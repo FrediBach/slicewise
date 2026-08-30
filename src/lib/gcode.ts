@@ -1,5 +1,9 @@
 import { clipRunToRect, optimizeRuns } from './toolpaths';
-import { createConstantContactOperations, type MachineOperation } from './gcode-3d-toolpaths';
+import {
+  createExpressiveOperations,
+  type MachineOperation,
+  type UunaExpressiveMotion,
+} from './gcode-3d-toolpaths';
 
 export type ToolpathGroup = {
   color?: string;
@@ -19,6 +23,7 @@ export type GCodeOptions = {
   clipToArtboard?: boolean;
   optimizeTravel?: boolean;
   mergeTolerance?: number;
+  comments?: string[];
   layout?: {
     rotation?: 'clockwise-90';
     sourceWidth: number;
@@ -28,7 +33,8 @@ export type GCodeOptions = {
     | { kind: 'binary-z' }
     | {
         kind: 'coordinated-xyz';
-        contactZ: number;
+        settings: UunaExpressiveMotion;
+        operations?: MachineOperation[];
       };
   effects?: Partial<
     Record<
@@ -147,8 +153,21 @@ export function generateGCode(
       ? '; Origin: rear-left of sheet; +X right; +Y toward front'
       : '; Origin: bottom-left of sheet; +X right; +Y up',
   ];
-  if (options.motion?.kind === 'coordinated-xyz')
-    lines.push('; Motion: coordinated XYZ · constant contact');
+  if (options.motion?.kind === 'coordinated-xyz') {
+    const expressive = options.motion.settings;
+    lines.push(
+      `; Motion: coordinated XYZ · ${expressive.mode === 'tapered' ? 'tapered pressure' : 'constant contact'}`,
+      `; Pen angle: ${clampPrecision(expressive.penAngle)} degrees above paper; set holder manually`,
+      `; Pen tilt direction: ${clampPrecision(expressive.tiltDirection)} degrees in machine coordinates`,
+      `; Tip offset compensation: ${expressive.tipCompensation ? 'enabled' : 'disabled'}`,
+      `; Contact Z: ${clampPrecision(expressive.contactZ)} mm; maximum press depth: ${clampPrecision(expressive.maximumPressDepth)} mm`,
+    );
+    if (expressive.mode === 'tapered')
+      lines.push(
+        `; Pressure ramps: ${clampPrecision(expressive.leadIn)} mm lead-in; ${clampPrecision(expressive.leadOut)} mm lead-out`,
+      );
+  }
+  for (const comment of options.comments || []) lines.push(`; ${cleanComment(comment)}`);
   if (effects.kaleidoscope)
     lines.push('; Kaleidoscope: mirrored radial geometry is included in these toolpaths');
   if (effects.halftone)
@@ -185,8 +204,9 @@ export function generateGCode(
   );
 
   if (options.motion?.kind === 'coordinated-xyz') {
-    const contactZ = finiteOption(options.motion.contactZ, penDown);
-    const operations = createConstantContactOperations(usableGroups, penUp, contactZ);
+    const operations =
+      options.motion.operations ||
+      createExpressiveOperations(usableGroups, penUp, options.motion.settings);
     serializeCoordinatedOperations(lines, operations, {
       drawFeed,
       travelFeed,
