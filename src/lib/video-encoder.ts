@@ -50,7 +50,12 @@ export async function createVideoEncoderAdapter(
     codec: options.codec,
     quality: new Quality({ bitrate: options.bitrate }),
     keyFrameInterval: 2,
-    transform: { width: options.width, height: options.height, alpha: 'discard' },
+    transform: {
+      width: options.width,
+      height: options.height,
+      fit: 'fill',
+      alpha: 'discard',
+    },
   });
   output.addVideoTrack(source, { frameRate: options.fps });
   await output.start();
@@ -89,18 +94,28 @@ export async function rasterizeAnimationSvg(
 ): Promise<void> {
   const context = canvas.getContext('2d', { alpha: false });
   if (!context) throw new Error('The browser could not create a video canvas');
-  const bitmap = await createImageBitmap(new Blob([svg], { type: 'image/svg+xml' }));
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
   try {
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.addEventListener('load', () => resolve(), { once: true });
+      image.addEventListener(
+        'error',
+        () => reject(new Error('The rendered SVG could not be loaded for video export')),
+        { once: true },
+      );
+      image.src = url;
+    });
     context.save();
     try {
       context.setTransform(1, 0, 0, 1, 0, 0);
       context.fillStyle = background;
       context.fillRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
     } finally {
       context.restore();
     }
   } finally {
-    bitmap.close();
+    URL.revokeObjectURL(url);
   }
 }

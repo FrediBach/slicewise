@@ -11,6 +11,7 @@ const mediaMocks = vi.hoisted(() => ({
   outputStart: vi.fn(async () => undefined),
   outputFinalize: vi.fn(async () => undefined),
   outputCancel: vi.fn(async () => undefined),
+  sourceConfig: vi.fn(),
 }));
 
 vi.mock('mediabunny', () => {
@@ -20,6 +21,9 @@ vi.mock('mediabunny', () => {
   class CanvasSource {
     add = mediaMocks.sourceAdd;
     close = mediaMocks.sourceClose;
+    constructor(_canvas: HTMLCanvasElement, config: unknown) {
+      mediaMocks.sourceConfig(config);
+    }
   }
   class Output {
     state: 'pending' | 'started' | 'canceled' | 'finalizing' | 'finalized' = 'pending';
@@ -92,6 +96,17 @@ describe('Mediabunny video encoder adapter', () => {
     });
     const blob = await adapter.finalize();
 
+    expect(mediaMocks.sourceConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        codec: 'vp9',
+        transform: {
+          width: 1080,
+          height: 720,
+          fit: 'fill',
+          alpha: 'discard',
+        },
+      }),
+    );
     expect(mediaMocks.sourceAdd).toHaveBeenCalledWith(0.033333, 0.033333, { keyFrame: true });
     expect(mediaMocks.sourceClose).toHaveBeenCalledOnce();
     expect(mediaMocks.outputFinalize).toHaveBeenCalledOnce();
@@ -110,8 +125,22 @@ describe('Mediabunny video encoder adapter', () => {
 });
 
 describe('animation SVG rasterization', () => {
-  it('flattens the configured background and closes the bitmap', async () => {
-    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+  function stubLoadedImage() {
+    const image = new EventTarget();
+    Object.defineProperty(image, 'src', {
+      set: () => queueMicrotask(() => image.dispatchEvent(new Event('load'))),
+    });
+    class MockImage {
+      constructor() {
+        return image;
+      }
+    }
+    vi.stubGlobal('Image', MockImage);
+    return image;
+  }
+
+  it('loads SVG through an image element, flattens the background, and releases its URL', async () => {
+    const image = stubLoadedImage();
     const context = {
       save: vi.fn(),
       restore: vi.fn(),
@@ -125,22 +154,24 @@ describe('animation SVG rasterization', () => {
       height: 720,
       getContext: vi.fn(() => context),
     } as unknown as HTMLCanvasElement;
-    vi.stubGlobal(
-      'createImageBitmap',
-      vi.fn(async () => bitmap),
-    );
+    const createObjectURL = vi.fn(() => 'blob:animation-frame');
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', { createObjectURL, revokeObjectURL });
 
     await rasterizeAnimationSvg('<svg/>', canvas, '#123456');
 
+    expect(createObjectURL).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'image/svg+xml;charset=utf-8' }),
+    );
     expect(context.fillStyle).toBe('#123456');
     expect(context.fillRect).toHaveBeenCalledWith(0, 0, 1080, 720);
-    expect(context.drawImage).toHaveBeenCalledWith(bitmap, 0, 0, 1080, 720);
+    expect(context.drawImage).toHaveBeenCalledWith(image, 0, 0, 1080, 720);
     expect(context.restore).toHaveBeenCalledOnce();
-    expect(bitmap.close).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:animation-frame');
   });
 
-  it('restores the canvas and closes the bitmap when drawing fails', async () => {
-    const bitmap = { close: vi.fn() } as unknown as ImageBitmap;
+  it('restores the canvas and releases the URL when drawing fails', async () => {
+    stubLoadedImage();
     const context = {
       save: vi.fn(),
       restore: vi.fn(),
@@ -156,13 +187,40 @@ describe('animation SVG rasterization', () => {
       height: 2,
       getContext: vi.fn(() => context),
     } as unknown as HTMLCanvasElement;
-    vi.stubGlobal(
-      'createImageBitmap',
-      vi.fn(async () => bitmap),
-    );
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:failed-frame'),
+      revokeObjectURL,
+    });
 
     await expect(rasterizeAnimationSvg('<svg/>', canvas, '#fff')).rejects.toThrow('draw failed');
     expect(context.restore).toHaveBeenCalledOnce();
-    expect(bitmap.close).toHaveBeenCalledOnce();
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:failed-frame');
+  });
+
+  it('reports SVG loading failures and releases the URL', async () => {
+    const image = new EventTarget();
+    Object.defineProperty(image, 'src', {
+      set: () => queueMicrotask(() => image.dispatchEvent(new Event('error'))),
+    });
+    class InvalidImage {
+      constructor() {
+        return image;
+      }
+    }
+    vi.stubGlobal('Image', InvalidImage);
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => 'blob:invalid-frame'),
+      revokeObjectURL,
+    });
+    const canvas = {
+      getContext: vi.fn(() => ({})),
+    } as unknown as HTMLCanvasElement;
+
+    await expect(rasterizeAnimationSvg('<svg/>', canvas, '#fff')).rejects.toThrow(
+      'The rendered SVG could not be loaded for video export',
+    );
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:invalid-frame');
   });
 });
