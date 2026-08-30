@@ -48,6 +48,12 @@ import { normalizeParameterSnapshot } from './parameter-migrations';
 import { createCurrentExport, createExportFilename, createGCodeExport } from './slicer-export';
 import { createAnimationHistory } from './animation-history';
 import {
+  animationPlaybackPosition,
+  animationPreviewIntervalMs,
+  nextAnimationPreviewDeadline,
+  stepAnimationPlayhead,
+} from './animation-playback';
+import {
   addAnimationKeyframe,
   createAnimationProject,
   duplicateAnimationKeyframe,
@@ -3289,6 +3295,8 @@ if (typeof document !== 'undefined') {
   let animationPlaybackFrame = 0;
   let animationPlaybackStartedAt = 0;
   let animationPlaybackOriginMs = 0;
+  let animationNextPreviewAt = Number.NaN;
+  let animationSettleTimer = 0;
   let nextAnimationKeyframeId = 1;
   let draggingAnimationKeyframeId: string | null = null;
   let animationGestureActive = false;
@@ -3451,22 +3459,51 @@ if (typeof document !== 'undefined') {
     });
   }
 
-  function seekAnimation(timeMs: number, selectExact = false): void {
+  function clearAnimationSettle(): void {
+    clearTimeout(animationSettleTimer);
+    animationSettleTimer = 0;
+  }
+
+  function scheduleAnimationSettle(): void {
+    clearAnimationSettle();
+    animationSettleTimer = setTimeout(() => {
+      animationSettleTimer = 0;
+      if (animationMode && !animationPlaying) renderAnimationAt(animationPlayheadMs, false);
+    }, 140);
+  }
+
+  function seekAnimation(
+    timeMs: number,
+    selectExact = false,
+    quality: 'quick' | 'exact' = 'exact',
+  ): void {
     if (!animationProject) return;
+    clearAnimationSettle();
     animationPlayheadMs = clamp(timeMs, 0, animationProject.durationMs);
     const exact = animationProject.keyframes.find(
       (keyframe) => Math.abs(keyframe.timeMs - animationPlayheadMs) < 0.5,
     );
     selectedAnimationKeyframeId = selectExact || exact ? (exact?.id ?? null) : null;
     syncAnimationControlLocks();
-    renderAnimationAt(animationPlayheadMs, true);
+    renderAnimationAt(animationPlayheadMs, quality === 'quick');
+    if (quality === 'quick') scheduleAnimationSettle();
     publishAnimationState();
   }
 
   function stopAnimationPlayback(settle = true): void {
     if (!animationPlaying) return;
+    if (settle && animationProject) {
+      const position = animationPlaybackPosition(
+        animationPlaybackOriginMs,
+        performance.now() - animationPlaybackStartedAt,
+        animationProject.durationMs,
+        animationProject.loopPreview,
+      );
+      animationPlayheadMs = position.timeMs;
+    }
     animationPlaying = false;
     cancelAnimationFrame(animationPlaybackFrame);
+    clearAnimationSettle();
     syncAnimationControlLocks();
     if (settle) renderAnimationAt(animationPlayheadMs, false);
     publishAnimationState();
@@ -3474,21 +3511,26 @@ if (typeof document !== 'undefined') {
 
   function tickAnimationPlayback(now: number): void {
     if (!animationPlaying || !animationProject) return;
-    const elapsed = now - animationPlaybackStartedAt;
-    const rawTime = animationPlaybackOriginMs + elapsed;
-    if (rawTime >= animationProject.durationMs) {
-      if (animationProject.loopPreview) {
-        animationPlayheadMs = rawTime % animationProject.durationMs;
-        animationPlaybackStartedAt = now;
-        animationPlaybackOriginMs = animationPlayheadMs;
-      } else {
-        animationPlayheadMs = animationProject.durationMs;
-        stopAnimationPlayback();
-        return;
-      }
-    } else animationPlayheadMs = rawTime;
+    const position = animationPlaybackPosition(
+      animationPlaybackOriginMs,
+      now - animationPlaybackStartedAt,
+      animationProject.durationMs,
+      animationProject.loopPreview,
+    );
+    animationPlayheadMs = position.timeMs;
     selectedAnimationKeyframeId = null;
-    renderAnimationAt(animationPlayheadMs, true);
+    if (position.completed) {
+      stopAnimationPlayback();
+      return;
+    }
+    if (now >= animationNextPreviewAt) {
+      renderAnimationAt(animationPlayheadMs, true);
+      animationNextPreviewAt = nextAnimationPreviewDeadline(
+        animationNextPreviewAt,
+        now,
+        animationProject.fps,
+      );
+    }
     publishAnimationState();
     animationPlaybackFrame = requestAnimationFrame(tickAnimationPlayback);
   }
@@ -3500,10 +3542,13 @@ if (typeof document !== 'undefined') {
       return;
     }
     if (animationPlayheadMs >= animationProject.durationMs) animationPlayheadMs = 0;
+    clearAnimationSettle();
     animationPlaying = true;
     selectedAnimationKeyframeId = null;
     animationPlaybackStartedAt = performance.now();
     animationPlaybackOriginMs = animationPlayheadMs;
+    animationNextPreviewAt =
+      animationPlaybackStartedAt + animationPreviewIntervalMs(animationProject.fps);
     syncAnimationControlLocks();
     publishAnimationState();
     animationPlaybackFrame = requestAnimationFrame(tickAnimationPlayback);
@@ -3536,6 +3581,7 @@ if (typeof document !== 'undefined') {
   function leaveAnimationMode(): void {
     if (!animationMode) return;
     stopAnimationPlayback(false);
+    clearAnimationSettle();
     commitAnimationHistory();
     animationGestureActive = false;
     draggingAnimationKeyframeId = null;
@@ -3644,13 +3690,26 @@ if (typeof document !== 'undefined') {
     else if (detail.type === 'seek') {
       stopAnimationPlayback(false);
       seekAnimation(Number(detail.timeMs));
+    } else if (detail.type === 'scrub') {
+      stopAnimationPlayback(false);
+      seekAnimation(Number(detail.timeMs), false, 'quick');
+    } else if (detail.type === 'scrub-end') {
+      stopAnimationPlayback(false);
+      seekAnimation(Number(detail.timeMs));
     } else if (detail.type === 'jump-end') {
       stopAnimationPlayback(false);
       seekAnimation(animationProject.durationMs);
     } else if (detail.type === 'step') {
       stopAnimationPlayback(false);
       const frames = Number.isFinite(detail.frames) ? Number(detail.frames) : 0;
-      seekAnimation(animationPlayheadMs + (frames * 1000) / animationProject.fps);
+      seekAnimation(
+        stepAnimationPlayhead(
+          animationPlayheadMs,
+          frames,
+          animationProject.fps,
+          animationProject.durationMs,
+        ),
+      );
     } else if (detail.type === 'select' && detail.id) {
       stopAnimationPlayback(false);
       const keyframe = animationProject.keyframes.find((candidate) => candidate.id === detail.id);

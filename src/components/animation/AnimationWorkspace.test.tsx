@@ -158,4 +158,23 @@ describe('animation workspace controls', () => {
     );
     document.removeEventListener('animationcommand', onCommand);
   });
+
+  it('separates quick scrubbing from the exact scrub-end command', () => {
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+    const playhead = screen.getByRole('slider', { name: 'Animation playhead' });
+
+    fireEvent.input(playhead, { target: { value: '3200' } });
+    fireEvent.pointerUp(playhead, { target: { value: '3200' } });
+
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'scrub', timeMs: 3200 },
+      { type: 'scrub-end', timeMs: 3200 },
+    ]);
+    document.removeEventListener('animationcommand', onCommand);
+  });
 });

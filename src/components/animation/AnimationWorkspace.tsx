@@ -272,7 +272,12 @@ export function AnimationTimeline() {
             disabled={state.playing}
             aria-label="Animation playhead"
             aria-valuetext={formatTime(state.playheadMs)}
-            onInput={(event) => command('seek', { timeMs: Number(event.currentTarget.value) })}
+            onInput={(event) => command('scrub', { timeMs: Number(event.currentTarget.value) })}
+            onPointerUp={(event) =>
+              command('scrub-end', { timeMs: Number(event.currentTarget.value) })
+            }
+            onKeyUp={(event) => command('scrub-end', { timeMs: Number(event.currentTarget.value) })}
+            onBlur={(event) => command('scrub-end', { timeMs: Number(event.currentTarget.value) })}
           />
           <div className="animation-keyframes" aria-label={`${state.keyframes.length} keyframes`}>
             {state.keyframes.map((keyframe) => {
