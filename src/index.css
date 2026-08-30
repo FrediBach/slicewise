@@ -1378,8 +1378,7 @@ body.animation-mode .bedwrap {
   padding-bottom: 34px;
 }
 body.animation-mode .bed {
-  cursor: default;
-  pointer-events: none;
+  cursor: grab;
 }
 body.animation-mode .morph-toggle,
 body.animation-mode .random-lock,
@@ -1387,7 +1386,7 @@ body.animation-mode .section-randomize {
   visibility: hidden;
 }
 .animation-timeline {
-  flex: 0 0 156px;
+  flex: 0 0 188px;
   min-width: 0;
   padding: 12px 18px 10px;
   border-top: 1px solid #c3c7c1;
@@ -1397,6 +1396,14 @@ body.animation-mode .section-randomize {
   display: flex;
   align-items: center;
   gap: 7px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.animation-transport-group {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .animation-transport button {
   height: 28px;
@@ -1416,7 +1423,16 @@ body.animation-mode .section-randomize {
   color: #a6aaa4;
   cursor: not-allowed;
 }
+.animation-transport button:focus-visible,
+.animation-keyframes button:focus-visible,
+.animation-transport input:focus-visible,
+.animation-transport select:focus-visible,
+.animation-properties select:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent);
+  outline-offset: 2px;
+}
 .animation-timecode {
+  flex: 0 0 auto;
   min-width: 112px;
   color: #424642;
   font-size: 10px;
@@ -1427,6 +1443,7 @@ body.animation-mode .section-randomize {
   font-style: normal;
 }
 .animation-transport label {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -1438,7 +1455,9 @@ body.animation-mode .section-randomize {
 .animation-transport label:first-of-type {
   margin-left: auto;
 }
-.animation-transport input[type='number'] {
+.animation-transport input[type='number'],
+.animation-transport select,
+.animation-properties select {
   width: 58px;
   height: 28px;
   padding: 0 6px;
@@ -1446,10 +1465,51 @@ body.animation-mode .section-randomize {
   background: #fff;
   font-size: 9px;
 }
+.animation-transport select {
+  width: 52px;
+}
+.animation-loop {
+  white-space: nowrap;
+}
+.animation-loop input {
+  margin: 0;
+}
+.animation-edit-actions {
+  margin-left: 3px;
+}
+.animation-export-button {
+  margin-left: auto;
+}
+.animation-properties {
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 6px 7px 0;
+  color: #858a84;
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.animation-properties label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.animation-properties select {
+  width: 112px;
+  height: 24px;
+}
+.animation-track-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 .animation-track {
   position: relative;
   height: 42px;
-  margin: 12px 7px 0;
+  min-width: 520px;
+  margin: 5px 7px 0;
 }
 .animation-track > input[type='range'] {
   position: absolute;
@@ -1483,6 +1543,10 @@ body.animation-mode .section-randomize {
 .animation-keyframes button.is-selected {
   border-color: var(--blue);
   background: var(--blue);
+}
+.animation-keyframes button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .animation-help {
   margin: 1px 7px 0;
@@ -1694,10 +1758,11 @@ button:focus-visible,
     padding: 38px 28px 48px;
   }
   .animation-timeline {
-    flex-basis: 176px;
-    overflow-x: auto;
+    flex-basis: 216px;
+    padding-inline: 12px;
+    overflow: hidden;
   }
-  .animation-transport {
+  .animation-track {
     min-width: 680px;
   }
   .actions {

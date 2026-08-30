@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { AnimationModeSwitch, AnimationTimeline } from './AnimationWorkspace';
@@ -9,12 +9,16 @@ const animationState = {
   mode: 'animation' as const,
   durationMs: 5000,
   fps: 30,
+  loopPreview: true,
   playheadMs: 2500,
   selectedKeyframeId: 'middle',
   playing: false,
+  canUndo: true,
+  canRedo: false,
   keyframes: [
-    { id: 'keyframe-0', timeMs: 0 },
-    { id: 'middle', timeMs: 2500 },
+    { id: 'keyframe-0', timeMs: 0, easingToNext: 'linear' as const },
+    { id: 'middle', timeMs: 2500, easingToNext: 'ease-in' as const },
+    { id: 'end', timeMs: 5000, easingToNext: 'linear' as const },
   ],
 };
 
@@ -44,7 +48,7 @@ describe('animation workspace controls', () => {
 
     expect(screen.getByRole('region', { name: 'Animation timeline' })).toBeInTheDocument();
     expect(screen.getByText(/0:02.50/)).toBeInTheDocument();
-    expect(screen.getByLabelText('2 keyframes')).toBeInTheDocument();
+    expect(screen.getByLabelText('3 keyframes')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add keyframe' }));
     expect((onCommand.mock.calls.at(-1)![0] as CustomEvent).detail).toEqual({ type: 'add' });
     document.removeEventListener('animationcommand', onCommand);
@@ -65,5 +69,93 @@ describe('animation workspace controls', () => {
       document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
     );
     expect(screen.getByRole('button', { name: 'Delete selected keyframe' })).toBeEnabled();
+  });
+
+  it('publishes end, duplicate, loop, and easing commands', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Jump to animation end' }));
+    await user.click(screen.getByRole('button', { name: 'Duplicate selected keyframe' }));
+    await user.click(screen.getByRole('checkbox', { name: 'Loop' }));
+    await user.selectOptions(
+      screen.getByRole('combobox', { name: 'Outgoing keyframe easing' }),
+      'hold',
+    );
+
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual(
+      expect.arrayContaining([
+        { type: 'jump-end' },
+        { type: 'duplicate' },
+        { type: 'loop', enabled: false },
+        { type: 'easing', easing: 'hold' },
+      ]),
+    );
+    document.removeEventListener('animationcommand', onCommand);
+  });
+
+  it('maps timeline keyboard shortcuts while leaving form fields alone', () => {
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+
+    fireEvent.keyDown(document, { code: 'Space', key: ' ' });
+    fireEvent.keyDown(document, { key: 'ArrowRight', shiftKey: true });
+    fireEvent.keyDown(document, { key: 'k' });
+    fireEvent.keyDown(document, { key: 'z', metaKey: true });
+    fireEvent.keyDown(document, { key: 'End' });
+    fireEvent.keyDown(screen.getByLabelText('Animation FPS'), { key: 'ArrowRight' });
+
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'play-toggle' },
+      { type: 'step', frames: 10 },
+      { type: 'add' },
+      { type: 'undo' },
+      { type: 'jump-end' },
+    ]);
+    document.removeEventListener('animationcommand', onCommand);
+  });
+
+  it('publishes drag updates for an unprotected keyframe', () => {
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    const { container } = render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+    const track = container.querySelector<HTMLElement>('.animation-track')!;
+    Object.defineProperty(track, 'clientWidth', { configurable: true, value: 500 });
+    vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      width: 500,
+      right: 500,
+      top: 0,
+      bottom: 42,
+      height: 42,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    const marker = screen.getByRole('button', { name: /keyframe at 0:02\.50/i });
+
+    fireEvent.pointerDown(marker, { pointerId: 1, clientX: 250 });
+    fireEvent.pointerMove(marker, { pointerId: 1, clientX: 400 });
+    fireEvent.pointerUp(marker, { pointerId: 1, clientX: 400 });
+
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual(
+      expect.arrayContaining([
+        { type: 'move', id: 'middle', timeMs: 4000 },
+        { type: 'move-end', id: 'middle', timeMs: 4000 },
+      ]),
+    );
+    document.removeEventListener('animationcommand', onCommand);
   });
 });

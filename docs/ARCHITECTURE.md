@@ -112,6 +112,8 @@ These event names and their payloads are internal interfaces. Change producers a
 
 Animation controls use `animationmodechange` for the top-level Config/Animation switch, `animationcommand` for transport and timeline editing, `animationstatechange` for runtime-to-React state, and `animationstaterequest` for initial synchronization. In Animation mode, `slicer.ts` freezes a normal render-settings snapshot and intercepts morphable control input before the ordinary Config bindings can mutate runtime state. Quick playback renders use explicit evaluated snapshots and do not enter parameter history; leaving the mode restores the frozen Config snapshot.
 
+Timeline edits use a dedicated `ParameterHistory<AnimationProject>`, with slider and pointer changes coalesced at gesture boundaries. Keyframe dragging, duplication, easing, loop state, timing, keyboard commands, and camera gestures all update the animation project without writing into Config state. React owns the accessible timeline presentation and publishes commands; `slicer.ts` remains authoritative for selection, locking, project history, and rendering.
+
 ## Rendering and concurrency
 
 Contour requests are assigned monotonically increasing IDs and mesh versions. Results from replaced meshes and stale full-quality responses are ignored. During an active orbit or roll gesture, a completed same-mesh quick response may be shown transiently while a newer request remains queued; outside direct manipulation, stale quick responses are discarded. The runtime adjusts throttling using triangle count, preview contour count, visibility work, curve quality, and preview morph instance count.

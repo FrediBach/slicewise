@@ -46,13 +46,19 @@ import { createRenderSettingsSnapshot } from './render-settings';
 import { ParameterHistory } from './parameter-history';
 import { normalizeParameterSnapshot } from './parameter-migrations';
 import { createCurrentExport, createExportFilename, createGCodeExport } from './slicer-export';
+import { createAnimationHistory } from './animation-history';
 import {
   addAnimationKeyframe,
   createAnimationProject,
+  duplicateAnimationKeyframe,
   evaluateAnimationSettings,
+  moveAnimationKeyframe,
   removeAnimationKeyframe,
+  setAnimationKeyframeEasing,
+  setAnimationLoopPreview,
   updateAnimationKeyframeValue,
   updateAnimationTiming,
+  type AnimationEasing,
   type AnimationParameterDescriptor,
   type AnimationProject,
 } from './animation-project';
@@ -2290,15 +2296,18 @@ if (typeof document !== 'undefined') {
     });
     window.addEventListener('blur', () => setSpaceDown(false));
     bed.addEventListener('pointerdown', (e) => {
+      if (isAnimationModeActive() && !animationGestureEditable()) return;
       id = e.pointerId;
       bed.setPointerCapture(id);
       sx = e.clientX;
       sy = e.clientY;
-      az0 = state.az;
-      el0 = state.el;
-      ro0 = state.roll;
-      panX0 = state.panX;
-      panY0 = state.panY;
+      const view = interactiveGestureSettings();
+      az0 = view.az;
+      el0 = view.el;
+      ro0 = view.roll;
+      panX0 = view.panX;
+      panY0 = view.panY;
+      if (isAnimationModeActive()) beginAnimationGesture();
       mode = spaceDown ? 'pan' : e.shiftKey ? 'roll' : 'orbit';
       state.dragging = true;
       bed.classList.remove('space-pan');
@@ -2309,70 +2318,103 @@ if (typeof document !== 'undefined') {
       const dx = e.clientX - sx,
         dy = e.clientY - sy;
       if (mode === 'pan') {
-        state.panX = clamp(
+        const panX = clamp(
           Math.round((panX0 + (dx * state.pw) / bed.clientWidth) * 10) / 10,
           -2000,
           2000,
         );
-        state.panY = clamp(
+        const panY = clamp(
           Math.round((panY0 + (dy * state.ph) / bed.clientHeight) * 10) / 10,
           -2000,
           2000,
         );
-        syncPair('panX', state.panX);
-        syncPair('panY', state.panY);
-        invalidateRenderState();
-        applyViewTransform();
+        if (isAnimationModeActive()) updateAnimationGesture({ panX, panY }, true);
+        else {
+          state.panX = panX;
+          state.panY = panY;
+          syncPair('panX', state.panX);
+          syncPair('panY', state.panY);
+          invalidateRenderState();
+          applyViewTransform();
+        }
       } else if (mode === 'roll') {
-        state.roll = clamp(Math.round(ro0 + dx * 0.5), -180, 180);
-        $('rl').value = String(state.roll);
-        $('rlN').value = String(state.roll);
+        const roll = clamp(Math.round(ro0 + dx * 0.5), -180, 180);
+        if (isAnimationModeActive()) updateAnimationGesture({ roll }, true);
+        else {
+          state.roll = roll;
+          $('rl').value = String(state.roll);
+          $('rlN').value = String(state.roll);
+        }
       } else {
         let a = az0 - dx * 0.45;
         a = ((((a + 180) % 360) + 360) % 360) - 180;
-        state.az = Math.round(a);
+        const az = Math.round(a);
         let e = el0 + dy * 0.45;
         e = ((((e + 180) % 360) + 360) % 360) - 180;
-        state.el = Math.round(e);
-        $('az').value = String(state.az);
-        $('azN').value = String(state.az);
-        $('el').value = String(state.el);
-        $('elN').value = String(state.el);
+        const el = Math.round(e);
+        if (isAnimationModeActive()) updateAnimationGesture({ az, el }, true);
+        else {
+          state.az = az;
+          state.el = el;
+          $('az').value = String(state.az);
+          $('azN').value = String(state.az);
+          $('el').value = String(state.el);
+          $('elN').value = String(state.el);
+        }
       }
-      if (mode !== 'pan') redraw(true);
+      if (!isAnimationModeActive() && mode !== 'pan') redraw(true);
     });
     const end = (): void => {
       if (!state.dragging) return;
       state.dragging = false;
       bed.classList.remove('dragging', 'dragging-pan', 'dragging-roll', 'dragging-orbit');
       bed.classList.toggle('space-pan', spaceDown);
-      redraw(false);
+      if (isAnimationModeActive()) endAnimationGesture();
+      else redraw(false);
     };
     bed.addEventListener('pointerup', end);
     bed.addEventListener('pointercancel', end);
     bed.addEventListener('dblclick', (e) => {
       e.preventDefault();
-      state.zoom = 1;
-      state.panX = 0;
-      state.panY = 0;
-      syncPair('zoom', state.zoom);
-      syncPair('panX', state.panX);
-      syncPair('panY', state.panY);
-      applyViewTransform();
-      redraw(false);
+      if (isAnimationModeActive()) {
+        if (!animationGestureEditable()) return;
+        beginAnimationGesture();
+        updateAnimationGesture({ zoom: 1, panX: 0, panY: 0 }, true);
+        endAnimationGesture();
+      } else {
+        state.zoom = 1;
+        state.panX = 0;
+        state.panY = 0;
+        syncPair('zoom', state.zoom);
+        syncPair('panX', state.panX);
+        syncPair('panY', state.panY);
+        applyViewTransform();
+        redraw(false);
+      }
     });
     bed.addEventListener(
       'wheel',
       (e) => {
         e.preventDefault();
-        const z = clamp(state.zoom * (e.deltaY > 0 ? 0.94 : 1.06), 0.2, 3);
-        state.zoom = Math.round(z * 100) / 100;
-        $('zoom').value = String(state.zoom);
-        $('zoomN').value = String(state.zoom);
-        invalidateRenderState();
-        applyViewTransform();
+        if (isAnimationModeActive() && !animationGestureEditable()) return;
+        const current = interactiveGestureSettings();
+        const z = clamp(current.zoom * (e.deltaY > 0 ? 0.94 : 1.06), 0.2, 3);
+        const zoom = Math.round(z * 100) / 100;
+        if (isAnimationModeActive()) {
+          beginAnimationGesture();
+          updateAnimationGesture({ zoom }, true);
+        } else {
+          state.zoom = zoom;
+          $('zoom').value = String(state.zoom);
+          $('zoomN').value = String(state.zoom);
+          invalidateRenderState();
+          applyViewTransform();
+        }
         clearTimeout(wheelEnd);
-        wheelEnd = setTimeout(() => redraw(false), 140);
+        wheelEnd = setTimeout(
+          () => (isAnimationModeActive() ? endAnimationGesture() : redraw(false)),
+          140,
+        );
       },
       { passive: false },
     );
@@ -2667,6 +2709,7 @@ if (typeof document !== 'undefined') {
   $('undo').addEventListener('click', () => moveParameterHistory(-1));
   $('redo').addEventListener('click', () => moveParameterHistory(1));
   document.addEventListener('keydown', (event) => {
+    if (document.body.classList.contains('animation-mode')) return;
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     const undo = key === 'z' && !event.shiftKey;
@@ -3184,7 +3227,10 @@ if (typeof document !== 'undefined') {
     timeMs?: number;
     durationMs?: number;
     fps?: number;
+    frames?: number;
     id?: string;
+    easing?: AnimationEasing;
+    enabled?: boolean;
   };
   type LockableControl = HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
 
@@ -3234,6 +3280,8 @@ if (typeof document !== 'undefined') {
   const animationLockedControls = new Map<LockableControl, { disabled: boolean; title: string }>();
   let animationMode = false;
   let animationProject: AnimationProject | null = null;
+  let animationHistory: ParameterHistory<AnimationProject> | null = null;
+  let animationHistoryTimer = 0;
   let animationConfigSnapshot: ContourSettings | null = null;
   let animationPlayheadMs = 0;
   let selectedAnimationKeyframeId: string | null = null;
@@ -3242,6 +3290,81 @@ if (typeof document !== 'undefined') {
   let animationPlaybackStartedAt = 0;
   let animationPlaybackOriginMs = 0;
   let nextAnimationKeyframeId = 1;
+  let draggingAnimationKeyframeId: string | null = null;
+  let animationGestureActive = false;
+
+  function isAnimationModeActive(): boolean {
+    return animationMode;
+  }
+
+  function animationGestureEditable(): boolean {
+    return animationMode && !animationPlaying && selectedAnimationKeyframeId !== null;
+  }
+
+  function interactiveGestureSettings(): ContourSettings {
+    return animationMode && animationProject
+      ? evaluateAnimationSettings(animationProject, animationPlayheadMs, animationParameters)
+      : settingsSnapshot();
+  }
+
+  function beginAnimationGesture(): void {
+    if (!animationGestureEditable() || animationGestureActive) return;
+    commitAnimationHistory();
+    animationGestureActive = true;
+  }
+
+  function updateAnimationGesture(
+    values: Partial<Pick<ContourSettings, 'az' | 'el' | 'roll' | 'zoom' | 'panX' | 'panY'>>,
+    quick: boolean,
+  ): void {
+    if (!animationProject || !selectedAnimationKeyframeId) return;
+    let next = animationProject;
+    for (const [settingKey, value] of Object.entries(values))
+      next = updateAnimationKeyframeValue(
+        next,
+        selectedAnimationKeyframeId,
+        settingKey,
+        value,
+        animationParameters,
+      );
+    if (next === animationProject) return;
+    animationProject = next;
+    const settings = evaluateAnimationSettings(next, animationPlayheadMs, animationParameters);
+    syncAnimationControlValues(settings);
+    renderAnimationAt(animationPlayheadMs, quick);
+    publishAnimationState();
+  }
+
+  function endAnimationGesture(): void {
+    if (!animationGestureActive) return;
+    animationGestureActive = false;
+    commitAnimationHistory();
+    renderAnimationAt(animationPlayheadMs, false);
+    publishAnimationState();
+  }
+
+  function createAnimationKeyframeId(): string {
+    if (!animationProject) return `keyframe-${nextAnimationKeyframeId++}`;
+    let id = '';
+    do id = `keyframe-${nextAnimationKeyframeId++}`;
+    while (animationProject.keyframes.some((keyframe) => keyframe.id === id));
+    return id;
+  }
+
+  function resetAnimationHistory(): void {
+    clearTimeout(animationHistoryTimer);
+    animationHistory = animationProject ? createAnimationHistory(animationProject) : null;
+  }
+
+  function commitAnimationHistory(): void {
+    clearTimeout(animationHistoryTimer);
+    if (animationProject) animationHistory?.commit(animationProject);
+  }
+
+  function scheduleAnimationHistory(): void {
+    clearTimeout(animationHistoryTimer);
+    animationHistoryTimer = setTimeout(commitAnimationHistory, 180);
+  }
 
   function publishAnimationState(): void {
     document.dispatchEvent(
@@ -3250,10 +3373,17 @@ if (typeof document !== 'undefined') {
           mode: animationMode ? 'animation' : 'config',
           durationMs: animationProject?.durationMs ?? 5000,
           fps: animationProject?.fps ?? 30,
+          loopPreview: animationProject?.loopPreview ?? true,
           playheadMs: animationPlayheadMs,
           selectedKeyframeId: selectedAnimationKeyframeId,
           playing: animationPlaying,
-          keyframes: (animationProject?.keyframes ?? []).map(({ id, timeMs }) => ({ id, timeMs })),
+          canUndo: animationHistory?.status.canUndo ?? false,
+          canRedo: animationHistory?.status.canRedo ?? false,
+          keyframes: (animationProject?.keyframes ?? []).map(({ id, timeMs, easingToNext }) => ({
+            id,
+            timeMs,
+            easingToNext,
+          })),
         },
       }),
     );
@@ -3285,7 +3415,9 @@ if (typeof document !== 'undefined') {
       control.title = editable
         ? original.title
         : animationControlIds.has(control.id)
-          ? 'Select a keyframe to edit this animated parameter.'
+          ? animationPlaying
+            ? 'Pause playback to edit this animated parameter.'
+            : 'Move the playhead to a keyframe to edit this animated parameter.'
           : 'Return to Config mode to change this setting.';
     }
   }
@@ -3381,11 +3513,17 @@ if (typeof document !== 'undefined') {
     if (animationMode) return;
     commitParameterHistory();
     animationConfigSnapshot = cloneParameterSnapshot();
-    if (
+    const needsProject =
       !animationProject ||
-      JSON.stringify(animationProject.baseSettings) !== JSON.stringify(animationConfigSnapshot)
-    )
-      animationProject = createAnimationProject(animationConfigSnapshot, animationParameters);
+      JSON.stringify(animationProject.baseSettings) !== JSON.stringify(animationConfigSnapshot);
+    if (needsProject) {
+      const reducedMotion =
+        window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      animationProject = createAnimationProject(animationConfigSnapshot, animationParameters, {
+        loopPreview: !reducedMotion,
+      });
+      resetAnimationHistory();
+    } else if (!animationHistory) resetAnimationHistory();
     animationMode = true;
     animationPlayheadMs = 0;
     selectedAnimationKeyframeId = animationProject.keyframes[0]?.id ?? null;
@@ -3398,6 +3536,9 @@ if (typeof document !== 'undefined') {
   function leaveAnimationMode(): void {
     if (!animationMode) return;
     stopAnimationPlayback(false);
+    commitAnimationHistory();
+    animationGestureActive = false;
+    draggingAnimationKeyframeId = null;
     animationMode = false;
     document.body.classList.remove('animation-mode');
     unlockConfigControls();
@@ -3425,18 +3566,53 @@ if (typeof document !== 'undefined') {
     event.stopImmediatePropagation();
     if (descriptor.kind === 'color' && target.id.endsWith('Hex') && !exact) return;
     const value = descriptor.kind === 'color' ? target.value : Number(target.value);
-    animationProject = updateAnimationKeyframeValue(
+    const next = updateAnimationKeyframeValue(
       animationProject,
       selectedAnimationKeyframeId,
       descriptor.settingKey,
       value,
       animationParameters,
     );
+    if (next === animationProject) return;
+    animationProject = next;
+    if (exact) commitAnimationHistory();
+    else scheduleAnimationHistory();
     renderAnimationAt(animationPlayheadMs, !exact);
     publishAnimationState();
   }
   document.addEventListener('input', (event) => handleAnimationParameterInput(event, false), true);
   document.addEventListener('change', (event) => handleAnimationParameterInput(event, true), true);
+
+  function duplicateAnimationTime(sourceTimeMs: number): number | null {
+    if (!animationProject) return null;
+    const occupied = new Set(animationProject.keyframes.map(({ timeMs }) => timeMs));
+    const frameMs = Math.max(1, Math.round(1000 / animationProject.fps));
+    for (let time = sourceTimeMs + frameMs; time <= animationProject.durationMs; time += frameMs)
+      if (!occupied.has(time)) return time;
+    for (let time = sourceTimeMs - frameMs; time > 0; time -= frameMs)
+      if (!occupied.has(time)) return time;
+    return null;
+  }
+
+  function moveAnimationHistory(offset: number): void {
+    if (!animationProject || !animationHistory) return;
+    commitAnimationHistory();
+    const restored = animationHistory.move(offset);
+    if (!restored) return;
+    animationProject = restored;
+    animationPlayheadMs = clamp(animationPlayheadMs, 0, restored.durationMs);
+    const selectedStillExists = restored.keyframes.some(
+      ({ id }) => id === selectedAnimationKeyframeId,
+    );
+    if (!selectedStillExists) {
+      const exact = restored.keyframes.find(({ timeMs }) => timeMs === animationPlayheadMs);
+      selectedAnimationKeyframeId = exact?.id ?? null;
+    }
+    syncAnimationControlLocks();
+    renderAnimationAt(animationPlayheadMs, false);
+    publishAnimationState();
+    toast(offset < 0 ? 'Animation edit undone' : 'Animation edit redone');
+  }
 
   document.addEventListener('animationmodechange', (event) => {
     const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
@@ -3447,16 +3623,41 @@ if (typeof document !== 'undefined') {
   document.addEventListener('animationcommand', (event) => {
     if (!animationMode || !animationProject) return;
     const detail = (event as CustomEvent<AnimationCommandDetail>).detail || {};
+    if (
+      animationPlaying &&
+      [
+        'add',
+        'duplicate',
+        'move',
+        'move-end',
+        'delete',
+        'easing',
+        'loop',
+        'duration',
+        'fps',
+        'undo',
+        'redo',
+      ].includes(detail.type ?? '')
+    )
+      return;
     if (detail.type === 'play-toggle') toggleAnimationPlayback();
     else if (detail.type === 'seek') {
       stopAnimationPlayback(false);
       seekAnimation(Number(detail.timeMs));
+    } else if (detail.type === 'jump-end') {
+      stopAnimationPlayback(false);
+      seekAnimation(animationProject.durationMs);
+    } else if (detail.type === 'step') {
+      stopAnimationPlayback(false);
+      const frames = Number.isFinite(detail.frames) ? Number(detail.frames) : 0;
+      seekAnimation(animationPlayheadMs + (frames * 1000) / animationProject.fps);
     } else if (detail.type === 'select' && detail.id) {
       stopAnimationPlayback(false);
       const keyframe = animationProject.keyframes.find((candidate) => candidate.id === detail.id);
       if (keyframe) seekAnimation(keyframe.timeMs, true);
     } else if (detail.type === 'add') {
-      const id = `keyframe-${nextAnimationKeyframeId++}`;
+      commitAnimationHistory();
+      const id = createAnimationKeyframeId();
       const next = addAnimationKeyframe(
         animationProject,
         animationPlayheadMs,
@@ -3466,28 +3667,105 @@ if (typeof document !== 'undefined') {
       if (next !== animationProject) {
         animationProject = next;
         selectedAnimationKeyframeId = id;
+        commitAnimationHistory();
         syncAnimationControlLocks();
         publishAnimationState();
       }
+    } else if (detail.type === 'duplicate' && selectedAnimationKeyframeId) {
+      const selected = animationProject.keyframes.find(
+        ({ id }) => id === selectedAnimationKeyframeId,
+      );
+      const timeMs = selected && duplicateAnimationTime(selected.timeMs);
+      if (selected && timeMs !== null) {
+        commitAnimationHistory();
+        const id = createAnimationKeyframeId();
+        const next = duplicateAnimationKeyframe(
+          animationProject,
+          selectedAnimationKeyframeId,
+          timeMs,
+          id,
+        );
+        if (next !== animationProject) {
+          animationProject = next;
+          selectedAnimationKeyframeId = id;
+          animationPlayheadMs = timeMs;
+          commitAnimationHistory();
+          syncAnimationControlLocks();
+          renderAnimationAt(timeMs, false);
+          publishAnimationState();
+        }
+      }
+    } else if ((detail.type === 'move' || detail.type === 'move-end') && detail.id) {
+      stopAnimationPlayback(false);
+      if (draggingAnimationKeyframeId !== detail.id) {
+        commitAnimationHistory();
+        draggingAnimationKeyframeId = detail.id;
+      }
+      const next = moveAnimationKeyframe(animationProject, detail.id, Number(detail.timeMs));
+      if (next !== animationProject) {
+        animationProject = next;
+        const moved = next.keyframes.find(({ id }) => id === detail.id);
+        animationPlayheadMs = moved?.timeMs ?? animationPlayheadMs;
+        selectedAnimationKeyframeId = detail.id;
+        syncAnimationControlLocks();
+        renderAnimationAt(animationPlayheadMs, detail.type === 'move');
+      } else if (detail.type === 'move-end') renderAnimationAt(animationPlayheadMs, false);
+      if (detail.type === 'move-end') {
+        draggingAnimationKeyframeId = null;
+        commitAnimationHistory();
+      }
+      publishAnimationState();
     } else if (detail.type === 'delete' && selectedAnimationKeyframeId) {
+      commitAnimationHistory();
       const previous = animationProject;
       animationProject = removeAnimationKeyframe(animationProject, selectedAnimationKeyframeId);
       if (animationProject !== previous) {
+        commitAnimationHistory();
         const prior = [...animationProject.keyframes]
           .reverse()
           .find((keyframe) => keyframe.timeMs <= animationPlayheadMs);
         seekAnimation(prior?.timeMs ?? 0, true);
       }
+    } else if (detail.type === 'easing' && selectedAnimationKeyframeId && detail.easing) {
+      commitAnimationHistory();
+      const next = setAnimationKeyframeEasing(
+        animationProject,
+        selectedAnimationKeyframeId,
+        detail.easing,
+      );
+      if (next !== animationProject) {
+        animationProject = next;
+        commitAnimationHistory();
+        renderAnimationAt(animationPlayheadMs, false);
+        publishAnimationState();
+      }
+    } else if (detail.type === 'loop' && typeof detail.enabled === 'boolean') {
+      commitAnimationHistory();
+      const next = setAnimationLoopPreview(animationProject, detail.enabled);
+      if (next !== animationProject) {
+        animationProject = next;
+        commitAnimationHistory();
+        publishAnimationState();
+      }
     } else if (detail.type === 'duration') {
-      animationProject = updateAnimationTiming(animationProject, {
+      commitAnimationHistory();
+      const next = updateAnimationTiming(animationProject, {
         durationMs: Number(detail.durationMs),
       });
+      if (next === animationProject) return;
+      animationProject = next;
+      commitAnimationHistory();
       animationPlayheadMs = Math.min(animationPlayheadMs, animationProject.durationMs);
       publishAnimationState();
     } else if (detail.type === 'fps') {
-      animationProject = updateAnimationTiming(animationProject, { fps: Number(detail.fps) });
+      commitAnimationHistory();
+      const next = updateAnimationTiming(animationProject, { fps: Number(detail.fps) });
+      if (next === animationProject) return;
+      animationProject = next;
+      commitAnimationHistory();
       publishAnimationState();
-    }
+    } else if (detail.type === 'undo') moveAnimationHistory(-1);
+    else if (detail.type === 'redo') moveAnimationHistory(1);
   });
   publishAnimationState();
 
