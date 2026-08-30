@@ -65,7 +65,9 @@ The workspace mode switch changes between static configuration and timeline anim
 
 Keyframe diamonds can be selected or dragged along the timeline; occupied times are rejected and the time-zero keyframe cannot move. Space toggles playback, arrows step one frame, Shift + arrows step ten frames, K adds a keyframe, Delete/Backspace removes the selection, Home/End jump to the timeline boundaries, and Ctrl/⌘ Z handles animation-scoped undo while Animation mode is active.
 
-Numeric parameters interpolate linearly. Integer counts round after interpolation. Ink colour interpolates per RGB channel. Seed parameters hold their earlier value until the next keyframe so seeded geometry does not reshuffle continuously. Video export is available when the browser exposes WebCodecs VP9 or VP8 encoding; unsupported browsers retain timeline editing and playback. Export runs sequentially, remains local to the browser, and can be cancelled. Animation projects remain in memory while the page is open; persistence is follow-up work.
+Numeric parameters interpolate linearly. Integer counts round after interpolation. Ink colour interpolates per RGB channel. Seed parameters hold their earlier value until the next keyframe so seeded geometry does not reshuffle continuously. Video export is available when the browser exposes WebCodecs VP9 or VP8 encoding; unsupported browsers retain timeline editing and playback. Export runs sequentially, remains local to the browser, and can be cancelled.
+
+The current animation project autosaves locally after timeline edits. Slicewise associates it with a generated browser-local workspace ID rather than a source filename, migrates stored version-one data on load, and restores it when its frozen base settings match the current Config snapshot. Animation data stays separate from ordinary named parameter snapshots, and uploaded source mesh or artwork bytes are not stored with it. See `docs/ANIMATION.md` for the persistence, interpolation, and export contracts.
 
 ## View
 

@@ -48,6 +48,11 @@ import { normalizeParameterSnapshot } from './parameter-migrations';
 import { createCurrentExport, createExportFilename, createGCodeExport } from './slicer-export';
 import { createAnimationHistory } from './animation-history';
 import {
+  loadAnimationProject,
+  localAnimationProjectId,
+  saveAnimationProject,
+} from './animation-storage';
+import {
   animationPlaybackPosition,
   animationPreviewIntervalMs,
   nextAnimationPreviewDeadline,
@@ -3337,6 +3342,12 @@ if (typeof document !== 'undefined') {
   let animationVideoSupportKnown = false;
   let animationVideoCodec: AnimationVideoCodec | null = null;
   let animationVideoSupportRequest = 0;
+  const animationProjectId = localAnimationProjectId();
+  let animationStorageLoaded = false;
+  let animationModeTransition = 0;
+  let animationSaveTimer = 0;
+  let animationSaveChain = Promise.resolve();
+  let animationSaveFailed = false;
 
   function isAnimationModeActive(): boolean {
     return animationMode;
@@ -3406,9 +3417,30 @@ if (typeof document !== 'undefined') {
     animationHistory = animationProject ? createAnimationHistory(animationProject) : null;
   }
 
+  function scheduleAnimationSave(): void {
+    clearTimeout(animationSaveTimer);
+    animationSaveTimer = setTimeout(() => {
+      if (!animationProject) return;
+      const project = structuredClone(animationProject);
+      animationSaveChain = animationSaveChain
+        .catch(() => undefined)
+        .then(() => saveAnimationProject(animationProjectId, project, animationParameters))
+        .then(() => {
+          animationSaveFailed = false;
+        })
+        .catch(() => {
+          if (!animationSaveFailed) toast('Animation autosave is unavailable');
+          animationSaveFailed = true;
+        });
+    }, 250);
+  }
+
   function commitAnimationHistory(): void {
     clearTimeout(animationHistoryTimer);
-    if (animationProject) animationHistory?.commit(animationProject);
+    if (animationProject) {
+      animationHistory?.commit(animationProject);
+      scheduleAnimationSave();
+    }
   }
 
   function scheduleAnimationHistory(): void {
@@ -3782,10 +3814,26 @@ if (typeof document !== 'undefined') {
     }
   }
 
-  function enterAnimationMode(): void {
+  async function enterAnimationMode(): Promise<void> {
     if (animationMode) return;
+    const transition = ++animationModeTransition;
     commitParameterHistory();
     animationConfigSnapshot = cloneParameterSnapshot();
+    let storedProject: AnimationProject | null = null;
+    if (!animationStorageLoaded) {
+      try {
+        storedProject = await loadAnimationProject(
+          animationProjectId,
+          animationConfigSnapshot,
+          animationParameters,
+        );
+      } catch {
+        storedProject = null;
+      }
+      animationStorageLoaded = true;
+    }
+    if (transition !== animationModeTransition || !animationConfigSnapshot) return;
+    if (storedProject) animationProject = storedProject;
     const needsProject =
       !animationProject ||
       JSON.stringify(animationProject.baseSettings) !== JSON.stringify(animationConfigSnapshot);
@@ -3797,6 +3845,7 @@ if (typeof document !== 'undefined') {
       });
       resetAnimationHistory();
     } else if (!animationHistory) resetAnimationHistory();
+    scheduleAnimationSave();
     animationMode = true;
     animationPlayheadMs = 0;
     selectedAnimationKeyframeId = animationProject.keyframes[0]?.id ?? null;
@@ -3876,6 +3925,7 @@ if (typeof document !== 'undefined') {
     const restored = animationHistory.move(offset);
     if (!restored) return;
     animationProject = restored;
+    scheduleAnimationSave();
     animationPlayheadMs = clamp(animationPlayheadMs, 0, restored.durationMs);
     const selectedStillExists = restored.keyframes.some(
       ({ id }) => id === selectedAnimationKeyframeId,
@@ -3892,8 +3942,11 @@ if (typeof document !== 'undefined') {
 
   document.addEventListener('animationmodechange', (event) => {
     const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
-    if (mode === 'animation') enterAnimationMode();
-    else if (mode === 'config') leaveAnimationMode();
+    if (mode === 'animation') void enterAnimationMode();
+    else if (mode === 'config') {
+      animationModeTransition++;
+      leaveAnimationMode();
+    }
   });
   document.addEventListener('animationstaterequest', publishAnimationState);
   document.addEventListener('animationcommand', (event) => {
