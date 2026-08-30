@@ -3142,6 +3142,21 @@ if (typeof document !== 'undefined') {
   };
   type LockableControl = HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
 
+  const integerAnimationSettings = new Set([
+    'lines',
+    'quality',
+    'easeCycles',
+    'curvatureSmoothing',
+    'blockGlitchCount',
+    'scanBandGlitchCount',
+    'staggeredSlicesCount',
+    'tileShuffleRows',
+    'tileShuffleColumns',
+    'misregistrationCopies',
+    'halftoneCycles',
+    'kaleidoscopeSegments',
+    'gradientColors',
+  ]);
   const animationParameters: AnimationParameterDescriptor[] = [];
   for (const [controlId, settingKey] of morphKeyById) {
     if (!document.querySelector(`#${controlId}Control .morph-toggle`)) continue;
@@ -3150,9 +3165,16 @@ if (typeof document !== 'undefined') {
     animationParameters.push({
       controlId,
       settingKey: settingKey as keyof ContourSettings & string,
-      kind: color ? 'color' : settingKey.endsWith('Seed') ? 'seed' : 'number',
+      kind: color
+        ? 'color'
+        : settingKey.endsWith('Seed')
+          ? 'seed'
+          : integerAnimationSettings.has(settingKey)
+            ? 'integer'
+            : 'continuous',
       min: input && input.min !== '' ? Number(input.min) : undefined,
       max: input && input.max !== '' ? Number(input.max) : undefined,
+      step: input && input.step !== '' ? Number(input.step) : undefined,
     } satisfies AnimationParameterDescriptor);
   }
   const animationParameterByControl = new Map(

@@ -3,17 +3,19 @@ import { contourSettings } from '../test/fixtures/contours';
 import {
   addAnimationKeyframe,
   createAnimationProject,
+  duplicateAnimationKeyframe,
   evaluateAnimationSettings,
   moveAnimationKeyframe,
   removeAnimationKeyframe,
   setAnimationKeyframeEasing,
   updateAnimationKeyframeValue,
+  updateAnimationExportSettings,
   updateAnimationTiming,
   type AnimationParameterDescriptor,
 } from './animation-project';
 
 const parameters = [
-  { controlId: 'zoom', settingKey: 'zoom', kind: 'number', min: 0.2, max: 3 },
+  { controlId: 'zoom', settingKey: 'zoom', kind: 'continuous', min: 0.2, max: 3 },
   { controlId: 'blockGlitchSeed', settingKey: 'blockGlitchSeed', kind: 'seed', min: 0, max: 9999 },
   { controlId: 'color', settingKey: 'color', kind: 'color' },
 ] as const satisfies readonly AnimationParameterDescriptor[];
@@ -89,6 +91,29 @@ describe('animation projects', () => {
     expect(evaluateAnimationSettings(project, 5000, parameters).zoom).toBe(3);
   });
 
+  it('holds a segment until returning the exact next keyframe', () => {
+    let project = createAnimationProject(contourSettings, parameters);
+    project = addAnimationKeyframe(project, 5000, 'end', parameters);
+    project = updateAnimationKeyframeValue(project, 'end', 'zoom', 3, parameters);
+    project = setAnimationKeyframeEasing(project, 'keyframe-0', 'hold');
+
+    expect(evaluateAnimationSettings(project, 4999, parameters).zoom).toBe(1);
+    expect(evaluateAnimationSettings(project, 5000, parameters).zoom).toBe(3);
+  });
+
+  it('rounds integer interpolation after easing', () => {
+    const integerParameters = [
+      { controlId: 'lines', settingKey: 'lines', kind: 'integer', min: 1, max: 100 },
+    ] as const satisfies readonly AnimationParameterDescriptor[];
+    let project = createAnimationProject(contourSettings, integerParameters);
+    project = addAnimationKeyframe(project, 5000, 'end', integerParameters);
+    project = updateAnimationKeyframeValue(project, 'end', 'lines', 11, integerParameters);
+
+    expect(evaluateAnimationSettings(project, 2000, integerParameters).lines).toBe(9);
+    expect(evaluateAnimationSettings(project, 0, integerParameters).lines).toBe(8);
+    expect(evaluateAnimationSettings(project, 5000, integerParameters).lines).toBe(11);
+  });
+
   it('clamps values and keeps invalid edits immutable', () => {
     const project = createAnimationProject(contourSettings, parameters);
     const clamped = updateAnimationKeyframeValue(project, 'keyframe-0', 'zoom', 99, parameters);
@@ -115,6 +140,23 @@ describe('animation projects', () => {
     expect(project.keyframes).toHaveLength(1);
   });
 
+  it('duplicates a detached keyframe and rejects occupied ids and times', () => {
+    let project = createAnimationProject(contourSettings, parameters);
+    project = addAnimationKeyframe(project, 3000, 'source', parameters);
+    project = updateAnimationKeyframeValue(project, 'source', 'zoom', 2.5, parameters);
+    const duplicate = duplicateAnimationKeyframe(project, 'source', 4000, 'copy');
+
+    expect(duplicate.keyframes.at(-1)).toMatchObject({
+      id: 'copy',
+      timeMs: 4000,
+      values: { zoom: 2.5 },
+    });
+    duplicate.keyframes.at(-1)!.values.zoom = 1.5;
+    expect(project.keyframes.at(-1)!.values.zoom).toBe(2.5);
+    expect(duplicateAnimationKeyframe(project, 'source', 3000, 'copy')).toBe(project);
+    expect(duplicateAnimationKeyframe(project, 'source', 4000, 'source')).toBe(project);
+  });
+
   it('normalizes timing without truncating existing keyframes', () => {
     let project = createAnimationProject(contourSettings, parameters);
     project = addAnimationKeyframe(project, 4000, 'later', parameters);
@@ -123,5 +165,32 @@ describe('animation projects', () => {
       durationMs: 4000,
       fps: 120,
     });
+  });
+
+  it('normalizes export dimensions and keeps edits isolated', () => {
+    const project = createAnimationProject(contourSettings, parameters);
+    const updated = updateAnimationExportSettings(project, {
+      width: 721,
+      height: 405,
+      bitrate: 2_500_000.4,
+    });
+
+    expect(updated.export).toEqual({ width: 722, height: 406, bitrate: 2_500_000 });
+    expect(project.export).not.toEqual(updated.export);
+  });
+
+  it('evaluates deterministically without mutating project snapshots', () => {
+    let project = createAnimationProject(contourSettings, parameters);
+    project = addAnimationKeyframe(project, 5000, 'end', parameters);
+    project = updateAnimationKeyframeValue(project, 'end', 'zoom', 3, parameters);
+    const before = structuredClone(project);
+
+    const first = evaluateAnimationSettings(project, 1234, parameters);
+    const second = evaluateAnimationSettings(project, 1234, parameters);
+
+    expect(first).toEqual(second);
+    expect(project).toEqual(before);
+    first.zoom = 99;
+    expect(project.baseSettings.zoom).toBe(contourSettings.zoom);
   });
 });

@@ -60,6 +60,10 @@ When fixing a bug, first add the smallest test that reproduces it at the closest
 Coverage currently measures the focused core under active test:
 
 - `animation-project.ts`
+- `animation-history.ts`
+- `animation-interpolation.ts`
+- `animation-migrations.ts`
+- `animation-validation.ts`
 - `block-glitch.ts`
 - `colorPair.ts`
 - `contour-engine.ts`
