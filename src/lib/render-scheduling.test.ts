@@ -1,50 +1,153 @@
 import { describe, expect, it } from 'vitest';
-import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
+import { contourSettings } from '../test/fixtures/contours';
+import {
+  coalesceRenderQuality,
+  createExplicitRenderSnapshot,
+  isConfigExportCurrent,
+  isPreviewBusy,
+  previewViewTransform,
+  renderDisposition,
+  type RenderPurpose,
+  type RenderQuality,
+} from './render-scheduling';
+
+const disposition = (
+  responseId: number,
+  latestRequestId: number,
+  quality: RenderQuality,
+  responsePurpose: RenderPurpose = 'config',
+  latestPurpose: RenderPurpose = responsePurpose,
+  extra: { sameMesh?: boolean; allowStaleQuickPreview?: boolean } = {},
+) =>
+  renderDisposition({
+    responseId,
+    latestRequestId,
+    quality,
+    responsePurpose,
+    latestPurpose,
+    sameMesh: extra.sameMesh ?? true,
+    allowStaleQuickPreview: extra.allowStaleQuickPreview,
+  });
+
+describe('explicit render snapshots', () => {
+  it('detaches settings and adds quick-preview detail', () => {
+    const source = {
+      ...contourSettings,
+      morphTargets: { zoom: 2 },
+      morphTargets2: { roll: 90 },
+    };
+    const request = createExplicitRenderSnapshot(
+      {
+        settings: source,
+        quality: 'quick',
+        history: 'record',
+        purpose: 'config',
+      },
+      0.5,
+    );
+
+    expect(request.settings.previewDetail).toBe(0.5);
+    expect(request.settings.morphTargets).toEqual({ zoom: 2 });
+    request.settings.morphTargets.zoom = 3;
+    expect(source.morphTargets).toEqual({ zoom: 2 });
+  });
+
+  it.each(['animation-preview', 'animation-export'] as const)(
+    'forces Morph and Config history off for %s renders',
+    (purpose) => {
+      const request = createExplicitRenderSnapshot({
+        settings: {
+          ...contourSettings,
+          morphEnabled: true,
+          morphSecondEnabled: true,
+          morphTargets: { zoom: 2 },
+          morphTargets2: { roll: 90 },
+        },
+        quality: 'exact',
+        history: 'record',
+        purpose,
+      });
+
+      expect(request.history).toBe('ignore');
+      expect(request.settings).toMatchObject({
+        morphEnabled: false,
+        morphSecondEnabled: false,
+        morphTargets: {},
+        morphTargets2: {},
+      });
+    },
+  );
+
+  it('forces animation export to exact quality', () => {
+    const request = createExplicitRenderSnapshot(
+      {
+        settings: contourSettings,
+        quality: 'quick',
+        history: 'record',
+        purpose: 'animation-export',
+      },
+      0.25,
+    );
+
+    expect(request.quality).toBe('exact');
+    expect(request.settings).not.toHaveProperty('previewDetail');
+  });
+
+  it('only carries queued exact quality forward within the same purpose', () => {
+    expect(coalesceRenderQuality('quick', 'config', { quality: 'exact', purpose: 'config' })).toBe(
+      'exact',
+    );
+    expect(
+      coalesceRenderQuality('quick', 'animation-preview', {
+        quality: 'exact',
+        purpose: 'config',
+      }),
+    ).toBe('quick');
+    expect(coalesceRenderQuality('exact', 'config', null)).toBe('exact');
+  });
+});
 
 describe('renderDisposition', () => {
-  it('commits the result for the latest request', () => {
-    expect(
-      renderDisposition({ responseId: 7, latestRequestId: 7, sameMesh: true, quick: false }),
-    ).toBe('commit');
+  it('commits only the latest exact Config result', () => {
+    expect(disposition(7, 7, 'exact')).toBe('commit');
+    expect(disposition(7, 7, 'exact', 'animation-preview')).toBe('preview');
+    expect(disposition(7, 7, 'exact', 'animation-export')).toBe('capture');
+    expect(disposition(7, 7, 'quick', 'animation-export')).toBe('discard');
   });
 
   it('discards an older quick result instead of flashing a stale design', () => {
-    expect(
-      renderDisposition({ responseId: 6, latestRequestId: 7, sameMesh: true, quick: true }),
-    ).toBe('discard');
+    expect(disposition(6, 7, 'quick')).toBe('discard');
   });
 
-  it('uses an older quick result as transient feedback during a direct manipulation', () => {
+  it('uses an older quick result as transient feedback during direct manipulation', () => {
+    expect(disposition(6, 7, 'quick', 'config', 'config', { allowStaleQuickPreview: true })).toBe(
+      'preview',
+    );
     expect(
-      renderDisposition({
-        responseId: 6,
-        latestRequestId: 7,
-        sameMesh: true,
-        quick: true,
+      disposition(6, 7, 'quick', 'animation-preview', 'animation-preview', {
         allowStaleQuickPreview: true,
       }),
-    ).toBe('preview');
+    ).toBe('discard');
   });
 
   it('keeps even the latest quick result out of exact export state', () => {
-    expect(
-      renderDisposition({ responseId: 7, latestRequestId: 7, sameMesh: true, quick: true }),
-    ).toBe('preview');
+    expect(disposition(7, 7, 'quick')).toBe('preview');
   });
 
-  it('discards stale final results and results for replaced meshes', () => {
-    expect(
-      renderDisposition({
-        responseId: 6,
-        latestRequestId: 7,
-        sameMesh: true,
-        quick: false,
-        allowStaleQuickPreview: true,
-      }),
-    ).toBe('discard');
-    expect(
-      renderDisposition({ responseId: 7, latestRequestId: 7, sameMesh: false, quick: true }),
-    ).toBe('discard');
+  it('discards stale results, replaced meshes, and superseded purposes', () => {
+    expect(disposition(6, 7, 'exact', 'config', 'config', { allowStaleQuickPreview: true })).toBe(
+      'discard',
+    );
+    expect(disposition(7, 7, 'quick', 'config', 'config', { sameMesh: false })).toBe('discard');
+    expect(disposition(7, 7, 'exact', 'animation-preview', 'config')).toBe('discard');
+  });
+});
+
+describe('Config export freshness', () => {
+  it('is independent of animation request ids', () => {
+    expect(isConfigExportCurrent(4, 4)).toBe(true);
+    expect(isConfigExportCurrent(4, 5)).toBe(false);
+    expect(isConfigExportCurrent(0, 0)).toBe(false);
   });
 });
 

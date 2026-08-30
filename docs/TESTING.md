@@ -82,6 +82,7 @@ Coverage currently measures the focused core under active test:
 - `projection.ts`
 - `polyline-styling.ts`
 - `render-settings.ts`
+- `render-scheduling.ts`
 - `sample-and-hold.ts`
 - `scalar-fields.ts`
 - `scan-band-glitch.ts`

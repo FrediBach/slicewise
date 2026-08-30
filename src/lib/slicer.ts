@@ -31,7 +31,16 @@ import {
   previewLineCount,
   previewMorphSteps,
 } from './preview-detail';
-import { isPreviewBusy, previewViewTransform, renderDisposition } from './render-scheduling';
+import {
+  coalesceRenderQuality,
+  createExplicitRenderSnapshot,
+  isConfigExportCurrent,
+  isPreviewBusy,
+  previewViewTransform,
+  renderDisposition,
+  type RenderPurpose,
+  type RenderRequestOptions,
+} from './render-scheduling';
 import { setDisabled, setDisabledPair } from './control-state';
 import { createRenderSettingsSnapshot } from './render-settings';
 import { ParameterHistory } from './parameter-history';
@@ -94,11 +103,9 @@ type AppState = RenderSettings &
     dragging: boolean;
   };
 
-type RenderRequest = {
+type RenderRequest = RenderRequestOptions & {
   id: number;
   meshVersion: number;
-  quick: boolean;
-  settings: ContourSettings;
   queuedAt: number;
   dispatchedAt?: number;
 };
@@ -438,8 +445,11 @@ if (typeof document !== 'undefined') {
     type: 'module',
   });
   let requestId = 0,
-    appliedRequestId = 0,
-    failedRequestId = 0;
+    committedConfigRequestId = 0,
+    latestConfigRequestId = 0,
+    failedRequestId = 0,
+    failedConfigRequestId = 0;
+  let latestRenderPurpose: RenderPurpose = 'config';
   let queuedRender: RenderRequest | null = null,
     activeRender: RenderRequest | null = null,
     renderInFlight = false;
@@ -463,10 +473,10 @@ if (typeof document !== 'undefined') {
       requestAnimationFrame(() => {
         const paintedAt = performance.now();
         recordMeasure('slicewise:render:end-to-paint', request.queuedAt, paintedAt);
-        if (request.quick && request.meshVersion === meshVersion) {
+        if (request.quality === 'quick' && request.meshVersion === meshVersion) {
           const startedAt = request.dispatchedAt ?? request.queuedAt;
           previewPerformance = observePreviewPerformance(previewPerformance, paintedAt - startedAt);
-          if (queuedRender?.quick)
+          if (queuedRender?.quality === 'quick')
             queuedRender.settings.previewDetail = previewDetail(previewPerformance);
         }
       }),
@@ -476,18 +486,18 @@ if (typeof document !== 'undefined') {
   function settingsSnapshot(): ContourSettings {
     return createRenderSettingsSnapshot(state);
   }
-  function throttleDelay(): number {
+  function throttleDelay(settings: ContourSettings): number {
     const triangles = state.mesh ? state.mesh.T.length / 3 : 0;
     const detail = previewDetail(previewPerformance);
-    const previewLines = previewLineCount(state.lines, detail);
-    const visibilityCost = state.hide ? 1.55 : 1;
-    const quality = previewCurveQuality(state.quality, detail);
+    const previewLines = previewLineCount(settings.lines, detail);
+    const visibilityCost = settings.hide ? 1.55 : 1;
+    const quality = previewCurveQuality(settings.quality, detail);
     const curveCost = 1 + Math.max(0, quality - 1) * 0.055;
     const morphCost =
-      state.morphEnabled && Object.keys(state.morphTargets).length
-        ? previewMorphSteps(state.morphSteps, detail) *
-          (state.morphSecondEnabled && Object.keys(state.morphTargets2).length
-            ? previewMorphSteps(state.morphStepsY, detail)
+      settings.morphEnabled && Object.keys(settings.morphTargets).length
+        ? previewMorphSteps(settings.morphSteps, detail) *
+          (settings.morphSecondEnabled && Object.keys(settings.morphTargets2).length
+            ? previewMorphSteps(settings.morphStepsY, detail)
             : 1)
         : 1;
     const score = triangles * previewLines * visibilityCost * curveCost * morphCost;
@@ -511,10 +521,12 @@ if (typeof document !== 'undefined') {
     while (svg.firstChild) root.appendChild(svg.firstChild);
     svg.appendChild(root);
   }
-  function applyViewTransform(): void {
+  function applyViewTransform(
+    current: { zoom: number; panX: number; panY: number; pw: number; ph: number } = state,
+  ): void {
     const root = $('bed').querySelector<SVGGElement>('[data-preview-root]');
     if (!root) return;
-    const [scale, tx, ty] = previewViewTransform(previewView, state, state.pw, state.ph);
+    const [scale, tx, ty] = previewViewTransform(previewView, current, current.pw, current.ph);
     root.setAttribute('transform', `matrix(${scale} 0 0 ${scale} ${tx} ${ty})`);
   }
   function applyPreview(result: ContourResult, request: RenderRequest): void {
@@ -528,14 +540,14 @@ if (typeof document !== 'undefined') {
       panX: request.settings.panX,
       panY: request.settings.panY,
     };
-    applyViewTransform();
+    applyViewTransform(request.purpose === 'config' ? state : request.settings);
     $('rPaths').textContent = result.paths.toLocaleString();
     $('rPts').textContent = Math.round(result.nodes).toLocaleString();
     updateExportSize();
     $('rMs').textContent = Math.round(result.ms) + ' ms';
   }
   function applyRender(result: ContourResult, request: RenderRequest): void {
-    appliedRequestId = request.id;
+    committedConfigRequestId = request.id;
     state.svg = result.svg;
     state.svgBytes = result.bytes;
     state.toolpaths = result.toolpaths || [];
@@ -548,11 +560,20 @@ if (typeof document !== 'undefined') {
   }
   async function waitForCurrentRender(): Promise<void> {
     for (;;) {
-      if (!renderInFlight && !queuedRender && appliedRequestId === requestId) return;
-      if (!renderInFlight && !queuedRender) redraw(false);
-      const awaitedRequestId = requestId;
+      if (isConfigExportCurrent(committedConfigRequestId, latestConfigRequestId)) return;
+      if (!renderInFlight && !queuedRender)
+        requestRender({
+          settings: settingsSnapshot(),
+          quality: 'exact',
+          history: 'ignore',
+          purpose: 'config',
+        });
+      const awaitedRequestId = latestConfigRequestId;
       await new Promise<void>((resolve) => renderWaiters.push(resolve));
-      if (failedRequestId >= awaitedRequestId && appliedRequestId < awaitedRequestId) {
+      if (
+        failedConfigRequestId >= awaitedRequestId &&
+        committedConfigRequestId < awaitedRequestId
+      ) {
         throw new Error('The latest contour render could not be exported');
       }
     }
@@ -571,48 +592,68 @@ if (typeof document !== 'undefined') {
       type: 'render',
       id: request.id,
       meshVersion: request.meshVersion,
-      quick: request.quick,
+      quick: request.quality === 'quick',
       settings: request.settings,
     });
   }
   function scheduleRender(): void {
     if (renderInFlight || !queuedRender) return;
     clearTimeout(renderTimer);
-    const wait = queuedRender.quick
-      ? Math.max(0, throttleDelay() - (performance.now() - lastDispatch))
-      : 0;
+    const wait =
+      queuedRender.quality === 'quick'
+        ? Math.max(0, throttleDelay(queuedRender.settings) - (performance.now() - lastDispatch))
+        : 0;
     if (wait > 1) renderTimer = setTimeout(dispatchRender, wait);
     else requestAnimationFrame(dispatchRender);
   }
-  function redrawWithSettings(settings: ContourSettings, quick: boolean): void {
-    if (!state.mesh) return;
+  function requestRender(options: RenderRequestOptions): void {
     // Preserve a queued final-quality request; otherwise only the latest input
     // matters. This coalesces pointer and slider events while the worker is busy.
-    const renderQuick = quick && queuedRender?.quick !== false;
-    if (renderQuick) settings.previewDetail = previewDetail(previewPerformance);
+    const quality = coalesceRenderQuality(options.quality, options.purpose, queuedRender);
+    const prepared = createExplicitRenderSnapshot(
+      { ...options, quality },
+      quality === 'quick' ? previewDetail(previewPerformance) : undefined,
+    );
+    if (prepared.history === 'record') scheduleParameterHistory();
+    if (!state.mesh) return;
+    const id = ++requestId;
+    latestRenderPurpose = prepared.purpose;
+    if (prepared.purpose === 'config') latestConfigRequestId = id;
     queuedRender = {
-      id: ++requestId,
+      ...prepared,
+      id,
       meshVersion,
-      quick: renderQuick,
-      settings,
       queuedAt: performance.now(),
     };
     syncPreviewBusy();
     scheduleRender();
   }
   function redraw(quick: boolean): void {
-    if (!quick) scheduleParameterHistory();
-    redrawWithSettings(settingsSnapshot(), quick);
+    requestRender({
+      settings: settingsSnapshot(),
+      quality: quick ? 'quick' : 'exact',
+      history: quick ? 'ignore' : 'record',
+      purpose: 'config',
+    });
   }
   function invalidateRenderState(): void {
-    requestId++;
+    const id = ++requestId;
+    latestRenderPurpose = 'config';
+    latestConfigRequestId = id;
     if (!queuedRender) return;
-    const settings = settingsSnapshot();
-    if (queuedRender.quick) settings.previewDetail = previewDetail(previewPerformance);
+    const prepared = createExplicitRenderSnapshot(
+      {
+        settings: settingsSnapshot(),
+        quality: queuedRender.quality,
+        history: 'ignore',
+        purpose: 'config',
+      },
+      queuedRender.quality === 'quick' ? previewDetail(previewPerformance) : undefined,
+    );
     queuedRender = {
       ...queuedRender,
-      id: requestId,
-      settings,
+      ...prepared,
+      id,
       queuedAt: performance.now(),
     };
   }
@@ -631,10 +672,12 @@ if (typeof document !== 'undefined') {
         responseId: data.id,
         latestRequestId: requestId,
         sameMesh: data.meshVersion === meshVersion,
-        quick: data.result.quick,
-        allowStaleQuickPreview: state.dragging,
+        quality: completedRequest.quality,
+        responsePurpose: completedRequest.purpose,
+        latestPurpose: latestRenderPurpose,
+        allowStaleQuickPreview: state.dragging && completedRequest.purpose === 'config',
       });
-      if (disposition !== 'discard') {
+      if (disposition === 'commit' || disposition === 'preview') {
         const applyStarted = performance.now();
         if (disposition === 'commit') applyRender(data.result, completedRequest);
         else applyPreview(data.result, completedRequest);
@@ -643,6 +686,7 @@ if (typeof document !== 'undefined') {
       }
     } else if (data.meshVersion === meshVersion && data.type === 'error') {
       failedRequestId = data.id;
+      if (completedRequest?.purpose === 'config') failedConfigRequestId = data.id;
       showError(data.message);
     }
     notifyRenderWaiters();
@@ -650,11 +694,13 @@ if (typeof document !== 'undefined') {
     scheduleRender();
   });
   renderWorker.addEventListener('error', () => {
+    const failedPurpose = activeRender?.purpose ?? queuedRender?.purpose ?? latestRenderPurpose;
     clearTimeout(renderTimer);
     queuedRender = null;
     activeRender = null;
     renderInFlight = false;
     failedRequestId = requestId;
+    if (failedPurpose === 'config') failedConfigRequestId = latestConfigRequestId;
     notifyRenderWaiters();
     syncPreviewBusy();
     showError('The contour worker stopped unexpectedly — reload the page to restart it');
@@ -3265,7 +3311,12 @@ if (typeof document !== 'undefined') {
     if (!animationProject) return;
     const settings = evaluateAnimationSettings(animationProject, timeMs, animationParameters);
     syncAnimationControlValues(settings);
-    redrawWithSettings(settings, quick);
+    requestRender({
+      settings,
+      quality: quick ? 'quick' : 'exact',
+      history: 'ignore',
+      purpose: 'animation-preview',
+    });
   }
 
   function seekAnimation(timeMs: number, selectExact = false): void {

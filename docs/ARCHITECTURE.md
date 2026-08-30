@@ -130,6 +130,8 @@ Nonlinear projected runs are adaptively subdivided in world space before visibil
 
 The hidden-line depth buffer rasterizes projected source triangles directly for affine and bounded disk transforms. Spherical and inversion modes adaptively tessellate source faces to a depth-buffer-pixel error tolerance, with a recursion cap of four. Faces crossing a horizon or singular domain are subdivided; only finite valid subfaces are rasterized. Visibility retains its neighboring-pixel tolerance around the resulting surface.
 
+Every render request carries an explicit detached settings snapshot, quick/exact quality, record/ignore history policy, and Config/animation-preview/animation-export purpose. Animation snapshots defensively disable both Morph dimensions and never replace the exact Config SVG/toolpaths used by ordinary export. Stale-response checks include both the request ID and purpose; animation-export results are routed away from the visible preview for the dedicated exporter.
+
 The runtime publishes the latest timing samples through the browser Performance API as `slicewise:render:queue`, `slicewise:render:worker-roundtrip`, `slicewise:render:dom-apply`, and `slicewise:render:end-to-paint`. The visible Render statistic remains the contour engine's worker computation time.
 
 There are two worker entry points:

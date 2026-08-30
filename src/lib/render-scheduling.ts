@@ -1,4 +1,16 @@
-export type RenderDisposition = 'commit' | 'preview' | 'discard';
+import { type ContourSettings } from './contour-engine';
+
+export type RenderDisposition = 'commit' | 'preview' | 'capture' | 'discard';
+export type RenderQuality = 'quick' | 'exact';
+export type RenderHistoryPolicy = 'record' | 'ignore';
+export type RenderPurpose = 'config' | 'animation-preview' | 'animation-export';
+
+export type RenderRequestOptions = {
+  settings: ContourSettings;
+  quality: RenderQuality;
+  history: RenderHistoryPolicy;
+  purpose: RenderPurpose;
+};
 
 export type PreviewView = { zoom: number; panX: number; panY: number };
 
@@ -13,9 +25,48 @@ type RenderDispositionInput = {
   responseId: number;
   latestRequestId: number;
   sameMesh: boolean;
-  quick: boolean;
+  quality: RenderQuality;
+  responsePurpose: RenderPurpose;
+  latestPurpose: RenderPurpose;
   allowStaleQuickPreview?: boolean;
 };
+
+/** Detaches caller-owned settings and enforces purpose-specific invariants. */
+export function createExplicitRenderSnapshot(
+  options: RenderRequestOptions,
+  quickPreviewDetail?: number,
+): RenderRequestOptions {
+  const snapshot = globalThis.structuredClone(options.settings);
+  const quality = options.purpose === 'animation-export' ? 'exact' : options.quality;
+  const history = options.purpose === 'config' ? options.history : 'ignore';
+  if (options.purpose !== 'config') {
+    snapshot.morphEnabled = false;
+    snapshot.morphSecondEnabled = false;
+    snapshot.morphTargets = {};
+    snapshot.morphTargets2 = {};
+  }
+  if (quality === 'quick' && quickPreviewDetail !== undefined)
+    snapshot.previewDetail = quickPreviewDetail;
+  return { ...options, quality, history, settings: snapshot };
+}
+
+/** A queued exact render only upgrades later quick work for the same purpose. */
+export function coalesceRenderQuality(
+  incoming: RenderQuality,
+  purpose: RenderPurpose,
+  queued?: Pick<RenderRequestOptions, 'quality' | 'purpose'> | null,
+): RenderQuality {
+  return incoming === 'quick' && queued?.quality === 'exact' && queued.purpose === purpose
+    ? 'exact'
+    : incoming;
+}
+
+export function isConfigExportCurrent(
+  committedConfigRequestId: number,
+  latestConfigRequestId: number,
+): boolean {
+  return committedConfigRequestId > 0 && committedConfigRequestId === latestConfigRequestId;
+}
 
 /**
  * Exact results must always be current. During a direct manipulation gesture,
@@ -26,14 +77,19 @@ export function renderDisposition({
   responseId,
   latestRequestId,
   sameMesh,
-  quick,
+  quality,
+  responsePurpose,
+  latestPurpose,
   allowStaleQuickPreview = false,
 }: RenderDispositionInput): RenderDisposition {
-  if (!sameMesh || responseId > latestRequestId) return 'discard';
+  const quick = quality === 'quick';
+  if (!sameMesh || responseId > latestRequestId || responsePurpose !== latestPurpose)
+    return 'discard';
   if (responseId !== latestRequestId)
-    return quick && allowStaleQuickPreview ? 'preview' : 'discard';
+    return quick && allowStaleQuickPreview && responsePurpose === 'config' ? 'preview' : 'discard';
+  if (responsePurpose === 'animation-export') return quick ? 'discard' : 'capture';
   if (quick) return 'preview';
-  return 'commit';
+  return responsePurpose === 'config' ? 'commit' : 'preview';
 }
 
 export function isPreviewBusy({
