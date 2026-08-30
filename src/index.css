@@ -1308,15 +1308,17 @@ select {
 .topbar {
   height: 32px;
   flex: 0 0 32px;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   padding: 0 25px;
   border-bottom: 1px solid #c8ccc6;
   background: rgba(229, 232, 227, 0.72);
   backdrop-filter: blur(8px);
 }
 .mode-switch {
+  grid-column: 2;
+  justify-self: center;
   display: inline-flex;
   padding: 2px;
   border: 1px solid #c3c7c1;
@@ -1339,6 +1341,8 @@ select {
   color: white;
 }
 .workspace-title {
+  grid-column: 1;
+  justify-self: start;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1350,6 +1354,8 @@ select {
   color: #989d97;
 }
 .readout {
+  grid-column: 3;
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 22px;
