@@ -131,6 +131,25 @@ export function ExportPanel() {
             unit="mm/m"
             morphable={false}
           />
+          <div id="uunaExpressiveMotionSection">
+            <Checkbox id="uunaExpressiveMotionEnabled">Expressive 3-axis motion</Checkbox>
+            <p className="gradient-note">
+              Opt in to coordinated X/Y/Z output for UUNA TEK. This foundation mode holds a constant
+              contact Z; angled-pen compensation and pressure shaping are not active yet.
+            </p>
+            <div id="uunaExpressiveMotionControls" hidden>
+              <ValueControl
+                id="uunaExpressiveContactZ"
+                label="Contact Z"
+                min="-20"
+                max="50"
+                step="0.1"
+                value="-3"
+                unit="mm"
+                morphable={false}
+              />
+            </div>
+          </div>
           <p className="gradient-note" id="gcodeProfileNote">
             {GCODE_PROFILES[DEFAULT_GCODE_PROFILE_ID].note}
           </p>

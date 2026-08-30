@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultUunaExpressiveMotion } from './gcode-3d-toolpaths';
 import {
   createCurrentExport,
   createExportFilename,
@@ -17,6 +18,7 @@ const exportState = (overrides: Partial<ExportState> = {}): ExportState => ({
   penUp: 3,
   penDown: -2,
   zFeed: 900,
+  uunaExpressiveMotion: defaultUunaExpressiveMotion(-2),
   gcodeProfile: 'uunatek3-a3',
   gcodeAutoRotate: true,
   clipToArtboard: true,
@@ -121,6 +123,32 @@ describe('slicer export assembly', () => {
     expect(preflight.validation.valid).toBe(true);
     expect(preflight.validation.stats.drawDistance).toBeCloseTo(Math.hypot(20, 20));
     expect(preflight.validation.segments.some(({ kind }) => kind === 'draw')).toBe(true);
+  });
+
+  it('gates coordinated XYZ behind both the UUNA capability and explicit opt-in', () => {
+    const legacy = createGCodeExport(exportState());
+    const expressive = createGCodeExport(
+      exportState({
+        uunaExpressiveMotion: {
+          ...defaultUunaExpressiveMotion(-2.5),
+          enabled: true,
+        },
+      }),
+    );
+    const generic = createGCodeExport(
+      exportState({
+        gcodeProfile: 'generic',
+        uunaExpressiveMotion: {
+          ...defaultUunaExpressiveMotion(-2.5),
+          enabled: true,
+        },
+      }),
+    );
+
+    expect(legacy).not.toContain('coordinated XYZ');
+    expect(expressive).toContain('G1 X30 Y40 Z-2.5 F2400');
+    expect(generic).not.toContain('coordinated XYZ');
+    expect(generic).not.toMatch(/G1 X\S+ Y\S+ Z/);
   });
 
   it('blocks export when runtime machine settings cannot pass preflight', () => {

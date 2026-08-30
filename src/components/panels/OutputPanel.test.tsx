@@ -182,6 +182,9 @@ describe('OutputPanel composition boundaries', () => {
       'UUNA TEK 3.0 · A0 · 1189 × 841 mm',
     );
     expect(document.getElementById('gcodeControls')).toBeInTheDocument();
+    expect(document.getElementById('uunaExpressiveMotionEnabled')).not.toBeChecked();
+    expect(document.getElementById('uunaExpressiveContactZN')).toHaveValue(-3);
+    expect(document.getElementById('uunaExpressiveMotionControls')).toHaveAttribute('hidden');
     expect(document.getElementById('gcodePreflightStatus')).toHaveTextContent(
       'Waiting for an exact render',
     );

@@ -1,5 +1,19 @@
 The right model is “expressive 3-axis plotting with a fixed angled tool,” not a fourth motorized angle axis.
 
+## Implementation status
+
+Phase 1 safe foundation is implemented in the application:
+
+- machine profiles declare coordinated-XYZ and fixed-angle-holder capabilities;
+- export state has a structured, disabled-by-default UUNA expressive-motion configuration;
+- UUNA export exposes an opt-in master control and constant Contact Z;
+- a pure machine-operation model builds constant-contact 3D strokes;
+- the serializer emits coordinated XYZ only when both the UUNA capability and opt-in are active;
+- preflight validates the coordinated command subset and reports its Z range;
+- disabled and Generic output stay on the existing binary-Z path.
+
+Hardware characterization remains open. Until coordinated motion is confirmed on target firmware, the new mode should be treated as calibration-required output. Phase 2 pen-angle compensation, pressure ramps, and calibration patterns are not implemented yet.
+
 UUNA TEK 3.0 has stepper-driven X, Y, and Z axes, while its advertised 0–90° pen angle appears to be a manually adjusted holder setting. I found no evidence that pen angle can be changed through G-code. The angle still matters computationally: changing Z with a tilted pen shifts the physical tip in X/Y, affects pressure, and changes broad-nib or brush behavior. [UUNA TEK specifications](https://uunatek.com/products/uuna-tek-3-0-a2-size-pen-plotter-drawing-robot-drawing-machine-writing-machine), [official G-code guide](https://uunatek.com/blogs/tips-and-tricks/beginner-s-guide-to-g-code-for-uuna-tek-3-0-pen-plotter-step-by-step-tutorial).
 
 I’d use the following plan.
@@ -223,8 +237,10 @@ uunaExpressiveMotion: {
   modulationPeriod: 20;
   curvatureRelief: 0;
   preserveStrokeDirection: true;
-  surfaceCompensation: { mode: 'off' };
-};
+  surfaceCompensation: {
+    mode: 'off';
+  }
+}
 ```
 
 Add explicit migration defaults so old saved state is always safe. Export-only settings currently live in `slicer.ts`; if they should persist across sessions, that should be an intentional separate export-preset feature rather than silently adding them to creative render snapshots.

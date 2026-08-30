@@ -46,6 +46,7 @@ import { createRenderSettingsSnapshot } from './render-settings';
 import { ParameterHistory } from './parameter-history';
 import { normalizeParameterSnapshot } from './parameter-migrations';
 import { DEFAULT_GCODE_PROFILE_ID, resolveGCodeProfile } from './gcode-profiles';
+import { defaultUunaExpressiveMotion, type UunaExpressiveMotion } from './gcode-3d-toolpaths';
 import {
   orientPaperSize,
   paperOrientationForSize,
@@ -148,6 +149,7 @@ type AppState = RenderSettings &
     penUp: number;
     penDown: number;
     zFeed: number;
+    uunaExpressiveMotion: UunaExpressiveMotion;
     svg: string;
     svgBytes: number;
     toolpaths: ContourToolpathGroup[];
@@ -450,6 +452,7 @@ const state: AppState = {
   penUp: 0,
   penDown: -3,
   zFeed: 2000,
+  uunaExpressiveMotion: defaultUunaExpressiveMotion(),
   svg: '',
   svgBytes: 0,
   toolpaths: [],
@@ -1282,6 +1285,21 @@ if (typeof document !== 'undefined') {
   bindExportPair('penUp', 'penUp');
   bindExportPair('penDown', 'penDown');
   bindExportPair('zFeed', 'zFeed');
+  function bindExpressiveContactZ(): void {
+    const slider = $('uunaExpressiveContactZ');
+    const number = $('uunaExpressiveContactZN');
+    const apply = (value: string, from: 's' | 'n'): void => {
+      const next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
+      if (Number.isNaN(next)) return;
+      state.uunaExpressiveMotion.contactZ = next;
+      if (from !== 's') slider.value = String(next);
+      if (from !== 'n') number.value = String(next);
+      updateExportSize();
+    };
+    slider.addEventListener('input', (event) => apply(inputTarget(event).value, 's'));
+    number.addEventListener('input', (event) => apply(inputTarget(event).value, 'n'));
+  }
+  bindExpressiveContactZ();
   morphKeyById.set('color', 'color');
 
   function syncProjectionWarpControls(): void {
@@ -1533,6 +1551,7 @@ if (typeof document !== 'undefined') {
       setExportPair(key, key, profile[key]);
     $('gcodeProfileNote').textContent = profile.note;
     if (profile.workingArea) setArtboardSize(profile.workingArea.width, profile.workingArea.height);
+    syncExpressiveMotionControls();
     updateExportSize();
   });
   $('gcodeAutoRotate').addEventListener('change', (event) => {
@@ -1562,6 +1581,18 @@ if (typeof document !== 'undefined') {
     updateExportSize();
   });
   syncTravelOptimization();
+
+  function syncExpressiveMotionControls(): void {
+    const supported = resolveGCodeProfile(state.gcodeProfile).capabilities.coordinatedXYZ;
+    $('uunaExpressiveMotionSection').hidden = !supported;
+    $('uunaExpressiveMotionControls').hidden = !supported || !state.uunaExpressiveMotion.enabled;
+  }
+  $('uunaExpressiveMotionEnabled').addEventListener('change', (event) => {
+    state.uunaExpressiveMotion.enabled = inputTarget(event).checked;
+    syncExpressiveMotionControls();
+    updateExportSize();
+  });
+  syncExpressiveMotionControls();
 
   const curvedSliceField = (): boolean =>
     state.axis === 'spherical' || state.axis === 'cylindrical';
@@ -4298,9 +4329,13 @@ if (typeof document !== 'undefined') {
       stats.estimatedSeconds < 60
         ? `${Math.ceil(stats.estimatedSeconds)} sec`
         : `${Math.floor(stats.estimatedSeconds / 60)} min ${Math.ceil(stats.estimatedSeconds % 60)} sec`;
+    const zRange =
+      stats.minimumZ === null || stats.maximumZ === null
+        ? ''
+        : ` · Z ${stats.minimumZ.toFixed(1)}–${stats.maximumZ.toFixed(1)} mm`;
     $('gcodePreflightStats').textContent =
       `${stats.drawDistance.toFixed(1)} mm drawn · ${stats.travelDistance.toFixed(1)} mm travel · ` +
-      `${stats.penLifts} lifts · about ${duration}`;
+      `${stats.penLifts} lifts${zRange} · about ${duration}`;
     $('gcodePreflightLayout').textContent =
       preflight.rotation === 'clockwise-90'
         ? `Canvas ${preflight.sourceSheet.width} × ${preflight.sourceSheet.height} mm → machine ${preflight.sheet.width} × ${preflight.sheet.height} mm · rotated 90° clockwise`

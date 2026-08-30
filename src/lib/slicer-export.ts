@@ -1,4 +1,5 @@
 import { type ContourToolpathGroup } from './contour-engine';
+import type { UunaExpressiveMotion } from './gcode-3d-toolpaths';
 import { generateGCode } from './gcode';
 import { resolveGCodeMachineLayout, type GCodeLayoutRotation } from './gcode-layout';
 import { resolveGCodeProfile } from './gcode-profiles';
@@ -14,6 +15,7 @@ export interface ExportState {
   penUp: number;
   penDown: number;
   zFeed: number;
+  uunaExpressiveMotion: UunaExpressiveMotion;
   gcodeProfile: string;
   gcodeAutoRotate: boolean;
   clipToArtboard: boolean;
@@ -51,6 +53,8 @@ export type GCodeExportPreflight = {
 
 export function createGCodeExportPreflight(state: ExportState): GCodeExportPreflight {
   const profile = resolveGCodeProfile(state.gcodeProfile);
+  const expressiveMotionEnabled =
+    state.uunaExpressiveMotion.enabled && profile.capabilities.coordinatedXYZ;
   const layout = resolveGCodeMachineLayout(
     state.toolpaths,
     { width: state.pw, height: state.ph },
@@ -77,6 +81,9 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
     clipToArtboard: state.clipToArtboard,
     optimizeTravel: state.optimizeTravel,
     mergeTolerance: state.mergeTolerance,
+    motion: expressiveMotionEnabled
+      ? { kind: 'coordinated-xyz', contactZ: state.uunaExpressiveMotion.contactZ }
+      : undefined,
     effects: {
       kaleidoscope: state.kaleidoscope,
       halftone: state.halftone,
@@ -108,6 +115,13 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
       zFeed: state.zFeed,
       machineWidth: profile.workingArea?.width,
       machineHeight: profile.workingArea?.height,
+      motion: expressiveMotionEnabled
+        ? {
+            kind: 'coordinated-xyz',
+            contactZ: state.uunaExpressiveMotion.contactZ,
+            zConvention: profile.capabilities.zConvention,
+          }
+        : undefined,
     }),
   };
 }

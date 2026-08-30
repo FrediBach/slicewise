@@ -133,4 +133,44 @@ describe('validateGCode', () => {
       expect.arrayContaining(['syntax', 'missing-end']),
     );
   });
+
+  it('accepts coordinated XYZ at the configured constant contact height', () => {
+    const output = generateGCode([{ color: 'black', runs: [[10, 10, 20, 20]] }], profile, {
+      ...profile,
+      origin: 'rear-left',
+      motion: { kind: 'coordinated-xyz', contactZ: -2.5 },
+    });
+    const result = validateGCode(output, {
+      ...profile,
+      motion: { kind: 'coordinated-xyz', contactZ: -2.5, zConvention: 'negative-down' },
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.stats.drawDistance3d).toBeCloseTo(Math.hypot(10, 10));
+    expect(result.stats.minimumZ).toBe(-2.5);
+    expect(result.stats.maximumZ).toBe(0);
+  });
+
+  it('rejects coordinated XYZ in binary mode and non-contact Z in coordinated mode', () => {
+    const program = [
+      'G21',
+      'G90',
+      'G94',
+      'G1 Z-3 F2000',
+      'G1 X5 Y5 Z-2 F3000',
+      'G1 Z0 F2000',
+      'G0 X0 Y0 F6000',
+      'M2',
+    ].join('\n');
+
+    expect(validateGCode(program, profile).errors.map(({ code }) => code)).toContain(
+      'mixed-axis-motion',
+    );
+    expect(
+      validateGCode(program, {
+        ...profile,
+        motion: { kind: 'coordinated-xyz', contactZ: -3, zConvention: 'negative-down' },
+      }).errors.map(({ code }) => code),
+    ).toContain('z-out-of-draw-range');
+  });
 });

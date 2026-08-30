@@ -26,8 +26,21 @@ describe('G-code machine profiles', () => {
         penUp: 0,
         penDown: -3,
         zFeed: 2000,
+        capabilities: {
+          coordinatedXYZ: true,
+          adjustableFixedPenAngle: true,
+          zConvention: 'negative-down',
+        },
       });
     }
+  });
+
+  it('keeps the generic profile on the conservative binary-Z path', () => {
+    expect(GCODE_PROFILES.generic.capabilities).toEqual({
+      coordinatedXYZ: false,
+      adjustableFixedPenAngle: false,
+      zConvention: 'positive-up',
+    });
   });
 
   it('resolves the legacy A3 identifier and unknown profiles safely', () => {

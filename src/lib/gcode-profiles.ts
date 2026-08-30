@@ -12,6 +12,11 @@ export type GCodeProfile = {
   penUp: number;
   penDown: number;
   zFeed: number;
+  capabilities: {
+    coordinatedXYZ: boolean;
+    adjustableFixedPenAngle: boolean;
+    zConvention: 'negative-down' | 'positive-up';
+  };
   note: string;
 };
 
@@ -33,6 +38,11 @@ const uunaTekProfile = (
   penUp: 0,
   penDown: -3,
   zFeed: 2000,
+  capabilities: {
+    coordinatedXYZ: true,
+    adjustableFixedPenAngle: true,
+    zConvention: 'negative-down',
+  },
   note: `UUNA TEK ${size} rear-left origin · ${width} × ${height} mm maximum working area · 3 mm pen drop. Set the machine origin at the sheet’s rear-left corner before plotting.`,
 });
 
@@ -52,6 +62,11 @@ export const GCODE_PROFILES: Record<GCodeProfileId, GCodeProfile> = {
     penUp: 5,
     penDown: 0,
     zFeed: 600,
+    capabilities: {
+      coordinatedXYZ: false,
+      adjustableFixedPenAngle: false,
+      zConvention: 'positive-up',
+    },
     note: 'Generic bottom-left origin. Confirm the working area, Z heights, speeds, and origin for your machine before plotting.',
   },
 };

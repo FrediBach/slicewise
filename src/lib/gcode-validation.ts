@@ -23,6 +23,13 @@ export type GCodeValidationOptions = {
   machineWidth?: number;
   machineHeight?: number;
   minimumDrawSegment?: number;
+  motion?:
+    | { kind: 'binary-z' }
+    | {
+        kind: 'coordinated-xyz';
+        contactZ: number;
+        zConvention: 'negative-down' | 'positive-up';
+      };
 };
 
 export type GCodeValidationResult = {
@@ -31,11 +38,14 @@ export type GCodeValidationResult = {
   segments: GCodePathSegment[];
   stats: {
     drawDistance: number;
+    drawDistance3d: number;
     estimatedSeconds: number;
     penChanges: number;
     penLifts: number;
     programLines: number;
     travelDistance: number;
+    minimumZ: number | null;
+    maximumZ: number | null;
   };
   valid: boolean;
   warnings: GCodeIssue[];
@@ -107,11 +117,17 @@ export function validateGCode(
   let ended = false;
   let motionSeen = false;
   let drawDistance = 0;
+  let drawDistance3d = 0;
   let travelDistance = 0;
   let estimatedSeconds = 0;
   let penChanges = 0;
   let penLifts = 0;
   let programLines = 0;
+  let minimumZ: number | null = null;
+  let maximumZ: number | null = null;
+  const coordinated = options.motion?.kind === 'coordinated-xyz';
+  const contactZ =
+    options.motion?.kind === 'coordinated-xyz' ? options.motion.contactZ : options.penDown;
 
   const addIssue = (
     severity: GCodeIssue['severity'],
@@ -205,31 +221,84 @@ export function validateGCode(
     const feed = words.get('F');
     if (feed === undefined || feed <= 0)
       addIssue('error', 'missing-feed', line, 'Every motion must include a positive feed rate.');
-    if (hasZ && (hasX || hasY))
+    if (hasZ && (hasX || hasY) && !coordinated)
       addIssue('error', 'mixed-axis-motion', line, 'XY and Z motion must use separate lines.');
 
-    if (hasZ) {
+    if (hasZ && !hasX && !hasY) {
       if (name !== 'G1') addIssue('error', 'unsafe-z-motion', line, 'Pen Z motion must use G1.');
       if (hasX || hasY || words.size !== 2)
         addIssue('error', 'invalid-z-motion', line, 'A pen move must contain only Z and F.');
       if (feed !== undefined && !approximatelyEqual(feed, options.zFeed))
         addIssue('error', 'wrong-feed', line, `Expected Z feed ${options.zFeed} mm/min.`);
       const nextZ = words.get('Z')!;
+      minimumZ = minimumZ === null ? nextZ : Math.min(minimumZ, nextZ);
+      maximumZ = maximumZ === null ? nextZ : Math.max(maximumZ, nextZ);
       const previousPen = pen;
       if (approximatelyEqual(nextZ, options.penUp)) pen = 'up';
-      else if (approximatelyEqual(nextZ, options.penDown)) pen = 'down';
+      else if (approximatelyEqual(nextZ, contactZ)) pen = 'down';
       else {
         pen = 'unknown';
         addIssue(
           'error',
           'unknown-pen-height',
           line,
-          `Z${nextZ} is neither the configured pen-up nor pen-down height.`,
+          `Z${nextZ} is neither the configured pen-up nor contact height.`,
         );
       }
       if (previousPen === 'down' && pen === 'up') penLifts += 1;
       if (z !== null && feed && feed > 0) estimatedSeconds += (Math.abs(nextZ - z) / feed) * 60;
       z = nextZ;
+      continue;
+    }
+
+    if (coordinated && hasZ) {
+      if (name !== 'G1')
+        addIssue('error', 'unsafe-coordinated-motion', line, 'Coordinated XYZ motion must use G1.');
+      if (!hasX || !hasY || words.size !== 4) {
+        addIssue(
+          'error',
+          'invalid-xyz-motion',
+          line,
+          'A coordinated draw move must contain X, Y, Z, and F.',
+        );
+        continue;
+      }
+      const nextX = words.get('X')!;
+      const nextY = words.get('Y')!;
+      const nextZ = words.get('Z')!;
+      minimumZ = minimumZ === null ? nextZ : Math.min(minimumZ, nextZ);
+      maximumZ = maximumZ === null ? nextZ : Math.max(maximumZ, nextZ);
+      if (!approximatelyEqual(nextZ, contactZ))
+        addIssue(
+          'error',
+          'z-out-of-draw-range',
+          line,
+          `Phase 1 constant-contact motion requires Z${contactZ}.`,
+        );
+      if (pen !== 'down')
+        addIssue('error', 'pen-not-down', line, 'Coordinated drawing requires contact first.');
+      validateXYBounds(nextX, nextY, line, options, addIssue);
+      if (feed !== undefined && !approximatelyEqual(feed, options.drawFeed))
+        addIssue('error', 'wrong-feed', line, `Expected draw feed ${options.drawFeed} mm/min.`);
+      const planarDistance = Math.hypot(nextX - x, nextY - y);
+      const spatialDistance = Math.hypot(nextX - x, nextY - y, nextZ - (z ?? nextZ));
+      if (planarDistance > EPSILON && planarDistance < minimumDrawSegment)
+        addIssue(
+          'warning',
+          'tiny-draw-segment',
+          line,
+          `Draw segment is only ${planarDistance.toFixed(3)} mm long.`,
+        );
+      if (planarDistance > EPSILON) {
+        segments.push({ from: [x, y], to: [nextX, nextY], kind: 'draw', line });
+        drawDistance += planarDistance;
+        drawDistance3d += spatialDistance;
+        if (feed && feed > 0) estimatedSeconds += (spatialDistance / feed) * 60;
+      }
+      x = nextX;
+      y = nextY;
+      z = nextZ;
+      pen = approximatelyEqual(nextZ, options.penUp) ? 'up' : 'down';
       continue;
     }
 
@@ -239,10 +308,7 @@ export function validateGCode(
     }
     const nextX = words.get('X')!;
     const nextY = words.get('Y')!;
-    if (nextX < -EPSILON || nextX > options.width + EPSILON)
-      addIssue('error', 'x-out-of-bounds', line, `X${nextX} is outside 0–${options.width} mm.`);
-    if (nextY < -EPSILON || nextY > options.height + EPSILON)
-      addIssue('error', 'y-out-of-bounds', line, `Y${nextY} is outside 0–${options.height} mm.`);
+    validateXYBounds(nextX, nextY, line, options, addIssue);
     const distance = Math.hypot(nextX - x, nextY - y);
     const kind = name === 'G0' ? 'travel' : 'draw';
     const expectedFeed = kind === 'travel' ? options.travelFeed : options.drawFeed;
@@ -262,7 +328,10 @@ export function validateGCode(
     if (distance > EPSILON) {
       segments.push({ from: [x, y], to: [nextX, nextY], kind, line });
       if (kind === 'travel') travelDistance += distance;
-      else drawDistance += distance;
+      else {
+        drawDistance += distance;
+        drawDistance3d += distance;
+      }
       if (feed && feed > 0) estimatedSeconds += (distance / feed) * 60;
     }
     x = nextX;
@@ -284,11 +353,27 @@ export function validateGCode(
     segments,
     stats: {
       drawDistance,
+      drawDistance3d,
       travelDistance,
       penLifts,
       penChanges,
       programLines,
       estimatedSeconds,
+      minimumZ,
+      maximumZ,
     },
   };
+}
+
+function validateXYBounds(
+  x: number,
+  y: number,
+  line: number,
+  options: GCodeValidationOptions,
+  addIssue: (severity: GCodeIssue['severity'], code: string, line: number, message: string) => void,
+): void {
+  if (x < -EPSILON || x > options.width + EPSILON)
+    addIssue('error', 'x-out-of-bounds', line, `X${x} is outside 0–${options.width} mm.`);
+  if (y < -EPSILON || y > options.height + EPSILON)
+    addIssue('error', 'y-out-of-bounds', line, `Y${y} is outside 0–${options.height} mm.`);
 }

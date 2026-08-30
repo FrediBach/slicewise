@@ -125,6 +125,36 @@ describe('generateGCode', () => {
     expect(output.endsWith('M2\n')).toBe(true);
   });
 
+  it('keeps the legacy serializer byte-identical when binary motion is explicit', () => {
+    const groups = [group([[1, 2, 3, 4]])];
+    const sheet = { width: 10, height: 10 };
+
+    expect(
+      generateGCode(groups, sheet, { origin: 'rear-left', motion: { kind: 'binary-z' } }),
+    ).toBe(generateGCode(groups, sheet, { origin: 'rear-left' }));
+  });
+
+  it('serializes constant-contact strokes as coordinated XYZ motion', () => {
+    const output = generateGCode(
+      [group([[1, 2, 3, 4]])],
+      { width: 10, height: 10 },
+      {
+        origin: 'rear-left',
+        penUp: 0,
+        penDown: -3,
+        zFeed: 2000,
+        drawFeed: 3000,
+        motion: { kind: 'coordinated-xyz', contactZ: -2.5 },
+      },
+    );
+
+    expect(output).toContain('; Motion: coordinated XYZ · constant contact');
+    expect(output).toContain('G0 X1 Y2 F3000');
+    expect(output).toContain('G1 Z-2.5 F2000 ; pen contact');
+    expect(output).toContain('G1 X3 Y4 Z-2.5 F3000');
+    expect(output).toContain('G1 Z0 F2000 ; pen up');
+  });
+
   it('clips unsafe moves and joins nearby runs before plotting', () => {
     const output = generateGCode(
       [

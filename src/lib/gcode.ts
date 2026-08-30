@@ -1,4 +1,5 @@
 import { clipRunToRect, optimizeRuns } from './toolpaths';
+import { createConstantContactOperations, type MachineOperation } from './gcode-3d-toolpaths';
 
 export type ToolpathGroup = {
   color?: string;
@@ -23,6 +24,12 @@ export type GCodeOptions = {
     sourceWidth: number;
     sourceHeight: number;
   };
+  motion?:
+    | { kind: 'binary-z' }
+    | {
+        kind: 'coordinated-xyz';
+        contactZ: number;
+      };
   effects?: Partial<
     Record<
       | 'kaleidoscope'
@@ -140,6 +147,8 @@ export function generateGCode(
       ? '; Origin: rear-left of sheet; +X right; +Y toward front'
       : '; Origin: bottom-left of sheet; +X right; +Y up',
   ];
+  if (options.motion?.kind === 'coordinated-xyz')
+    lines.push('; Motion: coordinated XYZ · constant contact');
   if (effects.kaleidoscope)
     lines.push('; Kaleidoscope: mirrored radial geometry is included in these toolpaths');
   if (effects.halftone)
@@ -175,6 +184,19 @@ export function generateGCode(
     `G1 Z${clampPrecision(penUp)} F${clampPrecision(zFeed)} ; pen up`,
   );
 
+  if (options.motion?.kind === 'coordinated-xyz') {
+    const contactZ = finiteOption(options.motion.contactZ, penDown);
+    const operations = createConstantContactOperations(usableGroups, penUp, contactZ);
+    serializeCoordinatedOperations(lines, operations, {
+      drawFeed,
+      travelFeed,
+      zFeed,
+      penUp,
+    });
+    lines.push(`G0 X0 Y0 F${clampPrecision(travelFeed)}`, 'M2', '');
+    return lines.join('\n');
+  }
+
   let tool = 0;
   for (const group of usableGroups) {
     tool += 1;
@@ -195,4 +217,36 @@ export function generateGCode(
   }
   lines.push(`G0 X0 Y0 F${clampPrecision(travelFeed)}`, 'M2', '');
   return lines.join('\n');
+}
+
+function serializeCoordinatedOperations(
+  lines: string[],
+  operations: MachineOperation[],
+  settings: {
+    drawFeed: number;
+    travelFeed: number;
+    zFeed: number;
+    penUp: number;
+  },
+): void {
+  for (const operation of operations) {
+    if (operation.kind === 'pen-change') {
+      lines.push(`M0 ; change pen to ${operation.color}`);
+      continue;
+    }
+    if (operation.kind === 'travel') {
+      lines.push(
+        `G0 X${clampPrecision(operation.point.x)} Y${clampPrecision(operation.point.y)} F${clampPrecision(settings.travelFeed)}`,
+      );
+      continue;
+    }
+    const [start, ...points] = operation.stroke.points;
+    if (!start) continue;
+    lines.push(`G1 Z${clampPrecision(start.z)} F${clampPrecision(settings.zFeed)} ; pen contact`);
+    for (const point of points)
+      lines.push(
+        `G1 X${clampPrecision(point.x)} Y${clampPrecision(point.y)} Z${clampPrecision(point.z)} F${clampPrecision(settings.drawFeed)}`,
+      );
+    lines.push(`G1 Z${clampPrecision(settings.penUp)} F${clampPrecision(settings.zFeed)} ; pen up`);
+  }
 }
