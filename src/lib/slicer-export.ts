@@ -1,5 +1,6 @@
 import { type ContourToolpathGroup } from './contour-engine';
 import { generateGCode } from './gcode';
+import { resolveGCodeMachineLayout, type GCodeLayoutRotation } from './gcode-layout';
 import { resolveGCodeProfile } from './gcode-profiles';
 import { validateGCode, type GCodeValidationResult } from './gcode-validation';
 
@@ -14,6 +15,7 @@ export interface ExportState {
   penDown: number;
   zFeed: number;
   gcodeProfile: string;
+  gcodeAutoRotate: boolean;
   clipToArtboard: boolean;
   optimizeTravel: boolean;
   mergeTolerance: number;
@@ -41,48 +43,64 @@ export type CurrentExport = {
 
 export type GCodeExportPreflight = {
   content: string;
+  rotation: GCodeLayoutRotation;
+  sheet: { width: number; height: number };
+  sourceSheet: { width: number; height: number };
   validation: GCodeValidationResult;
 };
 
 export function createGCodeExportPreflight(state: ExportState): GCodeExportPreflight {
   const profile = resolveGCodeProfile(state.gcodeProfile);
-  const content = generateGCode(
+  const layout = resolveGCodeMachineLayout(
     state.toolpaths,
     { width: state.pw, height: state.ph },
-    {
-      name: state.name,
-      drawFeed: state.drawFeed,
-      travelFeed: state.travelFeed,
-      penUp: state.penUp,
-      penDown: state.penDown,
-      zFeed: state.zFeed,
-      machine: profile.machine,
-      origin: profile.origin,
-      clipToArtboard: state.clipToArtboard,
-      optimizeTravel: state.optimizeTravel,
-      mergeTolerance: state.mergeTolerance,
-      effects: {
-        kaleidoscope: state.kaleidoscope,
-        halftone: state.halftone,
-        chroma: state.chroma,
-        misregistration: state.misregistration,
-        humanizer: state.humanizer,
-        yarnCurl: state.yarnCurl,
-        blueprint: state.blueprint,
-        topographicMap: state.topographicMap,
-        vectorZoom:
-          state.vectorZoom1Enabled ||
-          state.vectorZoom2Enabled ||
-          state.vectorZoom3Enabled ||
-          state.vectorZoom4Enabled,
-      },
-    },
+    profile.workingArea,
+    state.gcodeAutoRotate,
   );
+  const content = generateGCode(layout.groups, layout.sheet, {
+    name: state.name,
+    drawFeed: state.drawFeed,
+    travelFeed: state.travelFeed,
+    penUp: state.penUp,
+    penDown: state.penDown,
+    zFeed: state.zFeed,
+    machine: profile.machine,
+    origin: profile.origin,
+    layout:
+      layout.rotation === 'clockwise-90'
+        ? {
+            rotation: layout.rotation,
+            sourceWidth: layout.sourceSheet.width,
+            sourceHeight: layout.sourceSheet.height,
+          }
+        : undefined,
+    clipToArtboard: state.clipToArtboard,
+    optimizeTravel: state.optimizeTravel,
+    mergeTolerance: state.mergeTolerance,
+    effects: {
+      kaleidoscope: state.kaleidoscope,
+      halftone: state.halftone,
+      chroma: state.chroma,
+      misregistration: state.misregistration,
+      humanizer: state.humanizer,
+      yarnCurl: state.yarnCurl,
+      blueprint: state.blueprint,
+      topographicMap: state.topographicMap,
+      vectorZoom:
+        state.vectorZoom1Enabled ||
+        state.vectorZoom2Enabled ||
+        state.vectorZoom3Enabled ||
+        state.vectorZoom4Enabled,
+    },
+  });
   return {
     content,
+    rotation: layout.rotation,
+    sheet: layout.sheet,
+    sourceSheet: layout.sourceSheet,
     validation: validateGCode(content, {
-      width: state.pw,
-      height: state.ph,
+      width: layout.sheet.width,
+      height: layout.sheet.height,
       penUp: state.penUp,
       penDown: state.penDown,
       drawFeed: state.drawFeed,

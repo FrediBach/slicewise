@@ -169,6 +169,7 @@ describe('OutputPanel composition boundaries', () => {
   it('preserves the canvas and export controls through the panel barrel', () => {
     const { unmount } = render(<CanvasPanel />);
     expect(screen.getByLabelText('Paper size')).toHaveValue('custom');
+    expect(screen.getByLabelText('Orientation')).toHaveValue('portrait');
     expect(screen.getByLabelText('Artboard width')).toHaveValue(210);
     expect(screen.getByLabelText('Clip paths to artboard')).toBeChecked();
 
@@ -176,12 +177,16 @@ describe('OutputPanel composition boundaries', () => {
     render(<ExportPanel />);
     expect(screen.getByLabelText('File type')).toHaveValue('svg');
     expect(screen.getByLabelText('Machine')).toHaveValue('uunatek3-a3');
+    expect(document.getElementById('gcodeAutoRotate')).toBeChecked();
     expect(document.querySelector('option[value="uunatek3-a0"]')).toHaveTextContent(
       'UUNA TEK 3.0 · A0 · 1189 × 841 mm',
     );
     expect(document.getElementById('gcodeControls')).toBeInTheDocument();
     expect(document.getElementById('gcodePreflightStatus')).toHaveTextContent(
       'Waiting for an exact render',
+    );
+    expect(document.getElementById('gcodePreflightLayout')).toHaveTextContent(
+      'No machine layout available yet',
     );
     expect(document.getElementById('gcodePathPreview')).toHaveAttribute(
       'aria-label',

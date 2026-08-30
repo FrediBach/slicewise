@@ -73,6 +73,7 @@ Coverage currently measures the focused core under active test:
 - `contour-engine.ts`
 - `demo-meshes/index.ts`
 - `gcode.ts`
+- `gcode-layout.ts`
 - `gcode-profiles.ts`
 - `gcode-validation.ts`
 - `generativeMesh.ts`
@@ -85,6 +86,7 @@ Coverage currently measures the focused core under active test:
 - `misregistration.ts`
 - `parameter-history.ts`
 - `parameter-migrations.ts`
+- `paper-orientation.ts`
 - `projection.ts`
 - `polyline-styling.ts`
 - `render-settings.ts`

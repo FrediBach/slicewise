@@ -61,6 +61,13 @@ export function ExportPanel() {
             })}
             <option value="generic">Generic Z-axis plotter</option>
           </SelectControl>
+          <Checkbox id="gcodeAutoRotate" defaultChecked>
+            Auto-rotate portrait to fit
+          </Checkbox>
+          <p className="gradient-note">
+            Rotates 90° clockwise only when the canvas does not fit directly but its swapped
+            dimensions fit the selected machine.
+          </p>
           <ValueControl
             id="drawFeed"
             label="Draw speed"
@@ -150,6 +157,7 @@ export function ExportPanel() {
               <span className="gcode-preflight__draw">Pen down</span>
               <span className="gcode-preflight__travel">Pen-up travel</span>
             </div>
+            <p id="gcodePreflightLayout">No machine layout available yet.</p>
             <p id="gcodePreflightStats">No machine path available yet.</p>
             <p id="gcodePreflightIssue" className="gcode-preflight__issue" />
             <p className="gradient-note">

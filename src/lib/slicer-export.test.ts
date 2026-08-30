@@ -18,6 +18,7 @@ const exportState = (overrides: Partial<ExportState> = {}): ExportState => ({
   penDown: -2,
   zFeed: 900,
   gcodeProfile: 'uunatek3-a3',
+  gcodeAutoRotate: true,
   clipToArtboard: true,
   optimizeTravel: false,
   mergeTolerance: 0.15,
@@ -85,6 +86,33 @@ describe('slicer export assembly', () => {
     expect(() =>
       createGCodeExport(exportState({ gcodeProfile: 'uunatek3-a3', pw: 421, ph: 297 })),
     ).toThrow(/421 × 297 mm artboard exceeds.*420 × 297 mm working area/);
+  });
+
+  it('rotates a full portrait artboard clockwise to fit the landscape machine', () => {
+    const preflight = createGCodeExportPreflight(exportState({ pw: 297, ph: 420 }));
+
+    expect(preflight.validation.valid).toBe(true);
+    expect(preflight.rotation).toBe('clockwise-90');
+    expect(preflight.sheet).toEqual({ width: 420, height: 297 });
+    expect(preflight.content).toContain('; Sheet: 420 x 297 mm');
+    expect(preflight.content).toContain(
+      '; Layout: rotated 90 degrees clockwise from 297 x 420 mm canvas',
+    );
+    expect(preflight.content).toContain('G0 X400 Y10 F4800');
+    expect(preflight.content).toContain('G1 X380 Y30 F2400');
+  });
+
+  it('blocks a portrait artboard when machine auto-rotation is disabled', () => {
+    expect(() =>
+      createGCodeExport(exportState({ pw: 297, ph: 420, gcodeAutoRotate: false })),
+    ).toThrow(/297 × 420 mm artboard exceeds.*420 × 297 mm working area/);
+  });
+
+  it('preserves a smaller portrait sheet that already fits', () => {
+    const preflight = createGCodeExportPreflight(exportState({ pw: 210, ph: 297 }));
+
+    expect(preflight.rotation).toBe('none');
+    expect(preflight.sheet).toEqual({ width: 210, height: 297 });
   });
 
   it('preflights the serialized machine path before export', () => {

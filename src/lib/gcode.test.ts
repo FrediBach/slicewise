@@ -89,6 +89,7 @@ describe('generateGCode', () => {
         penDown: -2.5,
         zFeed: 900,
         machine: 'UUNA TEK',
+        layout: { rotation: 'clockwise-90', sourceWidth: 297, sourceHeight: 420 },
         effects: {
           kaleidoscope: true,
           halftone: true,
@@ -112,6 +113,7 @@ describe('generateGCode', () => {
     expect(output).toContain('blueprint border and annotations are SVG-only');
     expect(output).toContain('Topographic map: elevation labels, locations, and map symbols');
     expect(output).toContain('Vector zoom: enlarged detail, borders, and dashed leaders');
+    expect(output).toContain('Layout: rotated 90 degrees clockwise from 297 x 420 mm canvas');
   });
 
   it('always returns controller setup and shutdown for an empty drawing', () => {

@@ -42,6 +42,19 @@ export function CanvasPanel() {
             <option value="tabloid">Tabloid · 279 × 432 mm</option>
           </optgroup>
         </SelectControl>
+        <SelectControl
+          id="paperOrientation"
+          label="Orientation"
+          defaultValue="portrait"
+          rowClassName="select-row"
+          optionDescriptions={{
+            portrait: 'Places the shorter edge horizontally and the longer edge vertically.',
+            landscape: 'Places the longer edge horizontally and the shorter edge vertically.',
+          }}
+        >
+          <option value="portrait">Portrait · tall</option>
+          <option value="landscape">Landscape · wide</option>
+        </SelectControl>
         <div className="control-row">
           <ControlLabel htmlFor="pw">Dimensions</ControlLabel>
           <div className="sheet-control">

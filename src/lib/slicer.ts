@@ -47,11 +47,16 @@ import { ParameterHistory } from './parameter-history';
 import { normalizeParameterSnapshot } from './parameter-migrations';
 import { DEFAULT_GCODE_PROFILE_ID, resolveGCodeProfile } from './gcode-profiles';
 import {
+  orientPaperSize,
+  paperOrientationForSize,
+  type PaperOrientation,
+} from './paper-orientation';
+import {
   createCurrentExport,
   createExportFilename,
   createGCodeExportPreflight,
+  type GCodeExportPreflight,
 } from './slicer-export';
-import { type GCodeValidationResult } from './gcode-validation';
 import { createAnimationHistory } from './animation-history';
 import {
   loadAnimationProject,
@@ -128,6 +133,7 @@ type AppState = RenderSettings &
     tilingDiskScale: number;
     exportFormat: string;
     gcodeProfile: string;
+    gcodeAutoRotate: boolean;
     drawFeed: number;
     travelFeed: number;
     optimizeTravel: boolean;
@@ -429,6 +435,7 @@ const state: AppState = {
   morphTargets2: {},
   exportFormat: 'svg',
   gcodeProfile: DEFAULT_GCODE_PROFILE_ID,
+  gcodeAutoRotate: true,
   drawFeed: 3000,
   travelFeed: 6000,
   optimizeTravel: true,
@@ -1521,6 +1528,10 @@ if (typeof document !== 'undefined') {
     if (profile.workingArea) setArtboardSize(profile.workingArea.width, profile.workingArea.height);
     updateExportSize();
   });
+  $('gcodeAutoRotate').addEventListener('change', (event) => {
+    state.gcodeAutoRotate = inputTarget(event).checked;
+    updateExportSize();
+  });
 
   $('exportFormat').addEventListener('change', (event) => {
     state.exportFormat = inputTarget(event).value;
@@ -2221,11 +2232,23 @@ if (typeof document !== 'undefined') {
     legal: [216, 356],
     tabloid: [279, 432],
   };
+  function selectedPaperOrientation(): PaperOrientation {
+    return $('paperOrientation').value === 'landscape' ? 'landscape' : 'portrait';
+  }
   function syncPaperPreset(): void {
-    const match = Object.entries(paperSizes).find(
-      ([, size]) => size[0] === state.pw && size[1] === state.ph,
-    );
+    const match = Object.entries(paperSizes).find(([, size]) => {
+      const portrait = orientPaperSize(size, 'portrait');
+      const landscape = orientPaperSize(size, 'landscape');
+      return (
+        (portrait[0] === state.pw && portrait[1] === state.ph) ||
+        (landscape[0] === state.pw && landscape[1] === state.ph)
+      );
+    });
     setSelectValue('paperPreset', match?.[0] || 'custom');
+    setSelectValue(
+      'paperOrientation',
+      paperOrientationForSize(state.pw, state.ph, selectedPaperOrientation()),
+    );
   }
   function setArtboardSize(width: number, height: number): void {
     [state.pw, state.ph] = [width, height];
@@ -2237,7 +2260,13 @@ if (typeof document !== 'undefined') {
   $('paperPreset').addEventListener('change', (e) => {
     const size = paperSizes[inputTarget(e).value];
     if (!size) return;
-    setArtboardSize(...size);
+    setArtboardSize(...orientPaperSize(size, selectedPaperOrientation()));
+  });
+  $('paperOrientation').addEventListener('change', (event) => {
+    const orientation = inputTarget(event).value === 'landscape' ? 'landscape' : 'portrait';
+    const preset = paperSizes[$('paperPreset').value];
+    const size = preset || ([state.pw, state.ph] as const);
+    setArtboardSize(...orientPaperSize(size, orientation));
   });
   for (const id of ['pw', 'ph'] as const)
     $(id).addEventListener('input', (e) => {
@@ -4103,7 +4132,8 @@ if (typeof document !== 'undefined') {
   publishAnimationState();
 
   /* export */
-  function updateGCodePreflight(validation: GCodeValidationResult): void {
+  function updateGCodePreflight(preflight: GCodeExportPreflight): void {
+    const { validation } = preflight;
     const status = $('gcodePreflightStatus');
     const container = status.closest<HTMLElement>('.gcode-preflight');
     const stateName = validation.valid
@@ -4126,6 +4156,10 @@ if (typeof document !== 'undefined') {
     $('gcodePreflightStats').textContent =
       `${stats.drawDistance.toFixed(1)} mm drawn · ${stats.travelDistance.toFixed(1)} mm travel · ` +
       `${stats.penLifts} lifts · about ${duration}`;
+    $('gcodePreflightLayout').textContent =
+      preflight.rotation === 'clockwise-90'
+        ? `Canvas ${preflight.sourceSheet.width} × ${preflight.sourceSheet.height} mm → machine ${preflight.sheet.width} × ${preflight.sheet.height} mm · rotated 90° clockwise`
+        : `Machine layout ${preflight.sheet.width} × ${preflight.sheet.height} mm · no rotation`;
     const firstIssue = validation.errors[0] || validation.warnings[0];
     $('gcodePreflightIssue').textContent = firstIssue
       ? `${firstIssue.line ? `Line ${firstIssue.line}: ` : ''}${firstIssue.message}`
@@ -4136,11 +4170,11 @@ if (typeof document !== 'undefined') {
     const draw = document.querySelector<SVGPathElement>('#gcodePreviewDraw')!;
     const travel = document.querySelector<SVGPathElement>('#gcodePreviewTravel')!;
     const origin = document.querySelector<SVGCircleElement>('#gcodePreviewOrigin')!;
-    const padding = Math.max(state.pw, state.ph) * 0.025;
+    const padding = Math.max(preflight.sheet.width, preflight.sheet.height) * 0.025;
     const screenY = (machineY: number) =>
       resolveGCodeProfile(state.gcodeProfile).origin === 'rear-left'
         ? machineY
-        : state.ph - machineY;
+        : preflight.sheet.height - machineY;
     const drawCommands: string[] = [];
     const travelCommands: string[] = [];
     for (const { from, to, kind } of validation.segments) {
@@ -4149,15 +4183,18 @@ if (typeof document !== 'undefined') {
     }
     svg.setAttribute(
       'viewBox',
-      `${-padding} ${-padding} ${state.pw + padding * 2} ${state.ph + padding * 2}`,
+      `${-padding} ${-padding} ${preflight.sheet.width + padding * 2} ${preflight.sheet.height + padding * 2}`,
     );
-    sheet.setAttribute('width', String(state.pw));
-    sheet.setAttribute('height', String(state.ph));
+    sheet.setAttribute('width', String(preflight.sheet.width));
+    sheet.setAttribute('height', String(preflight.sheet.height));
     draw.setAttribute('d', drawCommands.join(''));
     travel.setAttribute('d', travelCommands.join(''));
     origin.setAttribute('cx', '0');
     origin.setAttribute('cy', String(screenY(0)));
-    origin.setAttribute('r', String(Math.max(1, Math.max(state.pw, state.ph) * 0.01)));
+    origin.setAttribute(
+      'r',
+      String(Math.max(1, Math.max(preflight.sheet.width, preflight.sheet.height) * 0.01)),
+    );
   }
 
   function updateExportSize(): void {
@@ -4166,7 +4203,7 @@ if (typeof document !== 'undefined') {
     if (state.exportFormat === 'gcode') {
       const preflight = createGCodeExportPreflight(state);
       bytes = new TextEncoder().encode(preflight.content).byteLength;
-      updateGCodePreflight(preflight.validation);
+      updateGCodePreflight(preflight);
     }
     $('rSize').textContent = (bytes / 1024).toFixed(1) + ' kB';
   }

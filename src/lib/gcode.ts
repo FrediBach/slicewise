@@ -18,6 +18,11 @@ export type GCodeOptions = {
   clipToArtboard?: boolean;
   optimizeTravel?: boolean;
   mergeTolerance?: number;
+  layout?: {
+    rotation?: 'clockwise-90';
+    sourceWidth: number;
+    sourceHeight: number;
+  };
   effects?: Partial<
     Record<
       | 'kaleidoscope'
@@ -157,6 +162,10 @@ export function generateGCode(
     lines.push('; Topographic map: elevation labels, locations, and map symbols are included');
   if (effects.vectorZoom)
     lines.push('; Vector zoom: enlarged detail, borders, and dashed leaders are included');
+  if (options.layout?.rotation === 'clockwise-90')
+    lines.push(
+      `; Layout: rotated 90 degrees clockwise from ${clampPrecision(options.layout.sourceWidth)} x ${clampPrecision(options.layout.sourceHeight)} mm canvas`,
+    );
   if (clipToArtboard) lines.push('; Artboard clipping: enabled');
   if (optimizeTravel) lines.push(`; Optimized pen-up travel: ${clampPrecision(penUpDistance)} mm`);
   lines.push(
