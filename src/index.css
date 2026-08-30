@@ -1175,6 +1175,97 @@ select {
 .gcode-controls .gradient-note {
   margin: 7px 8px 3px 0;
 }
+.gcode-preflight {
+  margin: 10px 8px 4px 0;
+  padding-top: 9px;
+  border-top: 1px solid #d9dcd7;
+}
+.gcode-preflight__heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+  color: #676c66;
+  font-size: 8.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.gcode-preflight__heading strong {
+  color: #8d928c;
+  font-size: 8px;
+  text-align: right;
+}
+.gcode-preflight[data-state='valid'] .gcode-preflight__heading strong {
+  color: #3f7f50;
+}
+.gcode-preflight[data-state='warning'] .gcode-preflight__heading strong {
+  color: #91691e;
+}
+.gcode-preflight[data-state='error'] .gcode-preflight__heading strong,
+.gcode-preflight[data-state='error'] .gcode-preflight__issue {
+  color: #a22b25;
+}
+#gcodePathPreview {
+  display: block;
+  width: 100%;
+  height: 96px;
+  border: 1px solid #d8dbd6;
+  background: #f2f4ef;
+}
+#gcodePreviewSheet {
+  fill: #fff;
+  stroke: #c4c8c1;
+  vector-effect: non-scaling-stroke;
+}
+#gcodePreviewTravel,
+#gcodePreviewDraw {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+#gcodePreviewTravel {
+  stroke: #8e95aa;
+  stroke-width: 0.7;
+  stroke-dasharray: 3 2;
+}
+#gcodePreviewDraw {
+  stroke: #171a18;
+  stroke-width: 1;
+}
+#gcodePreviewOrigin {
+  fill: #a22b25;
+  stroke: #fff;
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+.gcode-preflight__legend {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+  color: #858a84;
+  font-size: 8px;
+}
+.gcode-preflight__legend span::before {
+  display: inline-block;
+  width: 13px;
+  margin-right: 4px;
+  border-top: 1px solid;
+  content: '';
+  vertical-align: middle;
+}
+.gcode-preflight__travel::before {
+  border-top-style: dashed !important;
+  border-color: #8e95aa !important;
+}
+.gcode-preflight p {
+  margin: 5px 0 0;
+  color: #747973;
+  font-size: 8px;
+  line-height: 1.4;
+}
+.gcode-preflight .gcode-preflight__issue:empty {
+  display: none;
+}
 
 .actions {
   flex: 0 0 auto;

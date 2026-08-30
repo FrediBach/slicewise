@@ -45,7 +45,12 @@ import { setDisabled, setDisabledPair } from './control-state';
 import { createRenderSettingsSnapshot } from './render-settings';
 import { ParameterHistory } from './parameter-history';
 import { normalizeParameterSnapshot } from './parameter-migrations';
-import { createCurrentExport, createExportFilename, createGCodeExport } from './slicer-export';
+import {
+  createCurrentExport,
+  createExportFilename,
+  createGCodeExportPreflight,
+} from './slicer-export';
+import { type GCodeValidationResult } from './gcode-validation';
 import { createAnimationHistory } from './animation-history';
 import {
   loadAnimationProject,
@@ -4118,12 +4123,69 @@ if (typeof document !== 'undefined') {
   publishAnimationState();
 
   /* export */
+  function updateGCodePreflight(validation: GCodeValidationResult): void {
+    const status = $('gcodePreflightStatus');
+    const container = status.closest<HTMLElement>('.gcode-preflight');
+    const stateName = validation.valid
+      ? validation.warnings.length
+        ? 'warning'
+        : 'valid'
+      : 'error';
+    if (container) container.dataset.state = stateName;
+    status.textContent = validation.valid
+      ? validation.warnings.length
+        ? `Safe · ${validation.warnings.length} warning${validation.warnings.length === 1 ? '' : 's'}`
+        : 'Safe to export'
+      : `${validation.errors.length} blocking error${validation.errors.length === 1 ? '' : 's'}`;
+
+    const { stats } = validation;
+    const duration =
+      stats.estimatedSeconds < 60
+        ? `${Math.ceil(stats.estimatedSeconds)} sec`
+        : `${Math.floor(stats.estimatedSeconds / 60)} min ${Math.ceil(stats.estimatedSeconds % 60)} sec`;
+    $('gcodePreflightStats').textContent =
+      `${stats.drawDistance.toFixed(1)} mm drawn · ${stats.travelDistance.toFixed(1)} mm travel · ` +
+      `${stats.penLifts} lifts · about ${duration}`;
+    const firstIssue = validation.errors[0] || validation.warnings[0];
+    $('gcodePreflightIssue').textContent = firstIssue
+      ? `${firstIssue.line ? `Line ${firstIssue.line}: ` : ''}${firstIssue.message}`
+      : '';
+
+    const svg = document.querySelector<SVGSVGElement>('#gcodePathPreview')!;
+    const sheet = document.querySelector<SVGRectElement>('#gcodePreviewSheet')!;
+    const draw = document.querySelector<SVGPathElement>('#gcodePreviewDraw')!;
+    const travel = document.querySelector<SVGPathElement>('#gcodePreviewTravel')!;
+    const origin = document.querySelector<SVGCircleElement>('#gcodePreviewOrigin')!;
+    const padding = Math.max(state.pw, state.ph) * 0.025;
+    const screenY = (machineY: number) =>
+      state.gcodeProfile === 'uunatek3' ? machineY : state.ph - machineY;
+    const drawCommands: string[] = [];
+    const travelCommands: string[] = [];
+    for (const { from, to, kind } of validation.segments) {
+      const command = `M${from[0]} ${screenY(from[1])}L${to[0]} ${screenY(to[1])}`;
+      (kind === 'draw' ? drawCommands : travelCommands).push(command);
+    }
+    svg.setAttribute(
+      'viewBox',
+      `${-padding} ${-padding} ${state.pw + padding * 2} ${state.ph + padding * 2}`,
+    );
+    sheet.setAttribute('width', String(state.pw));
+    sheet.setAttribute('height', String(state.ph));
+    draw.setAttribute('d', drawCommands.join(''));
+    travel.setAttribute('d', travelCommands.join(''));
+    origin.setAttribute('cx', '0');
+    origin.setAttribute('cy', String(screenY(0)));
+    origin.setAttribute('r', String(Math.max(1, Math.max(state.pw, state.ph) * 0.01)));
+  }
+
   function updateExportSize(): void {
     if (!state.svg) return;
-    const bytes =
-      state.exportFormat === 'gcode'
-        ? new TextEncoder().encode(createGCodeExport(state)).byteLength
-        : state.svgBytes;
+    let bytes = state.svgBytes;
+    if (state.exportFormat === 'gcode') {
+      const preflight = createGCodeExportPreflight(state);
+      bytes = new TextEncoder().encode(preflight.content).byteLength;
+      updateGCodePreflight(preflight.validation);
+    }
     $('rSize').textContent = (bytes / 1024).toFixed(1) + ' kB';
   }
   $('save').addEventListener('click', async () => {

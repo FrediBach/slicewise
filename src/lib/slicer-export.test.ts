@@ -3,6 +3,7 @@ import {
   createCurrentExport,
   createExportFilename,
   createGCodeExport,
+  createGCodeExportPreflight,
   type ExportState,
 } from './slicer-export';
 
@@ -56,6 +57,20 @@ describe('slicer export assembly', () => {
     expect(output).toContain('G0 X10 Y20 F4800');
     expect(output).toContain('Vector zoom: enlarged detail, borders, and dashed leaders');
     expect(output).toContain('Misregistration: offset colour copies are included');
+  });
+
+  it('preflights the serialized machine path before export', () => {
+    const preflight = createGCodeExportPreflight(exportState());
+
+    expect(preflight.validation.valid).toBe(true);
+    expect(preflight.validation.stats.drawDistance).toBeCloseTo(Math.hypot(20, 20));
+    expect(preflight.validation.segments.some(({ kind }) => kind === 'draw')).toBe(true);
+  });
+
+  it('blocks export when runtime machine settings cannot pass preflight', () => {
+    expect(() => createGCodeExport(exportState({ drawFeed: Number.NaN }))).toThrow(
+      /G-code preflight failed.*Expected draw feed NaN mm\/min/,
+    );
   });
 
   it('maps unknown profiles to the generic bottom-left convention', () => {

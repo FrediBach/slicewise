@@ -13,7 +13,7 @@ export default defineConfig({
       reporter: ['text', 'html'],
       reportsDirectory: 'coverage',
       include: [
-        'src/lib/{animation-history,animation-interpolation,animation-migrations,animation-playback,animation-project,animation-validation,animation-video-export,block-glitch,colorPair,contour-engine,gcode,generativeMesh,hyperbolic-tiling,mapAnnotations,mesh,mesh-curvature,mesh-geodesics,mesh-topology,misregistration,parameter-history,parameter-migrations,polyline-styling,projection,render-scheduling,render-settings,sample-and-hold,scalar-fields,scan-band-glitch,slicer-export,staggered-slices,svg-mesh,tile-shuffle,toolpaths,vector-zoom,video-encoder,wraparound-tear}.ts',
+        'src/lib/{animation-history,animation-interpolation,animation-migrations,animation-playback,animation-project,animation-validation,animation-video-export,block-glitch,colorPair,contour-engine,gcode,gcode-validation,generativeMesh,hyperbolic-tiling,mapAnnotations,mesh,mesh-curvature,mesh-geodesics,mesh-topology,misregistration,parameter-history,parameter-migrations,polyline-styling,projection,render-scheduling,render-settings,sample-and-hold,scalar-fields,scan-band-glitch,slicer-export,staggered-slices,svg-mesh,tile-shuffle,toolpaths,vector-zoom,video-encoder,wraparound-tear}.ts',
         'src/lib/demo-meshes/index.ts',
         'src/components/controls/{FormControls,GradientChooser}.tsx',
       ],

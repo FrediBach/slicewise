@@ -1,5 +1,6 @@
 import { type ContourToolpathGroup } from './contour-engine';
 import { generateGCode } from './gcode';
+import { validateGCode, type GCodeValidationResult } from './gcode-validation';
 
 export interface ExportState {
   toolpaths: ContourToolpathGroup[];
@@ -37,9 +38,14 @@ export type CurrentExport = {
   type: 'image/svg+xml' | 'text/x-gcode';
 };
 
-export function createGCodeExport(state: ExportState): string {
+export type GCodeExportPreflight = {
+  content: string;
+  validation: GCodeValidationResult;
+};
+
+export function createGCodeExportPreflight(state: ExportState): GCodeExportPreflight {
   const isUunaTek = state.gcodeProfile === 'uunatek3';
-  return generateGCode(
+  const content = generateGCode(
     state.toolpaths,
     { width: state.pw, height: state.ph },
     {
@@ -71,6 +77,28 @@ export function createGCodeExport(state: ExportState): string {
       },
     },
   );
+  return {
+    content,
+    validation: validateGCode(content, {
+      width: state.pw,
+      height: state.ph,
+      penUp: state.penUp,
+      penDown: state.penDown,
+      drawFeed: state.drawFeed,
+      travelFeed: state.travelFeed,
+      zFeed: state.zFeed,
+    }),
+  };
+}
+
+export function createGCodeExport(state: ExportState): string {
+  const preflight = createGCodeExportPreflight(state);
+  const firstError = preflight.validation.errors[0];
+  if (firstError)
+    throw new Error(
+      `G-code preflight failed${firstError.line ? ` on line ${firstError.line}` : ''}: ${firstError.message}`,
+    );
+  return preflight.content;
 }
 
 export function createCurrentExport(state: ExportState): CurrentExport {

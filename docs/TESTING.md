@@ -73,6 +73,7 @@ Coverage currently measures the focused core under active test:
 - `contour-engine.ts`
 - `demo-meshes/index.ts`
 - `gcode.ts`
+- `gcode-validation.ts`
 - `generativeMesh.ts`
 - `hyperbolic-tiling.ts`
 - `mapAnnotations.ts`

@@ -177,5 +177,12 @@ describe('OutputPanel composition boundaries', () => {
     expect(screen.getByLabelText('File type')).toHaveValue('svg');
     expect(screen.getByLabelText('Machine')).toHaveValue('uunatek3');
     expect(document.getElementById('gcodeControls')).toBeInTheDocument();
+    expect(document.getElementById('gcodePreflightStatus')).toHaveTextContent(
+      'Waiting for an exact render',
+    );
+    expect(document.getElementById('gcodePathPreview')).toHaveAttribute(
+      'aria-label',
+      'Validated G-code drawing and pen-up travel preview',
+    );
   });
 });

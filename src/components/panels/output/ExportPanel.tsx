@@ -105,6 +105,36 @@ export function ExportPanel() {
             UUNA TEK rear-left origin with 3 mm pen drop. Set the machine origin at the sheet’s
             rear-left corner before plotting.
           </p>
+          <div className="gcode-preflight" aria-labelledby="gcodePreflightHeading">
+            <div className="gcode-preflight__heading">
+              <span id="gcodePreflightHeading">Machine preflight</span>
+              <strong id="gcodePreflightStatus" role="status" aria-live="polite">
+                Waiting for an exact render
+              </strong>
+            </div>
+            <svg
+              id="gcodePathPreview"
+              viewBox="0 0 1 1"
+              preserveAspectRatio="xMidYMid meet"
+              role="img"
+              aria-label="Validated G-code drawing and pen-up travel preview"
+            >
+              <rect id="gcodePreviewSheet" x="0" y="0" width="1" height="1" />
+              <path id="gcodePreviewTravel" />
+              <path id="gcodePreviewDraw" />
+              <circle id="gcodePreviewOrigin" cx="0" cy="0" r="0.01" />
+            </svg>
+            <div className="gcode-preflight__legend" aria-hidden="true">
+              <span className="gcode-preflight__draw">Pen down</span>
+              <span className="gcode-preflight__travel">Pen-up travel</span>
+            </div>
+            <p id="gcodePreflightStats">No machine path available yet.</p>
+            <p id="gcodePreflightIssue" className="gcode-preflight__issue" />
+            <p className="gradient-note">
+              Preflight checks the file itself. Confirm its placement in Universal Gcode Sender and
+              frame the sheet with the pen raised before plotting.
+            </p>
+          </div>
         </div>
       </FieldGroup>
     </Section>
