@@ -1159,6 +1159,9 @@ describe('contour line-weight variation', () => {
     expect(indexed.toolpaths.flatMap((group) => group.runs)).toHaveLength(
       uniform.toolpaths.flatMap((group) => group.runs).length,
     );
+    expect(new Set(indexed.toolpaths.flatMap((group) => group.runWeights ?? []))).toEqual(
+      new Set([0, 1]),
+    );
   });
 
   it.each(['wave', 'center'])('emits multiple finite widths for %s weighting', (mode) => {

@@ -19,6 +19,7 @@ export type MachineOperation =
 export type PreparedMachineGroup = {
   color: string;
   runs: number[][][];
+  runWeights?: number[];
 };
 
 export type SurfaceCompensation =
@@ -48,6 +49,7 @@ export type UunaExpressiveMotion = {
   curvatureRelief: number;
   preserveStrokeDirection: boolean;
   nibWidth: number;
+  lineWeightPressure: boolean;
   surfaceCompensation: SurfaceCompensation;
 };
 
@@ -71,6 +73,7 @@ export function defaultUunaExpressiveMotion(contactZ = -3): UunaExpressiveMotion
     curvatureRelief: 0,
     preserveStrokeDirection: true,
     nibWidth: 0,
+    lineWeightPressure: false,
     surfaceCompensation: { mode: 'off' },
   };
 }
@@ -112,6 +115,7 @@ type ExpressiveOperationOptions = Pick<
   | 'curvatureRelief'
   | 'leadIn'
   | 'leadOut'
+  | 'lineWeightPressure'
   | 'maximumPressDepth'
   | 'mode'
   | 'modulationDepth'
@@ -272,14 +276,18 @@ export function createExpressiveOperations(
   penUp: number,
   options: ExpressiveOperationOptions,
 ): MachineOperation[] {
-  if (options.mode === 'constant' && options.surfaceCompensation.mode === 'off')
+  if (
+    options.mode === 'constant' &&
+    options.surfaceCompensation.mode === 'off' &&
+    !options.lineWeightPressure
+  )
     return createConstantContactOperations(groups, penUp, finiteOr(options.contactZ, -3));
 
   const operations: MachineOperation[] = [];
   let sourceRun = 0;
   groups.forEach((group, groupIndex) => {
     if (groupIndex > 0) operations.push({ kind: 'pen-change', color: group.color });
-    for (const run of group.runs) {
+    for (const [runIndex, run] of group.runs.entries()) {
       const sampled = resampleRun(run);
       const [start] = sampled.points;
       if (!start || sampled.points.length < 2) continue;
@@ -310,10 +318,15 @@ export function createExpressiveOperations(
                 : options.mode === 'curvature'
                   ? curvaturePressure(sampled.points, index, options.curvatureRelief)
                   : 1;
+            const weight = options.lineWeightPressure
+              ? clamp(finiteOr(group.runWeights?.[runIndex] ?? 0, 0), 0, 1)
+              : 1;
             return machinePointForPressure(
               x,
               y,
-              options.mode === 'constant' ? 0 : envelope * behavior,
+              options.mode === 'constant' && !options.lineWeightPressure
+                ? 0
+                : envelope * behavior * weight,
               options,
             );
           }),

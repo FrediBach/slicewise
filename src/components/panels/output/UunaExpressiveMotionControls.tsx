@@ -36,6 +36,11 @@ export function UunaExpressiveMotionControls() {
           unit="mm"
           morphable={false}
         />
+        <Checkbox id="uunaExpressiveLineWeightPressure">Map appearance line weight to Z</Checkbox>
+        <p className="gradient-note">
+          Thin contour bands stay at contact and the thickest band reaches Max press. Endpoint ramps
+          and the selected Z behavior still apply.
+        </p>
         <div id="uunaExpressivePressureControls" hidden>
           <ValueControl
             id="uunaExpressiveMaximumPressDepth"

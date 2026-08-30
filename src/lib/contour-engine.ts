@@ -221,6 +221,8 @@ export interface ContourToolpathGroup {
   color: string;
   label: string;
   runs: Polyline[];
+  /** Normalized visual line-weight band for each run; omitted sources use zero. */
+  runWeights?: number[];
 }
 
 export interface ContourResult {
@@ -2981,12 +2983,21 @@ function computeContourInstance(
   for (let index = 0; index < out.length; index++) {
     const pathsForColor: string[][] = [];
     const runsForColor: Polyline[] = [];
+    const runWeightsForColor: number[] = [];
     for (const toneGroup of out[index]) {
       const pathsForTone: string[] = [];
-      for (const weightGroup of toneGroup) {
+      for (let weight = 0; weight < toneGroup.length; weight += 1) {
+        const weightGroup = toneGroup[weight];
         const group = serialiseGroup(weightGroup);
         pathsForTone.push(group.d);
         runsForColor.push(...group.runs);
+        runWeightsForColor.push(
+          ...group.runs.map(() =>
+            weightBandCount <= 1 || (settings.lineWeightAmount || 0) <= 0
+              ? 0
+              : weight / (weightBandCount - 1),
+          ),
+        );
         annotationSourceRuns.push(...group.runs);
       }
       pathsForColor.push(pathsForTone);
@@ -2998,6 +3009,7 @@ function computeContourInstance(
         color: palette[index],
         label: settings.gradientEnabled ? `gradient colour ${index + 1}` : 'contours',
         runs: runsForColor,
+        runWeights: runWeightsForColor,
       });
     }
   }
@@ -3009,8 +3021,10 @@ function computeContourInstance(
     const matching = toolpaths.find(
       (group) => group.color.toLowerCase() === settings.color.toLowerCase(),
     );
-    if (matching) matching.runs.push(...outlineGroup.runs);
-    else toolpaths.push({ color: settings.color, label: 'silhouette', runs: outlineGroup.runs });
+    if (matching) {
+      matching.runs.push(...outlineGroup.runs);
+      matching.runWeights?.push(...outlineGroup.runs.map(() => 0));
+    } else toolpaths.push({ color: settings.color, label: 'silhouette', runs: outlineGroup.runs });
   }
   const strokeWidth = (weight: number): number => {
     if (weightBandCount === 1) return settings.sw;
@@ -3036,8 +3050,10 @@ function computeContourInstance(
     const matching = toolpaths.find(
       (group) => group.color.toLowerCase() === settings.color.toLowerCase(),
     );
-    if (matching) matching.runs.push(...clippedAnnotationRuns);
-    else
+    if (matching) {
+      matching.runs.push(...clippedAnnotationRuns);
+      matching.runWeights?.push(...clippedAnnotationRuns.map(() => 0));
+    } else
       toolpaths.push({
         color: settings.color,
         label: 'topographic annotations',
@@ -3048,8 +3064,10 @@ function computeContourInstance(
   if (!quick && maskOutline.runs.length) {
     const color = effectiveAnnotationColor(settings);
     const matching = toolpaths.find((group) => group.color.toLowerCase() === color.toLowerCase());
-    if (matching) matching.runs.push(...maskOutline.runs);
-    else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
+    if (matching) {
+      matching.runs.push(...maskOutline.runs);
+      matching.runWeights?.push(...maskOutline.runs.map(() => 0));
+    } else toolpaths.push({ color, label: 'mask outline', runs: maskOutline.runs });
   }
   const zoomGuideGroups = clippedVectorZoomGuideGroups(vectorZooms, settings, W, H);
   const zoomGuideRuns = zoomGuideGroups.flatMap((group) => group.runs);
@@ -3058,8 +3076,10 @@ function computeContourInstance(
       const matching = toolpaths.find(
         (group) => group.color.toLowerCase() === guideGroup.color.toLowerCase(),
       );
-      if (matching) matching.runs.push(...guideGroup.runs);
-      else
+      if (matching) {
+        matching.runs.push(...guideGroup.runs);
+        matching.runWeights?.push(...guideGroup.runs.map(() => 0));
+      } else
         toolpaths.push({
           color: guideGroup.color,
           label: 'vector zoom guides',
@@ -3303,12 +3323,19 @@ ${background}${layers}${documentOverlay(settings, blueprint)}
         ? `${group.label}:${group.color}`.toLowerCase()
         : group.color.toLowerCase();
       const existing = groups.get(key);
-      if (existing) existing.runs.push(...group.runs);
-      else
+      if (existing) {
+        const existingCount = existing.runs.length;
+        existing.runs.push(...group.runs);
+        if (existing.runWeights || group.runWeights) {
+          existing.runWeights ??= Array.from({ length: existingCount }, () => 0);
+          existing.runWeights.push(...(group.runWeights ?? group.runs.map(() => 0)));
+        }
+      } else
         groups.set(key, {
           color: group.color,
           label: registrationCopy ? group.label : 'morphed contours',
           runs: [...group.runs],
+          runWeights: group.runWeights ? [...group.runWeights] : undefined,
         });
     }
   return {

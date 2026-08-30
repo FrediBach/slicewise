@@ -10,6 +10,7 @@ export type ToolpathGroup = {
   color?: string;
   label?: string;
   runs?: number[][];
+  runWeights?: number[];
 };
 
 export type GCodeOptions = {
@@ -106,16 +107,25 @@ export function generateGCode(
   const optimizeTravel = options.optimizeTravel !== false;
   const mergeTolerance = finiteOption(options.mergeTolerance, 0.15);
   const effects = options.effects || {};
-  const usableGroups: Array<{ color: string; label: string; runs: number[][][] }> = [];
+  const usableGroups: Array<{
+    color: string;
+    label: string;
+    runs: number[][][];
+    runWeights?: number[];
+  }> = [];
   let cursor: [number, number] = [0, 0],
     penUpDistance = 0;
   for (const group of groups || []) {
     const preparedRuns: number[][][] = [];
-    for (const run of group.runs || []) {
+    const preparedWeights: number[] = [];
+    for (const [runIndex, run] of (group.runs || []).entries()) {
       const sourceRuns = clipToArtboard ? clipRunToRect(run, width, height) : [run];
       for (const sourceRun of sourceRuns) {
         const prepared = prepareRun(sourceRun, height, origin);
-        if (prepared) preparedRuns.push(prepared);
+        if (prepared) {
+          preparedRuns.push(prepared);
+          preparedWeights.push(group.runWeights?.[runIndex] ?? 0);
+        }
       }
     }
     if (!preparedRuns.length) continue;
@@ -123,7 +133,9 @@ export function generateGCode(
       ? optimizeRuns(
           preparedRuns.flatMap((run) => [run.flat()]),
           cursor,
-          mergeTolerance,
+          options.motion?.kind === 'coordinated-xyz' && options.motion.settings.lineWeightPressure
+            ? 0
+            : mergeTolerance,
           options.motion?.kind === 'coordinated-xyz' &&
             options.motion.settings.preserveStrokeDirection,
         )
@@ -135,6 +147,9 @@ export function generateGCode(
           return points;
         })
       : preparedRuns;
+    const orderedWeights = optimized
+      ? optimized.sourceIndexes.map(([sourceIndex]) => preparedWeights[sourceIndex] ?? 0)
+      : preparedWeights;
     if (optimized) {
       cursor = optimized.end;
       penUpDistance += optimized.penUpDistance;
@@ -144,6 +159,7 @@ export function generateGCode(
       color: cleanComment(group.color || 'unspecified'),
       label: cleanComment(group.label || 'contours'),
       runs: orderedRuns,
+      runWeights: orderedWeights,
     });
   }
 
@@ -185,7 +201,10 @@ export function generateGCode(
       lines.push(`; Curvature relief: ${clampPrecision(expressive.curvatureRelief * 100)}%`);
     lines.push(
       `; Stroke direction: ${expressive.preserveStrokeDirection ? 'preserved' : 'optimizer may reverse runs'}`,
+      `; Line-weight pressure mapping: ${expressive.lineWeightPressure ? 'enabled' : 'disabled'}`,
     );
+    if (expressive.lineWeightPressure)
+      lines.push('; Pen-down run merging: disabled to preserve per-run pressure metadata');
     if (expressive.surfaceCompensation.mode === 'plane')
       lines.push(
         `; Surface compensation: plane · origin ${clampPrecision(expressive.surfaceCompensation.originOffset)} mm; +X ${clampPrecision(expressive.surfaceCompensation.xOffset)} mm; +Y ${clampPrecision(expressive.surfaceCompensation.yOffset)} mm`,

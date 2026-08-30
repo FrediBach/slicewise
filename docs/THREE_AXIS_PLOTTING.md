@@ -440,4 +440,8 @@ Status: implemented in software. Pressure modulation uses final-path arc length 
 
 Status: the three-point plane, safe surface-relative lift height, full-bed calibration pattern, and local per-machine presets are implemented. The 3×3 height map remains intentionally deferred until physical probing or measurement workflows are validated on target hardware.
 
+### Appearance-driven pressure extension
+
+An additional opt-in maps the final normalized line-weight bands from Appearance to expressive pressure. The metadata travels with each final run through clipping, layout rotation, and travel ordering. Thin bands remain at contact, thick bands reach the configured maximum pressure, and endpoint ramps plus modulation or curvature relief still apply multiplicatively. Runs without contour weight metadata remain at contact. Disabled output and ordinary SVG/G-code geometry are unchanged.
+
 The most important scope boundary is that Slicewise’s current final toolpaths are 2D and have lost most original 3D mesh provenance. The first version should therefore derive pressure from final path length, endpoints, and curvature. Mapping pressure to original mesh depth or contour scalar value should be a later feature that deliberately carries metadata through `contour-engine.ts`, rather than trying to reconstruct it during export.

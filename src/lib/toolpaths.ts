@@ -83,50 +83,6 @@ export function clipToolpathGroups<T extends ToolpathGroupLike>(
   return clipped;
 }
 
-function mergeNearbyRuns(
-  source: ToolpathRun[],
-  tolerance: number,
-  preserveDirection = false,
-): ToolpathRun[] {
-  const runs = source.map((run) => run.slice());
-  if (tolerance <= 0) return runs;
-  for (;;) {
-    let best: { i: number; j: number; mode: number; gap: number } | null = null;
-    for (let i = 0; i < runs.length; i++) {
-      const aStart = firstPoint(runs[i]),
-        aEnd = lastPoint(runs[i]);
-      if (samePoint(aStart, aEnd)) continue;
-      for (let j = i + 1; j < runs.length; j++) {
-        const bStart = firstPoint(runs[j]),
-          bEnd = lastPoint(runs[j]);
-        if (samePoint(bStart, bEnd)) continue;
-        const gaps = preserveDirection
-          ? [distance(aEnd, bStart), Infinity, Infinity, distance(bEnd, aStart)]
-          : [
-              distance(aEnd, bStart),
-              distance(aEnd, bEnd),
-              distance(aStart, bStart),
-              distance(aStart, bEnd),
-            ];
-        for (let mode = 0; mode < gaps.length; mode++)
-          if (gaps[mode] <= tolerance && (!best || gaps[mode] < best.gap - 1e-12))
-            best = { i, j, mode, gap: gaps[mode] };
-      }
-    }
-    if (!best) return runs;
-    let a = runs[best.i],
-      b = runs[best.j];
-    if (best.mode === 1) b = reverseRun(b);
-    else if (best.mode === 2) a = reverseRun(a);
-    else if (best.mode === 3) [a, b] = [b, a];
-    const joined = a.slice();
-    if (!samePoint(lastPoint(a), firstPoint(b))) joined.push(...firstPoint(b));
-    joined.push(...b.slice(2));
-    runs[best.i] = joined;
-    runs.splice(best.j, 1);
-  }
-}
-
 function routeDistance(runs: ToolpathRun[], start: Point): number {
   let total = 0,
     cursor = start;
@@ -139,9 +95,66 @@ function routeDistance(runs: ToolpathRun[], start: Point): number {
 
 export type OptimizedRuns = {
   runs: ToolpathRun[];
+  sourceIndexes: number[][];
   end: Point;
   penUpDistance: number;
 };
+
+type IndexedRun = { points: ToolpathRun; sourceIndexes: number[] };
+
+function mergeNearbyIndexedRuns(
+  source: ToolpathRun[],
+  tolerance: number,
+  preserveDirection: boolean,
+): IndexedRun[] {
+  const indexed = source.map((points, index) => ({
+    points: points.slice(),
+    sourceIndexes: [index],
+  }));
+  if (tolerance <= 0) return indexed;
+  const reverse = (run: IndexedRun): IndexedRun => ({
+    points: reverseRun(run.points),
+    sourceIndexes: run.sourceIndexes.slice().reverse(),
+  });
+  for (;;) {
+    let best: { i: number; j: number; mode: number; gap: number } | null = null;
+    for (let i = 0; i < indexed.length; i++) {
+      const aStart = firstPoint(indexed[i].points);
+      const aEnd = lastPoint(indexed[i].points);
+      if (samePoint(aStart, aEnd)) continue;
+      for (let j = i + 1; j < indexed.length; j++) {
+        const bStart = firstPoint(indexed[j].points);
+        const bEnd = lastPoint(indexed[j].points);
+        if (samePoint(bStart, bEnd)) continue;
+        const gaps = preserveDirection
+          ? [distance(aEnd, bStart), Infinity, Infinity, distance(bEnd, aStart)]
+          : [
+              distance(aEnd, bStart),
+              distance(aEnd, bEnd),
+              distance(aStart, bStart),
+              distance(aStart, bEnd),
+            ];
+        for (let mode = 0; mode < gaps.length; mode += 1)
+          if (gaps[mode] <= tolerance && (!best || gaps[mode] < best.gap - 1e-12))
+            best = { i, j, mode, gap: gaps[mode] };
+      }
+    }
+    if (!best) return indexed;
+    let a = indexed[best.i];
+    let b = indexed[best.j];
+    if (best.mode === 1) b = reverse(b);
+    else if (best.mode === 2) a = reverse(a);
+    else if (best.mode === 3) [a, b] = [b, a];
+    const points = a.points.slice();
+    if (!samePoint(lastPoint(a.points), firstPoint(b.points))) points.push(...firstPoint(b.points));
+    points.push(...b.points.slice(2));
+    indexed[best.i] = {
+      points,
+      sourceIndexes: [...a.sourceIndexes, ...b.sourceIndexes],
+    };
+    indexed.splice(best.j, 1);
+  }
+}
 
 /** Greedy endpoint ordering followed by deterministic reversible 2-opt refinement. */
 export function optimizeRuns(
@@ -150,20 +163,28 @@ export function optimizeRuns(
   mergeTolerance = 0.15,
   preserveDirection = false,
 ): OptimizedRuns {
-  const remaining = mergeNearbyRuns(
-    source.filter((run) => run.length >= 4),
+  const filteredSourceIndexes: number[] = [];
+  const filtered = source.filter((run, index) => {
+    if (run.length < 4) return false;
+    filteredSourceIndexes.push(index);
+    return true;
+  });
+  const remaining = mergeNearbyIndexedRuns(
+    filtered,
     Math.max(0, mergeTolerance),
     preserveDirection,
   );
-  const ordered: ToolpathRun[] = [];
+  const ordered: IndexedRun[] = [];
   let cursor: Point = [...start];
   while (remaining.length) {
     let bestIndex = 0,
       reverse = false,
       bestDistance = Infinity;
     for (let i = 0; i < remaining.length; i++) {
-      const startDistance = distance(cursor, firstPoint(remaining[i]));
-      const endDistance = preserveDirection ? Infinity : distance(cursor, lastPoint(remaining[i]));
+      const startDistance = distance(cursor, firstPoint(remaining[i].points));
+      const endDistance = preserveDirection
+        ? Infinity
+        : distance(cursor, lastPoint(remaining[i].points));
       if (startDistance < bestDistance) {
         bestDistance = startDistance;
         bestIndex = i;
@@ -175,10 +196,10 @@ export function optimizeRuns(
         reverse = true;
       }
     }
-    let next = remaining.splice(bestIndex, 1)[0];
-    if (reverse) next = reverseRun(next);
+    const next = remaining.splice(bestIndex, 1)[0];
+    if (reverse) next.points = reverseRun(next.points);
     ordered.push(next);
-    cursor = lastPoint(next);
+    cursor = lastPoint(next.points);
   }
 
   for (let pass = 0; !preserveDirection && pass < 8; pass++) {
@@ -186,15 +207,15 @@ export function optimizeRuns(
       bestK = -1,
       bestGain = 1e-9;
     for (let i = 0; i < ordered.length; i++) {
-      const before = i === 0 ? start : lastPoint(ordered[i - 1]);
+      const before = i === 0 ? start : lastPoint(ordered[i - 1].points);
       for (let k = i + 1; k < ordered.length; k++) {
-        const after = k + 1 < ordered.length ? firstPoint(ordered[k + 1]) : null;
+        const after = k + 1 < ordered.length ? firstPoint(ordered[k + 1].points) : null;
         const oldCost =
-          distance(before, firstPoint(ordered[i])) +
-          (after ? distance(lastPoint(ordered[k]), after) : 0);
+          distance(before, firstPoint(ordered[i].points)) +
+          (after ? distance(lastPoint(ordered[k].points), after) : 0);
         const newCost =
-          distance(before, lastPoint(ordered[k])) +
-          (after ? distance(firstPoint(ordered[i]), after) : 0);
+          distance(before, lastPoint(ordered[k].points)) +
+          (after ? distance(firstPoint(ordered[i].points), after) : 0);
         const gain = oldCost - newCost;
         if (gain > bestGain) {
           bestGain = gain;
@@ -207,10 +228,21 @@ export function optimizeRuns(
     const replacement = ordered
       .slice(bestI, bestK + 1)
       .reverse()
-      .map(reverseRun);
+      .map((run) => ({
+        points: reverseRun(run.points),
+        sourceIndexes: run.sourceIndexes.slice().reverse(),
+      }));
     ordered.splice(bestI, replacement.length, ...replacement);
   }
 
-  const end = ordered.length ? lastPoint(ordered[ordered.length - 1]) : start;
-  return { runs: ordered, end, penUpDistance: routeDistance(ordered, start) };
+  const runs = ordered.map(({ points }) => points);
+  const end = runs.length ? lastPoint(runs[runs.length - 1]) : start;
+  return {
+    runs,
+    sourceIndexes: ordered.map(({ sourceIndexes }) =>
+      sourceIndexes.map((index) => filteredSourceIndexes[index]),
+    ),
+    end,
+    penUpDistance: routeDistance(runs, start),
+  };
 }

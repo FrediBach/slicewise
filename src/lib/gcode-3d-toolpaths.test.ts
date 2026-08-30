@@ -244,4 +244,40 @@ describe('3D G-code toolpaths', () => {
     expect(stroke.stroke.points.at(-1)?.z).toBe(-2);
     expect(stroke.stroke.points.every(({ pressure }) => pressure === 0)).toBe(true);
   });
+
+  it('maps final-run visual weight to pressure with safe endpoint ramps', () => {
+    const operations = createExpressiveOperations(
+      [
+        {
+          color: 'black',
+          runs: [
+            [
+              [0, 0],
+              [10, 0],
+            ],
+            [
+              [0, 5],
+              [10, 5],
+            ],
+          ],
+          runWeights: [0, 1],
+        },
+      ],
+      0,
+      {
+        ...defaultUunaExpressiveMotion(-3),
+        lineWeightPressure: true,
+        maximumPressDepth: 1,
+      },
+    );
+    const strokes = operations.filter(({ kind }) => kind === 'stroke');
+    expect(strokes).toHaveLength(2);
+    if (strokes[0]?.kind !== 'stroke' || strokes[1]?.kind !== 'stroke') return;
+    expect(strokes[0].stroke.points.every(({ pressure, z }) => pressure === 0 && z === -3)).toBe(
+      true,
+    );
+    expect(strokes[1].stroke.points[0]).toMatchObject({ pressure: 0, z: -3 });
+    expect(strokes[1].stroke.points[2]).toMatchObject({ pressure: 1, z: -4 });
+    expect(strokes[1].stroke.points.at(-1)).toMatchObject({ pressure: 0, z: -3 });
+  });
 });

@@ -194,6 +194,7 @@ describe('OutputPanel composition boundaries', () => {
     expect(document.getElementById('uunaExpressiveModulationPeriodN')).toHaveValue(20);
     expect(document.getElementById('uunaExpressiveCurvatureReliefN')).toHaveValue(0);
     expect(document.getElementById('uunaExpressiveNibWidthN')).toHaveValue(0);
+    expect(document.getElementById('uunaExpressiveLineWeightPressure')).not.toBeChecked();
     expect(document.getElementById('uunaSurfaceCompensation')).not.toBeChecked();
     expect(document.getElementById('uunaSurfaceOriginOffsetN')).toHaveValue(0);
     expect(document.getElementById('uunaSurfaceXOffsetN')).toHaveValue(0);

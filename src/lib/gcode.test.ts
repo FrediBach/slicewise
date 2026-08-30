@@ -256,4 +256,35 @@ describe('generateGCode', () => {
     expect(output).toContain('G1 Z1.5 F600 ; pen up');
     expect(output).toContain('G1 X10 Y0 Z-2.5 F1200');
   });
+
+  it('keeps visual run weights attached through travel ordering', () => {
+    const output = generateGCode(
+      [
+        {
+          ...group([
+            [100, 0, 110, 0],
+            [10, 0, 20, 0],
+          ]),
+          runWeights: [1, 0],
+        },
+      ],
+      { width: 120, height: 20 },
+      {
+        origin: 'rear-left',
+        penUp: 0,
+        motion: {
+          kind: 'coordinated-xyz',
+          settings: {
+            ...defaultUunaExpressiveMotion(-3),
+            lineWeightPressure: true,
+            maximumPressDepth: 1,
+          },
+        },
+      },
+    );
+
+    expect(output).toContain('; Line-weight pressure mapping: enabled');
+    expect(output.indexOf('G0 X10 Y0')).toBeLessThan(output.indexOf('G0 X100 Y0'));
+    expect(output).toMatch(/G1 X102 Y0 Z-4 F1200/);
+  });
 });

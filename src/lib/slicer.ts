@@ -1205,7 +1205,7 @@ if (typeof document !== 'undefined') {
   bindPair('quality', 'quality');
   bindPair('sw', 'sw');
   bindPair('lineWeightInterval', 'lineWeightInterval');
-  bindPair('lineWeightAmount', 'lineWeightAmount');
+  bindPair('lineWeightAmount', 'lineWeightAmount', syncExpressiveLineWeightControl);
   bindPair('margin', 'margin');
   bindPair('maskRoundness', 'maskRoundness');
   bindPair('maskScaleX', 'maskScaleX');
@@ -1658,10 +1658,21 @@ if (typeof document !== 'undefined') {
     const supported = resolveGCodeProfile(state.gcodeProfile).capabilities.coordinatedXYZ;
     $('uunaExpressiveMotionSection').hidden = !supported;
     $('uunaExpressiveMotionControls').hidden = !supported || !state.uunaExpressiveMotion.enabled;
-    $('uunaExpressivePressureControls').hidden = state.uunaExpressiveMotion.mode === 'constant';
+    $('uunaExpressivePressureControls').hidden =
+      state.uunaExpressiveMotion.mode === 'constant' &&
+      !state.uunaExpressiveMotion.lineWeightPressure;
     $('uunaExpressiveModulationControls').hidden = state.uunaExpressiveMotion.mode !== 'modulated';
     $('uunaExpressiveCurvatureControls').hidden = state.uunaExpressiveMotion.mode !== 'curvature';
     syncSurfaceControls();
+    syncExpressiveLineWeightControl();
+  }
+  function syncExpressiveLineWeightControl(): void {
+    const available = state.lineWeightMode !== 'uniform' && state.lineWeightAmount > 0;
+    setSingleControlDisabled(
+      'uunaExpressiveLineWeightPressure',
+      !available,
+      'Choose a non-uniform line-weight mode with Variation above 0% in Appearance.',
+    );
   }
   function syncSurfaceControls(): void {
     const active = state.uunaExpressiveMotion.surfaceCompensation.mode === 'plane';
@@ -1700,6 +1711,11 @@ if (typeof document !== 'undefined') {
   });
   $('uunaExpressivePreserveDirection').addEventListener('change', (event) => {
     state.uunaExpressiveMotion.preserveStrokeDirection = inputTarget(event).checked;
+    updateExportSize();
+  });
+  $('uunaExpressiveLineWeightPressure').addEventListener('change', (event) => {
+    state.uunaExpressiveMotion.lineWeightPressure = inputTarget(event).checked;
+    syncExpressiveMotionControls();
     updateExportSize();
   });
   $('uunaSurfaceCompensation').addEventListener('change', (event) => {
@@ -1920,6 +1936,7 @@ if (typeof document !== 'undefined') {
       );
       $(id + 'Control').classList.toggle('is-disabled', !controlEnabled);
     }
+    syncExpressiveLineWeightControl();
   }
   $('lineWeightMode').addEventListener('change', (event) => {
     state.lineWeightMode = inputTarget(event).value;

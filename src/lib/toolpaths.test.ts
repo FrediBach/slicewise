@@ -26,6 +26,7 @@ describe('toolpath optimization', () => {
 
     expect(result.runs).toHaveLength(1);
     expect(result.runs[0]).toEqual([0, 0, 5, 0, 5.05, 0, 10, 0]);
+    expect(result.sourceIndexes).toEqual([[0, 1]]);
   });
 
   it('uses reversible 2-opt improvements after greedy ordering', () => {
@@ -46,5 +47,18 @@ describe('toolpath optimization', () => {
     const result = optimizeRuns([first, second], [0, 0], 0, true);
 
     expect(result.runs).toEqual([first, second]);
+  });
+
+  it('reports source indexes after reversible travel ordering', () => {
+    const result = optimizeRuns(
+      [
+        [100, 0, 110, 0],
+        [10, 0, 20, 0],
+      ],
+      [0, 0],
+      0,
+    );
+
+    expect(result.sourceIndexes).toEqual([[1], [0]]);
   });
 });
