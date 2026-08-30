@@ -21,6 +21,17 @@ export type PreparedMachineGroup = {
   runs: number[][][];
 };
 
+export type SurfaceCompensation =
+  | { mode: 'off' }
+  | {
+      mode: 'plane';
+      originOffset: number;
+      xOffset: number;
+      yOffset: number;
+      width: number;
+      height: number;
+    };
+
 export type UunaExpressiveMotion = {
   enabled: boolean;
   penAngle: number;
@@ -37,7 +48,7 @@ export type UunaExpressiveMotion = {
   curvatureRelief: number;
   preserveStrokeDirection: boolean;
   nibWidth: number;
-  surfaceCompensation: { mode: 'off' };
+  surfaceCompensation: SurfaceCompensation;
 };
 
 export const EXPRESSIVE_RESAMPLE_STEP = 1;
@@ -143,6 +154,34 @@ export function compensateAngledTip(
   return [x - offset * Math.cos(direction), y - offset * Math.sin(direction)];
 }
 
+export function surfaceCorrectionAt(x: number, y: number, surface: SurfaceCompensation): number {
+  if (surface.mode === 'off') return 0;
+  const origin = finiteOr(surface.originOffset, 0);
+  const width = finiteOr(surface.width, 0);
+  const height = finiteOr(surface.height, 0);
+  if (width <= 0 || height <= 0) return origin;
+  return (
+    origin +
+    (finiteOr(surface.xOffset, origin) - origin) * (finiteOr(x, 0) / width) +
+    (finiteOr(surface.yOffset, origin) - origin) * (finiteOr(y, 0) / height)
+  );
+}
+
+export function surfaceCorrectionRange(
+  surface: SurfaceCompensation,
+): readonly [minimum: number, maximum: number] {
+  if (surface.mode === 'off') return [0, 0];
+  const origin = finiteOr(surface.originOffset, 0);
+  const x = finiteOr(surface.xOffset, origin);
+  const y = finiteOr(surface.yOffset, origin);
+  const opposite = x + y - origin;
+  return [Math.min(origin, x, y, opposite), Math.max(origin, x, y, opposite)];
+}
+
+export function safePenUpForSurface(penUp: number, surface: SurfaceCompensation): number {
+  return finiteOr(penUp, 0) + surfaceCorrectionRange(surface)[1];
+}
+
 export function machinePointForPressure(
   x: number,
   y: number,
@@ -150,7 +189,8 @@ export function machinePointForPressure(
   options: ExpressiveOperationOptions,
 ): MachinePoint {
   const normalizedPressure = clamp(finiteOr(pressure, 0), 0, 1);
-  const contactZ = finiteOr(options.contactZ, -3);
+  const contactZ =
+    finiteOr(options.contactZ, -3) + surfaceCorrectionAt(x, y, options.surfaceCompensation);
   const maximumPressDepth = Math.max(0, finiteOr(options.maximumPressDepth, 0));
   const z = contactZ - normalizedPressure * maximumPressDepth;
   const [compensatedX, compensatedY] = compensateAngledTip(
@@ -232,7 +272,7 @@ export function createExpressiveOperations(
   penUp: number,
   options: ExpressiveOperationOptions,
 ): MachineOperation[] {
-  if (options.mode === 'constant')
+  if (options.mode === 'constant' && options.surfaceCompensation.mode === 'off')
     return createConstantContactOperations(groups, penUp, finiteOr(options.contactZ, -3));
 
   const operations: MachineOperation[] = [];
@@ -270,7 +310,12 @@ export function createExpressiveOperations(
                 : options.mode === 'curvature'
                   ? curvaturePressure(sampled.points, index, options.curvatureRelief)
                   : 1;
-            return machinePointForPressure(x, y, envelope * behavior, options);
+            return machinePointForPressure(
+              x,
+              y,
+              options.mode === 'constant' ? 0 : envelope * behavior,
+              options,
+            );
           }),
         },
       });

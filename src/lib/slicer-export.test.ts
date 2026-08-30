@@ -6,6 +6,7 @@ import {
   createGCodeExport,
   createGCodeExportPreflight,
   createUunaCalibrationExport,
+  createUunaSurfaceCalibrationExport,
   type ExportState,
 } from './slicer-export';
 
@@ -222,6 +223,31 @@ describe('slicer export assembly', () => {
     );
   });
 
+  it('preflights a machine-coordinate surface plane with adjusted safe clearance', () => {
+    const preflight = createGCodeExportPreflight(
+      exportState({
+        toolpaths: [{ color: 'black', label: 'slope', runs: [[0, 0, 100, 0]] }],
+        uunaExpressiveMotion: {
+          ...defaultUunaExpressiveMotion(-2),
+          enabled: true,
+          surfaceCompensation: {
+            mode: 'plane',
+            originOffset: 0,
+            xOffset: 0.5,
+            yOffset: -0.25,
+            width: 200,
+            height: 100,
+          },
+        },
+      }),
+    );
+
+    expect(preflight.validation.errors).toEqual([]);
+    expect(preflight.content).toContain('G1 Z3.5 F900 ; pen up');
+    expect(preflight.validation.stats.minimumZ).toBe(-2);
+    expect(preflight.validation.stats.maximumZ).toBe(3.5);
+  });
+
   it('exports a preflight-validated UUNA calibration program', () => {
     const calibration = createUunaCalibrationExport(
       exportState({
@@ -242,6 +268,18 @@ describe('slicer export assembly', () => {
     expect(() => createUunaCalibrationExport(exportState({ gcodeProfile: 'generic' }))).toThrow(
       /Select a UUNA TEK profile/,
     );
+  });
+
+  it('exports a full-machine uncompensated three-point surface pattern', () => {
+    const calibration = createUunaSurfaceCalibrationExport(exportState());
+
+    expect(calibration.sheet).toEqual({ width: 420, height: 297 });
+    expect(calibration.validation.valid).toBe(true);
+    expect(calibration.content).toContain('three-point surface calibration');
+    expect(calibration.content).toContain('Surface compensation is intentionally disabled');
+    expect(() =>
+      createUunaSurfaceCalibrationExport(exportState({ gcodeProfile: 'generic' })),
+    ).toThrow(/fixed-size UUNA TEK/);
   });
 
   it('blocks export when runtime machine settings cannot pass preflight', () => {

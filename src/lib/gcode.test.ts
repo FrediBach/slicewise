@@ -227,4 +227,33 @@ describe('generateGCode', () => {
     expect(output).toContain('Pressure modulation: 50% depth; 8 mm wavelength; 90 degrees phase');
     expect(output).toContain('Stroke direction: preserved');
   });
+
+  it('serializes paper-plane Z and raises safe travel above its highest point', () => {
+    const output = generateGCode(
+      [group([[0, 0, 10, 0]])],
+      { width: 10, height: 10 },
+      {
+        origin: 'rear-left',
+        penUp: 1,
+        motion: {
+          kind: 'coordinated-xyz',
+          settings: {
+            ...defaultUunaExpressiveMotion(-3),
+            surfaceCompensation: {
+              mode: 'plane',
+              originOffset: 0,
+              xOffset: 0.5,
+              yOffset: 0,
+              width: 10,
+              height: 10,
+            },
+          },
+        },
+      },
+    );
+
+    expect(output).toContain('; Surface compensation: plane · origin 0 mm; +X 0.5 mm; +Y 0 mm');
+    expect(output).toContain('G1 Z1.5 F600 ; pen up');
+    expect(output).toContain('G1 X10 Y0 Z-2.5 F1200');
+  });
 });

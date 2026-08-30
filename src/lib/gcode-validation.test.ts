@@ -229,6 +229,14 @@ describe('validateGCode', () => {
         maximumPressDepth: -1,
         penAngle: 5,
         tiltDirection: 360,
+        surfaceCompensation: {
+          mode: 'plane',
+          originOffset: 0,
+          xOffset: Number.NaN,
+          yOffset: 0,
+          width: 0,
+          height: 80,
+        },
       }),
     });
     expect(invalid.errors.map(({ code }) => code)).toEqual(
@@ -236,6 +244,7 @@ describe('validateGCode', () => {
         'invalid-press-depth',
         'invalid-pen-angle',
         'invalid-tilt-direction',
+        'invalid-surface-plane',
       ]),
     );
   });

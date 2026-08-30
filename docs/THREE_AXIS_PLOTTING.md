@@ -2,7 +2,7 @@ The right model is “expressive 3-axis plotting with a fixed angled tool,” no
 
 ## Implementation status
 
-Phases 1 and 2 are implemented in the application:
+Phases 1–4 are implemented in the application, except for the hardware-gated 3×3 height map:
 
 - machine profiles declare coordinated-XYZ and fixed-angle-holder capabilities;
 - export state has a structured, disabled-by-default UUNA expressive-motion configuration;
@@ -17,8 +17,11 @@ Phases 1 and 2 are implemented in the application:
 - preflight reports pressure and Z slope and renders low, medium, and high pressure separately;
 - a preflight-validated calibration download contains a contact ladder, angle crosses, and taper fan;
 - direct serial confirmation calls out the physical angle, machine direction, Z range, compensation state, and calibration requirement.
+- three-point machine-coordinate paper planes correct contact and pressure Z independently;
+- pen-up clearance follows the highest point of the fitted surface;
+- full-bed three-point patterns and browser-local per-machine plane presets support calibration.
 
-Hardware characterization remains open. Until coordinated motion is confirmed on target firmware, expressive motion remains calibration-required output. Phase 3 arc-length modulation, curvature response, direction preservation, and broad-nib footprint guidance are implemented in software. Broad-nib preview and spacing checks are intentionally approximate and must be confirmed with the physical tool.
+Hardware characterization remains open. Until coordinated motion is confirmed on target firmware, expressive motion remains calibration-required output. Broad-nib preview, spacing checks, and surface-plane compensation must be confirmed with the physical tool. The optional 3×3 map remains deferred until its measurement workflow is physically validated.
 
 UUNA TEK 3.0 has stepper-driven X, Y, and Z axes, while its advertised 0–90° pen angle appears to be a manually adjusted holder setting. I found no evidence that pen angle can be changed through G-code. The angle still matters computationally: changing Z with a tilted pen shifts the physical tip in X/Y, affects pressure, and changes broad-nib or brush behavior. [UUNA TEK specifications](https://uunatek.com/products/uuna-tek-3-0-a2-size-pen-plotter-drawing-robot-drawing-machine-writing-machine), [official G-code guide](https://uunatek.com/blogs/tips-and-tricks/beginner-s-guide-to-g-code-for-uuna-tek-3-0-pen-plotter-step-by-step-tutorial).
 
@@ -434,5 +437,7 @@ Status: implemented in software. Pressure modulation uses final-path arc length 
 - Three-point paper plane.
 - Local machine calibration presets.
 - Optional 3×3 height maps after physical validation.
+
+Status: the three-point plane, safe surface-relative lift height, full-bed calibration pattern, and local per-machine presets are implemented. The 3×3 height map remains intentionally deferred until physical probing or measurement workflows are validated on target hardware.
 
 The most important scope boundary is that Slicewise’s current final toolpaths are 2D and have lost most original 3D mesh provenance. The first version should therefore derive pressure from final path length, endpoints, and curvature. Mapping pressure to original mesh depth or contour scalar value should be a later feature that deliberately carries metadata through `contour-engine.ts`, rather than trying to reconstruct it during export.

@@ -48,6 +48,13 @@ import { normalizeParameterSnapshot } from './parameter-migrations';
 import { DEFAULT_GCODE_PROFILE_ID, resolveGCodeProfile } from './gcode-profiles';
 import { defaultUunaExpressiveMotion, type UunaExpressiveMotion } from './gcode-3d-toolpaths';
 import {
+  clearSurfacePlanePreset,
+  defaultSurfacePlane,
+  loadSurfacePlanePreset,
+  saveSurfacePlanePreset,
+  type SurfacePlane,
+} from './gcode-surface-presets';
+import {
   orientPaperSize,
   paperOrientationForSize,
   type PaperOrientation,
@@ -57,6 +64,7 @@ import {
   createExportFilename,
   createGCodeExportPreflight,
   createUunaCalibrationExport,
+  createUunaSurfaceCalibrationExport,
   type GCodeExportPreflight,
 } from './slicer-export';
 import {
@@ -1323,6 +1331,46 @@ if (typeof document !== 'undefined') {
   bindExpressivePair('uunaExpressiveNibWidth', 'nibWidth');
   bindExpressivePair('uunaExpressivePenAngle', 'penAngle');
   bindExpressivePair('uunaExpressiveTiltDirection', 'tiltDirection');
+  type SurfaceOffsetKey = 'originOffset' | 'xOffset' | 'yOffset';
+  function surfaceReferenceSize(): { width: number; height: number } {
+    return (
+      resolveGCodeProfile(state.gcodeProfile).workingArea ?? { width: state.pw, height: state.ph }
+    );
+  }
+  function currentSurfacePlane(): SurfacePlane {
+    if (state.uunaExpressiveMotion.surfaceCompensation.mode === 'plane')
+      return state.uunaExpressiveMotion.surfaceCompensation;
+    const { width, height } = surfaceReferenceSize();
+    return defaultSurfacePlane(width, height);
+  }
+  function setSurfacePair(id: string, value: number): void {
+    $(id).value = String(value);
+    $(id + 'N').value = String(value);
+  }
+  function syncSurfacePairValues(plane: SurfacePlane): void {
+    setSurfacePair('uunaSurfaceOriginOffset', plane.originOffset);
+    setSurfacePair('uunaSurfaceXOffset', plane.xOffset);
+    setSurfacePair('uunaSurfaceYOffset', plane.yOffset);
+  }
+  function bindSurfacePair(id: string, key: SurfaceOffsetKey): void {
+    const slider = $(id);
+    const number = $(id + 'N');
+    const apply = (value: string, from: 's' | 'n'): void => {
+      const next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
+      if (Number.isNaN(next)) return;
+      const plane = currentSurfacePlane();
+      plane[key] = next;
+      state.uunaExpressiveMotion.surfaceCompensation = plane;
+      if (from !== 's') slider.value = String(next);
+      if (from !== 'n') number.value = String(next);
+      updateExportSize();
+    };
+    slider.addEventListener('input', (event) => apply(inputTarget(event).value, 's'));
+    number.addEventListener('input', (event) => apply(inputTarget(event).value, 'n'));
+  }
+  bindSurfacePair('uunaSurfaceOriginOffset', 'originOffset');
+  bindSurfacePair('uunaSurfaceXOffset', 'xOffset');
+  bindSurfacePair('uunaSurfaceYOffset', 'yOffset');
   morphKeyById.set('color', 'color');
 
   function syncProjectionWarpControls(): void {
@@ -1574,6 +1622,7 @@ if (typeof document !== 'undefined') {
       setExportPair(key, key, profile[key]);
     $('gcodeProfileNote').textContent = profile.note;
     if (profile.workingArea) setArtboardSize(profile.workingArea.width, profile.workingArea.height);
+    syncSurfacePresetForProfile();
     syncExpressiveMotionControls();
     updateExportSize();
   });
@@ -1612,6 +1661,25 @@ if (typeof document !== 'undefined') {
     $('uunaExpressivePressureControls').hidden = state.uunaExpressiveMotion.mode === 'constant';
     $('uunaExpressiveModulationControls').hidden = state.uunaExpressiveMotion.mode !== 'modulated';
     $('uunaExpressiveCurvatureControls').hidden = state.uunaExpressiveMotion.mode !== 'curvature';
+    syncSurfaceControls();
+  }
+  function syncSurfaceControls(): void {
+    const active = state.uunaExpressiveMotion.surfaceCompensation.mode === 'plane';
+    $<HTMLInputElement>('uunaSurfaceCompensation').checked = active;
+    $('uunaSurfaceCompensationControls').hidden = !active;
+    const saved = loadSurfacePlanePreset(state.gcodeProfile);
+    $('uunaSurfacePresetStatus').textContent = saved
+      ? `Saved for ${resolveGCodeProfile(state.gcodeProfile).machine} · ${saved.width} × ${saved.height} mm reference.`
+      : 'Plane is not saved for this machine.';
+  }
+  function syncSurfacePresetForProfile(): void {
+    const active = state.uunaExpressiveMotion.surfaceCompensation.mode === 'plane';
+    const saved = loadSurfacePlanePreset(state.gcodeProfile);
+    const { width, height } = surfaceReferenceSize();
+    const plane = saved ?? defaultSurfacePlane(width, height);
+    if (active) state.uunaExpressiveMotion.surfaceCompensation = plane;
+    syncSurfacePairValues(plane);
+    syncSurfaceControls();
   }
   $('uunaExpressiveMotionEnabled').addEventListener('change', (event) => {
     state.uunaExpressiveMotion.enabled = inputTarget(event).checked;
@@ -1634,6 +1702,36 @@ if (typeof document !== 'undefined') {
     state.uunaExpressiveMotion.preserveStrokeDirection = inputTarget(event).checked;
     updateExportSize();
   });
+  $('uunaSurfaceCompensation').addEventListener('change', (event) => {
+    if (inputTarget(event).checked) {
+      const saved = loadSurfacePlanePreset(state.gcodeProfile);
+      const { width, height } = surfaceReferenceSize();
+      const plane = saved ?? defaultSurfacePlane(width, height);
+      state.uunaExpressiveMotion.surfaceCompensation = plane;
+      syncSurfacePairValues(plane);
+    } else state.uunaExpressiveMotion.surfaceCompensation = { mode: 'off' };
+    syncSurfaceControls();
+    updateExportSize();
+  });
+  $('uunaSurfacePresetSave').addEventListener('click', () => {
+    try {
+      saveSurfacePlanePreset(state.gcodeProfile, currentSurfacePlane());
+      syncSurfaceControls();
+      toast('Saved surface plane for ' + resolveGCodeProfile(state.gcodeProfile).machine);
+    } catch (error) {
+      toast(errorMessage(error));
+    }
+  });
+  $('uunaSurfacePresetClear').addEventListener('click', () => {
+    try {
+      clearSurfacePlanePreset(state.gcodeProfile);
+      syncSurfaceControls();
+      toast('Cleared saved surface plane');
+    } catch (error) {
+      toast(errorMessage(error));
+    }
+  });
+  syncSurfacePresetForProfile();
   syncExpressiveMotionControls();
 
   const curvedSliceField = (): boolean =>
@@ -4297,6 +4395,7 @@ if (typeof document !== 'undefined') {
       const expressiveWarning = expressive
         ? `\n\nEXPRESSIVE 3-AXIS MOTION IS ENABLED. Set the holder to ${expressive.penAngle}° above the paper at ${expressive.tiltDirection}° machine direction. ` +
           `The file uses Z ${preflight.validation.stats.minimumZ?.toFixed(1)}–${preflight.validation.stats.maximumZ?.toFixed(1)} mm with ${expressive.tipCompensation ? 'angled-tip compensation' : 'no tip compensation'}. ` +
+          `It uses ${expressive.surfaceCompensation.mode === 'plane' ? 'paper-plane compensation' : 'no surface compensation'}. ` +
           'Calibration is required: run the calibration file and a pen-free dry run first.'
         : '';
       const confirmed = window.confirm(
@@ -4462,6 +4561,20 @@ if (typeof document !== 'undefined') {
       const anchor = document.createElement('a');
       anchor.href = URL.createObjectURL(blob);
       anchor.download = 'uuna-tek-3-axis-calibration.gcode';
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+      toast('Saved ' + anchor.download);
+    } catch (error) {
+      toast(errorMessage(error));
+    }
+  });
+  $('uunaSurfaceCalibrationDownload').addEventListener('click', () => {
+    try {
+      const calibration = createUunaSurfaceCalibrationExport(state);
+      const blob = new Blob([calibration.content], { type: 'text/x-gcode' });
+      const anchor = document.createElement('a');
+      anchor.href = URL.createObjectURL(blob);
+      anchor.download = `${state.gcodeProfile}-surface-calibration.gcode`;
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
       toast('Saved ' + anchor.download);

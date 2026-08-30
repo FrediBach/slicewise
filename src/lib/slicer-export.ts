@@ -1,6 +1,10 @@
 import { type ContourToolpathGroup } from './contour-engine';
-import type { UunaExpressiveMotion } from './gcode-3d-toolpaths';
-import { createUunaCalibrationOperations, UUNA_CALIBRATION_SHEET } from './gcode-calibration';
+import { safePenUpForSurface, type UunaExpressiveMotion } from './gcode-3d-toolpaths';
+import {
+  createSurfacePlaneCalibrationOperations,
+  createUunaCalibrationOperations,
+  UUNA_CALIBRATION_SHEET,
+} from './gcode-calibration';
 import { generateGCode } from './gcode';
 import { resolveGCodeMachineLayout, type GCodeLayoutRotation } from './gcode-layout';
 import { resolveGCodeProfile } from './gcode-profiles';
@@ -116,7 +120,9 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
   const validation = validateGCode(content, {
     width: layout.sheet.width,
     height: layout.sheet.height,
-    penUp: state.penUp,
+    penUp: expressiveMotion
+      ? safePenUpForSurface(state.penUp, expressiveMotion.surfaceCompensation)
+      : state.penUp,
     penDown: state.penDown,
     drawFeed: state.drawFeed,
     travelFeed: state.travelFeed,
@@ -133,6 +139,7 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
           tiltDirection: expressiveMotion!.tiltDirection,
           tipCompensation: expressiveMotion!.tipCompensation,
           zConvention: profile.capabilities.zConvention,
+          surfaceCompensation: expressiveMotion!.surfaceCompensation,
         }
       : undefined,
   });
@@ -177,6 +184,74 @@ export type UunaCalibrationExport = {
   validation: GCodeValidationResult;
 };
 
+export type UunaSurfaceCalibrationExport = {
+  content: string;
+  sheet: { width: number; height: number };
+  validation: GCodeValidationResult;
+};
+
+export function createUunaSurfaceCalibrationExport(
+  state: ExportState,
+): UunaSurfaceCalibrationExport {
+  const profile = resolveGCodeProfile(state.gcodeProfile);
+  if (!profile.capabilities.coordinatedXYZ || !profile.workingArea)
+    throw new Error('Select a fixed-size UUNA TEK profile before exporting a surface pattern.');
+  const sheet = { ...profile.workingArea };
+  const settings = {
+    ...state.uunaExpressiveMotion,
+    enabled: true,
+    mode: 'constant' as const,
+    maximumPressDepth: 0,
+    surfaceCompensation: { mode: 'off' as const },
+  };
+  const operations = createSurfacePlaneCalibrationOperations(state.penUp, settings, sheet);
+  const content = generateGCode([], sheet, {
+    name: 'UUNA TEK three-point surface calibration',
+    machine: profile.machine,
+    origin: profile.origin,
+    drawFeed: state.drawFeed,
+    travelFeed: state.travelFeed,
+    penUp: state.penUp,
+    penDown: state.penDown,
+    zFeed: state.zFeed,
+    clipToArtboard: false,
+    optimizeTravel: false,
+    comments: [
+      'Surface calibration: contact crosses at machine origin, +X edge, and +Y edge',
+      'Surface compensation is intentionally disabled; compare contact at all three crosses',
+    ],
+    motion: { kind: 'coordinated-xyz', settings, operations },
+  });
+  const validation = validateGCode(content, {
+    width: sheet.width,
+    height: sheet.height,
+    machineWidth: sheet.width,
+    machineHeight: sheet.height,
+    penUp: state.penUp,
+    penDown: state.penDown,
+    drawFeed: state.drawFeed,
+    travelFeed: state.travelFeed,
+    zFeed: state.zFeed,
+    motion: {
+      kind: 'coordinated-xyz',
+      contactZ: settings.contactZ,
+      maximumPressDepth: 0,
+      mode: settings.mode,
+      penAngle: settings.penAngle,
+      tiltDirection: settings.tiltDirection,
+      tipCompensation: settings.tipCompensation,
+      zConvention: profile.capabilities.zConvention,
+      surfaceCompensation: settings.surfaceCompensation,
+    },
+  });
+  const firstError = validation.errors[0];
+  if (firstError)
+    throw new Error(
+      `Surface calibration preflight failed${firstError.line ? ` on line ${firstError.line}` : ''}: ${firstError.message}`,
+    );
+  return { content, sheet, validation };
+}
+
 export function createUunaCalibrationExport(state: ExportState): UunaCalibrationExport {
   const profile = resolveGCodeProfile(state.gcodeProfile);
   if (!profile.capabilities.coordinatedXYZ)
@@ -205,7 +280,7 @@ export function createUunaCalibrationExport(state: ExportState): UunaCalibration
     height: UUNA_CALIBRATION_SHEET.height,
     machineWidth: profile.workingArea?.width,
     machineHeight: profile.workingArea?.height,
-    penUp: state.penUp,
+    penUp: safePenUpForSurface(state.penUp, settings.surfaceCompensation),
     penDown: state.penDown,
     drawFeed: state.drawFeed,
     travelFeed: state.travelFeed,
@@ -219,6 +294,7 @@ export function createUunaCalibrationExport(state: ExportState): UunaCalibration
       tiltDirection: settings.tiltDirection,
       tipCompensation: settings.tipCompensation,
       zConvention: profile.capabilities.zConvention,
+      surfaceCompensation: settings.surfaceCompensation,
     },
   });
   const firstError = validation.errors[0];

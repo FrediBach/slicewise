@@ -4,6 +4,9 @@ import {
   createConstantContactOperations,
   createExpressiveOperations,
   defaultUunaExpressiveMotion,
+  machinePointForPressure,
+  safePenUpForSurface,
+  surfaceCorrectionAt,
 } from './gcode-3d-toolpaths';
 
 describe('3D G-code toolpaths', () => {
@@ -184,5 +187,61 @@ describe('3D G-code toolpaths', () => {
     expect(operation.stroke.points[2].pressure).toBe(1);
     expect(operation.stroke.points[5].pressure).toBe(0);
     expect(operation.stroke.points[8].pressure).toBe(1);
+  });
+
+  it('fits a paper plane independently from artistic pressure', () => {
+    const surface = {
+      mode: 'plane' as const,
+      originOffset: 0.1,
+      xOffset: 0.5,
+      yOffset: -0.1,
+      width: 100,
+      height: 50,
+    };
+    const settings = {
+      ...defaultUunaExpressiveMotion(-3),
+      maximumPressDepth: 1,
+      surfaceCompensation: surface,
+    };
+
+    expect(surfaceCorrectionAt(50, 25, surface)).toBeCloseTo(0.2);
+    expect(machinePointForPressure(50, 25, 0, settings).z).toBeCloseTo(-2.8);
+    expect(machinePointForPressure(50, 25, 1, settings).z).toBeCloseTo(-3.8);
+    expect(safePenUpForSurface(1, surface)).toBeCloseTo(1.5);
+  });
+
+  it('resamples constant-contact strokes when a surface plane changes Z', () => {
+    const operations = createExpressiveOperations(
+      [
+        {
+          color: 'black',
+          runs: [
+            [
+              [0, 0],
+              [10, 0],
+            ],
+          ],
+        },
+      ],
+      1.5,
+      {
+        ...defaultUunaExpressiveMotion(-3),
+        mode: 'constant',
+        surfaceCompensation: {
+          mode: 'plane',
+          originOffset: 0,
+          xOffset: 1,
+          yOffset: 0,
+          width: 10,
+          height: 10,
+        },
+      },
+    );
+    const stroke = operations.find(({ kind }) => kind === 'stroke');
+    expect(stroke?.kind).toBe('stroke');
+    if (!stroke || stroke.kind !== 'stroke') return;
+    expect(stroke.stroke.points[0].z).toBe(-3);
+    expect(stroke.stroke.points.at(-1)?.z).toBe(-2);
+    expect(stroke.stroke.points.every(({ pressure }) => pressure === 0)).toBe(true);
   });
 });

@@ -1,6 +1,7 @@
 import { clipRunToRect, optimizeRuns } from './toolpaths';
 import {
   createExpressiveOperations,
+  safePenUpForSurface,
   type MachineOperation,
   type UunaExpressiveMotion,
 } from './gcode-3d-toolpaths';
@@ -185,6 +186,11 @@ export function generateGCode(
     lines.push(
       `; Stroke direction: ${expressive.preserveStrokeDirection ? 'preserved' : 'optimizer may reverse runs'}`,
     );
+    if (expressive.surfaceCompensation.mode === 'plane')
+      lines.push(
+        `; Surface compensation: plane · origin ${clampPrecision(expressive.surfaceCompensation.originOffset)} mm; +X ${clampPrecision(expressive.surfaceCompensation.xOffset)} mm; +Y ${clampPrecision(expressive.surfaceCompensation.yOffset)} mm`,
+      );
+    else lines.push('; Surface compensation: disabled');
   }
   for (const comment of options.comments || []) lines.push(`; ${cleanComment(comment)}`);
   if (effects.kaleidoscope)
@@ -215,22 +221,26 @@ export function generateGCode(
     );
   if (clipToArtboard) lines.push('; Artboard clipping: enabled');
   if (optimizeTravel) lines.push(`; Optimized pen-up travel: ${clampPrecision(penUpDistance)} mm`);
+  const effectivePenUp =
+    options.motion?.kind === 'coordinated-xyz'
+      ? safePenUpForSurface(penUp, options.motion.settings.surfaceCompensation)
+      : penUp;
   lines.push(
     'G21 ; millimetres',
     'G90 ; absolute positioning',
     'G94 ; feed per minute',
-    `G1 Z${clampPrecision(penUp)} F${clampPrecision(zFeed)} ; pen up`,
+    `G1 Z${clampPrecision(effectivePenUp)} F${clampPrecision(zFeed)} ; pen up`,
   );
 
   if (options.motion?.kind === 'coordinated-xyz') {
     const operations =
       options.motion.operations ||
-      createExpressiveOperations(usableGroups, penUp, options.motion.settings);
+      createExpressiveOperations(usableGroups, effectivePenUp, options.motion.settings);
     serializeCoordinatedOperations(lines, operations, {
       drawFeed,
       travelFeed,
       zFeed,
-      penUp,
+      penUp: effectivePenUp,
     });
     lines.push(`G0 X0 Y0 F${clampPrecision(travelFeed)}`, 'M2', '');
     return lines.join('\n');

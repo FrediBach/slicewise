@@ -1,3 +1,9 @@
+import {
+  surfaceCorrectionAt,
+  surfaceCorrectionRange,
+  type SurfaceCompensation,
+} from './gcode-3d-toolpaths';
+
 export type GCodeIssue = {
   code: string;
   line: number;
@@ -37,6 +43,7 @@ export type GCodeValidationOptions = {
         tiltDirection: number;
         tipCompensation: boolean;
         zConvention: 'negative-down' | 'positive-up';
+        surfaceCompensation?: SurfaceCompensation;
       };
 };
 
@@ -68,7 +75,8 @@ type ParsedLine = {
 
 const NUMBER = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)';
 const WORD = new RegExp(`\\s*([A-Za-z])(${NUMBER})`, 'y');
-const EPSILON = 0.0005;
+// Serializer rounds to 0.001 mm, so allow half a unit plus floating-point noise.
+const EPSILON = 0.000501;
 const MOTION_WORDS = new Set(['X', 'Y', 'Z', 'F']);
 
 function approximatelyEqual(a: number, b: number): boolean {
@@ -142,7 +150,12 @@ export function validateGCode(
     options.motion?.kind === 'coordinated-xyz' ? options.motion.contactZ : options.penDown;
   const maximumPressDepth =
     options.motion?.kind === 'coordinated-xyz' ? options.motion.maximumPressDepth : 0;
-  const minimumDrawZ = contactZ - maximumPressDepth;
+  const surface =
+    options.motion?.kind === 'coordinated-xyz'
+      ? (options.motion.surfaceCompensation ?? { mode: 'off' })
+      : ({ mode: 'off' } as const);
+  const [, maximumCorrection] = surfaceCorrectionRange(surface);
+  const maximumDrawZ = contactZ + maximumCorrection;
 
   const addIssue = (
     severity: GCodeIssue['severity'],
@@ -182,12 +195,28 @@ export function validateGCode(
         0,
         'Pen tilt direction must be at least 0° and less than 360°.',
       );
-    if (contactZ > options.penUp + EPSILON)
+    if (maximumDrawZ > options.penUp + EPSILON)
       addIssue(
         'error',
         'unsafe-contact-z',
         0,
         'Contact Z must not be above the configured pen-up Z.',
+      );
+    if (
+      surface.mode === 'plane' &&
+      (!Number.isFinite(surface.originOffset) ||
+        !Number.isFinite(surface.xOffset) ||
+        !Number.isFinite(surface.yOffset) ||
+        !Number.isFinite(surface.width) ||
+        !Number.isFinite(surface.height) ||
+        surface.width <= 0 ||
+        surface.height <= 0)
+    )
+      addIssue(
+        'error',
+        'invalid-surface-plane',
+        0,
+        'Surface-plane offsets must be finite and its reference dimensions must be positive.',
       );
   }
   if (
@@ -289,15 +318,16 @@ export function validateGCode(
       minimumZ = minimumZ === null ? nextZ : Math.min(minimumZ, nextZ);
       maximumZ = maximumZ === null ? nextZ : Math.max(maximumZ, nextZ);
       const previousPen = pen;
+      const localContactZ = contactZ + surfaceCorrectionAt(x, y, surface);
       if (approximatelyEqual(nextZ, options.penUp)) pen = 'up';
-      else if (approximatelyEqual(nextZ, contactZ)) pen = 'down';
+      else if (approximatelyEqual(nextZ, localContactZ)) pen = 'down';
       else {
         pen = 'unknown';
         addIssue(
           'error',
           'unknown-pen-height',
           line,
-          `Z${nextZ} is neither the configured pen-up nor contact height.`,
+          `Z${nextZ} is neither the configured pen-up nor local contact height.`,
         );
       }
       if (previousPen === 'down' && pen === 'up') penLifts += 1;
@@ -323,12 +353,14 @@ export function validateGCode(
       const nextZ = words.get('Z')!;
       minimumZ = minimumZ === null ? nextZ : Math.min(minimumZ, nextZ);
       maximumZ = maximumZ === null ? nextZ : Math.max(maximumZ, nextZ);
-      if (nextZ < minimumDrawZ - EPSILON || nextZ > contactZ + EPSILON)
+      const localContactZ = contactZ + surfaceCorrectionAt(nextX, nextY, surface);
+      const localMinimumDrawZ = localContactZ - maximumPressDepth;
+      if (nextZ < localMinimumDrawZ - EPSILON || nextZ > localContactZ + EPSILON)
         addIssue(
           'error',
           'z-out-of-draw-range',
           line,
-          `Z${nextZ} is outside the configured drawing range ${minimumDrawZ}–${contactZ}.`,
+          `Z${nextZ} is outside the local drawing range ${localMinimumDrawZ}–${localContactZ}.`,
         );
       if (pen !== 'down')
         addIssue('error', 'pen-not-down', line, 'Coordinated drawing requires contact first.');
@@ -340,7 +372,7 @@ export function validateGCode(
       const pressure =
         maximumPressDepth <= EPSILON
           ? 0
-          : Math.max(0, Math.min(1, (contactZ - nextZ) / maximumPressDepth));
+          : Math.max(0, Math.min(1, (localContactZ - nextZ) / maximumPressDepth));
       maximumPressure = Math.max(maximumPressure, pressure);
       if (planarDistance > EPSILON && z !== null)
         maximumZSlope = Math.max(maximumZSlope, Math.abs(nextZ - z) / planarDistance);

@@ -166,6 +166,61 @@ export function UunaExpressiveMotionControls() {
           machine coordinates. Compensation uses Contact Z as the zero-offset plane. Nib width adds
           an approximate footprint preview and warns about nearby strokes; zero turns it off.
         </p>
+        <Checkbox id="uunaSurfaceCompensation">Compensate paper plane</Checkbox>
+        <div id="uunaSurfaceCompensationControls" hidden>
+          <p className="gradient-note">
+            Enter measured Z offsets at the machine origin, +X edge, and +Y edge. Positive values
+            raise Z. The plane stays in machine coordinates when artwork auto-rotates.
+          </p>
+          <ValueControl
+            id="uunaSurfaceOriginOffset"
+            label="Origin offset"
+            min="-5"
+            max="5"
+            step="0.01"
+            value="0"
+            unit="mm"
+            morphable={false}
+          />
+          <ValueControl
+            id="uunaSurfaceXOffset"
+            label="+X edge offset"
+            min="-5"
+            max="5"
+            step="0.01"
+            value="0"
+            unit="mm"
+            morphable={false}
+          />
+          <ValueControl
+            id="uunaSurfaceYOffset"
+            label="+Y edge offset"
+            min="-5"
+            max="5"
+            step="0.01"
+            value="0"
+            unit="mm"
+            morphable={false}
+          />
+          <div className="uuna-calibration-actions">
+            <button type="button" id="uunaSurfacePresetSave" className="uuna-calibration">
+              Save machine plane
+            </button>
+            <button type="button" id="uunaSurfacePresetClear" className="uuna-calibration">
+              Clear saved plane
+            </button>
+          </div>
+          <p id="uunaSurfacePresetStatus" className="gradient-note" role="status">
+            Plane is not saved for this machine.
+          </p>
+          <button type="button" id="uunaSurfaceCalibrationDownload" className="uuna-calibration">
+            Download three-point pattern
+          </button>
+          <p className="gradient-note">
+            Draws uncompensated contact crosses near the machine origin, +X edge, and +Y edge.
+            Measure the Z adjustment needed for equal contact, then enter those three offsets above.
+          </p>
+        </div>
         <button type="button" id="uunaCalibrationDownload" className="uuna-calibration">
           Download calibration G-code
         </button>

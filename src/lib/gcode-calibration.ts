@@ -109,3 +109,48 @@ export function createUunaCalibrationOperations(
 
   return operations;
 }
+
+/** Draw contact-only crosses near the machine origin, +X edge, and +Y edge. */
+export function createSurfacePlaneCalibrationOperations(
+  penUp: number,
+  settings: UunaExpressiveMotion,
+  sheet: { width: number; height: number },
+): MachineOperation[] {
+  const operations: MachineOperation[] = [];
+  const uncompensated = {
+    ...settings,
+    maximumPressDepth: 0,
+    surfaceCompensation: { mode: 'off' as const },
+  };
+  const inset = Math.min(10, sheet.width / 4, sheet.height / 4);
+  const radius = Math.min(4, inset / 2);
+  const points: Array<readonly [number, number]> = [
+    [inset, inset],
+    [sheet.width - inset, inset],
+    [inset, sheet.height - inset],
+  ];
+  let sourceRun = 0;
+  for (const [x, y] of points) {
+    appendStroke(
+      operations,
+      [
+        [x - radius, y, 0],
+        [x + radius, y, 0],
+      ],
+      penUp,
+      uncompensated,
+      sourceRun++,
+    );
+    appendStroke(
+      operations,
+      [
+        [x, y - radius, 0],
+        [x, y + radius, 0],
+      ],
+      penUp,
+      uncompensated,
+      sourceRun++,
+    );
+  }
+  return operations;
+}
