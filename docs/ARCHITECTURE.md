@@ -83,6 +83,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `render-settings.ts` is the exhaustive browser-state-to-worker-settings adapter. Its key list is compile-time checked against `ContourSettings`, omits runtime/request-only fields, derives the document title, and detaches mutable morph maps.
 - `parameter-history.ts` owns the bounded, branch-aware undo/redo timeline. It clones values at its boundary and exposes navigation availability without knowing about controls or rendering.
 - `parameter-migrations.ts` normalizes legacy and incomplete parameter snapshots before the browser runtime applies them. Compatibility defaults, legacy lens conversion, and saved vector-zoom validation belong here rather than in DOM restoration code.
+- `animation-project.ts` owns the versioned, DOM-free animation project model. It captures complete morphable-value keyframes, applies easing and typed interpolation, keeps seeded parameters discrete, and evaluates a single ordinary `ContourSettings` snapshot for any playhead time. Evaluated animation snapshots always disable the separate overlaid X/Y Morph feature.
 - `colorPair.ts` creates random ink/background combinations and ink-anchored harmonic gradients in OKLCH while enforcing contrast and gamut constraints.
 - `mapAnnotations.ts` derives deterministic, plotter-safe elevation labels, generated locations, map symbols, and single-line lettering from finished contour runs.
 
@@ -108,6 +109,8 @@ Complex React controls communicate through custom DOM events:
 Named parameter snapshots are stored locally in IndexedDB by `parameter-snapshots.ts`. They use the same render-setting shape as undo/redo and additionally preserve randomization locks; active X/Y morph targets are already part of the render settings.
 
 These event names and their payloads are internal interfaces. Change producers and consumers together.
+
+Animation controls use `animationmodechange` for the top-level Config/Animation switch, `animationcommand` for transport and timeline editing, `animationstatechange` for runtime-to-React state, and `animationstaterequest` for initial synchronization. In Animation mode, `slicer.ts` freezes a normal render-settings snapshot and intercepts morphable control input before the ordinary Config bindings can mutate runtime state. Quick playback renders use explicit evaluated snapshots and do not enter parameter history; leaving the mode restores the frozen Config snapshot.
 
 ## Rendering and concurrency
 

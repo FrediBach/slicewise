@@ -47,6 +47,7 @@ Prioritize observable contracts and failure-prone transformations:
 - React controls: user interactions and the custom events consumed by `slicer.ts`.
 - Render snapshots: exhaustive worker keys, omission of browser-only state, derived metadata, and detached mutable values.
 - Parameter history and migrations: duplicate suppression, branch truncation, bounded eviction, snapshot isolation, legacy compatibility, and invalid saved values.
+- Animation projects: detached base settings, complete keyframe capture, exact endpoints, easing, typed interpolation, discrete seed behavior, timeline editing boundaries, and forced suppression of the separate Morph grid.
 
 Avoid snapshots of entire panels. They are noisy and do not prove that controls remain connected to the imperative runtime. Prefer assertions about accessible controls, event payloads, and exported data.
 
@@ -58,6 +59,7 @@ When fixing a bug, first add the smallest test that reproduces it at the closest
 
 Coverage currently measures the focused core under active test:
 
+- `animation-project.ts`
 - `block-glitch.ts`
 - `colorPair.ts`
 - `contour-engine.ts`

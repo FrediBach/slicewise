@@ -46,6 +46,21 @@ Built-in demo meshes include Torus knot, Ripple sphere, Rounded cube, Soft diamo
 
 Morphable parameters are: Azimuth, Elevation, Roll, Scale, Offset X/Y, Focal length, Perspective, Klein↔Poincaré warp, Hyperbolic direction/displacement/rotation/strength, hyperbolic tiling Disk scale, Lens distortion, Line count, Curve quality, Ease strength/cycles/centre, custom slice Azimuth/Elevation, slice LFO amplitude/cycles/direction/phase and modulation depth/cycles/phase, Stroke, line-weight Interval/Variation, Ink colour, Pen colours, Margin, every numeric generative-mask parameter, Dot spacing, Contrast, Depth cycles, and RGB split. Source-extrusion, tiling `{p,q}`/depth, artboard-dimension, morph-step, projection-warp mode, categorical line-weight mode, and G-code parameters are not morphable.
 
+## Animation
+
+The workspace mode switch changes between static configuration and timeline animation. Entering Animation mode freezes the current render settings, disables non-morphable controls, suppresses the overlaid X/Y Morph feature for animation frames, and creates a protected keyframe at time zero. Returning to Config mode restores the frozen settings without applying keyframe edits to them.
+
+| Parameter                | Type and default       | What it does                                                                                                                                                   |
+| ------------------------ | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Duration                 | Number; **5 s**        | Sets the timeline length. It cannot be shortened past the final keyframe.                                                                                      |
+| FPS                      | Integer; **30**; 1–120 | Sets the playhead step and the intended future export frame rate. Preview playback remains clock-based and may drop visual frames when contour rendering lags. |
+| Playhead                 | Timeline range         | Scrubs through calculated in-between settings. Controls are read-only between keyframes.                                                                       |
+| Add keyframe             | Action                 | Captures every morphable value at the current calculated playhead state and selects the new keyframe for editing.                                              |
+| Delete selected keyframe | Action                 | Removes the selected keyframe. The first keyframe at time zero is protected.                                                                                   |
+| Play / pause             | Action                 | Previews the animation with quick worker renders and settles on an exact render when paused.                                                                   |
+
+Numeric parameters interpolate linearly. Ink colour interpolates per RGB channel. Seed parameters hold their earlier value until the next keyframe so seeded geometry does not reshuffle continuously. The first implementation keeps animation projects in memory while the page remains open; persistent animation projects, easing controls, draggable keyframes, and video encoding are follow-up work.
+
 ## View
 
 | Parameter (ID)                                 | Type and default                       | What it does                                                                                                                                                                                                                                                                                      |

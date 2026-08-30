@@ -13,6 +13,7 @@ import {
   EffectsPanel,
   ExportPanel,
 } from './components/panels/OutputPanel';
+import { AnimationModeSwitch, AnimationTimeline } from './components/animation/AnimationWorkspace';
 
 export default function App() {
   useEffect(() => {
@@ -123,6 +124,7 @@ export default function App() {
             </span>
             Preview <span>/ contour study</span>
           </div>
+          <AnimationModeSwitch />
           <div className="readout">
             <span className="paths-readout">
               Paths <b id="rPaths">0</b>
@@ -152,6 +154,7 @@ export default function App() {
           </div>
           <div className="toast" id="toast" />
         </div>
+        <AnimationTimeline />
       </main>
     </div>
   );

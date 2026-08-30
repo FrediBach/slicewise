@@ -1,6 +1,6 @@
 # Video Mode
 
- The cleanest design is to treat animation as a separate, non-destructive layer over a frozen configuration:
+The cleanest design is to treat animation as a separate, non-destructive layer over a frozen configuration:
 
 - Config mode edits the artwork.
 - Animation mode freezes that configuration.
@@ -116,12 +116,7 @@ type AnimationKeyframe = {
   easingToNext: AnimationEasing;
 };
 
-type AnimationEasing =
-  | 'linear'
-  | 'ease-in'
-  | 'ease-out'
-  | 'ease-in-out'
-  | 'hold';
+type AnimationEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold';
 ```
 
 `AnimationValues` should be derived from a central morphable-parameter registry, not declared as arbitrary `Partial<ContourSettings>`.

@@ -37,6 +37,16 @@ import { createRenderSettingsSnapshot } from './render-settings';
 import { ParameterHistory } from './parameter-history';
 import { normalizeParameterSnapshot } from './parameter-migrations';
 import { createCurrentExport, createExportFilename, createGCodeExport } from './slicer-export';
+import {
+  addAnimationKeyframe,
+  createAnimationProject,
+  evaluateAnimationSettings,
+  removeAnimationKeyframe,
+  updateAnimationKeyframeValue,
+  updateAnimationTiming,
+  type AnimationParameterDescriptor,
+  type AnimationProject,
+} from './animation-project';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -510,7 +520,7 @@ if (typeof document !== 'undefined') {
   function applyPreview(result: ContourResult, request: RenderRequest): void {
     fitBed(result.W, result.H);
     $('artboardDimensions').textContent = `${result.W} × ${result.H} MM`;
-    $('bed').style.background = previewBackground(state);
+    $('bed').style.background = previewBackground(request.settings);
     $('bed').innerHTML = result.svg;
     installPreviewRoot();
     previewView = {
@@ -574,13 +584,11 @@ if (typeof document !== 'undefined') {
     if (wait > 1) renderTimer = setTimeout(dispatchRender, wait);
     else requestAnimationFrame(dispatchRender);
   }
-  function redraw(quick: boolean): void {
+  function redrawWithSettings(settings: ContourSettings, quick: boolean): void {
     if (!state.mesh) return;
-    if (!quick) scheduleParameterHistory();
     // Preserve a queued final-quality request; otherwise only the latest input
     // matters. This coalesces pointer and slider events while the worker is busy.
     const renderQuick = quick && queuedRender?.quick !== false;
-    const settings = settingsSnapshot();
     if (renderQuick) settings.previewDetail = previewDetail(previewPerformance);
     queuedRender = {
       id: ++requestId,
@@ -591,6 +599,10 @@ if (typeof document !== 'undefined') {
     };
     syncPreviewBusy();
     scheduleRender();
+  }
+  function redraw(quick: boolean): void {
+    if (!quick) scheduleParameterHistory();
+    redrawWithSettings(settingsSnapshot(), quick);
   }
   function invalidateRenderState(): void {
     requestId++;
@@ -3119,6 +3131,292 @@ if (typeof document !== 'undefined') {
     if (!Array.isArray(ids) || ids.length === 0) return;
     randomizeParameters(ids, title);
   });
+
+  /* --------------------------------------------------------- animation */
+  type AnimationCommandDetail = {
+    type?: string;
+    timeMs?: number;
+    durationMs?: number;
+    fps?: number;
+    id?: string;
+  };
+  type LockableControl = HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
+
+  const animationParameters: AnimationParameterDescriptor[] = [];
+  for (const [controlId, settingKey] of morphKeyById) {
+    if (!document.querySelector(`#${controlId}Control .morph-toggle`)) continue;
+    const input = document.getElementById(controlId + 'N') as HTMLInputElement | null;
+    const color = controlId === 'color';
+    animationParameters.push({
+      controlId,
+      settingKey: settingKey as keyof ContourSettings & string,
+      kind: color ? 'color' : settingKey.endsWith('Seed') ? 'seed' : 'number',
+      min: input && input.min !== '' ? Number(input.min) : undefined,
+      max: input && input.max !== '' ? Number(input.max) : undefined,
+    } satisfies AnimationParameterDescriptor);
+  }
+  const animationParameterByControl = new Map(
+    animationParameters.map((descriptor) => [descriptor.controlId, descriptor]),
+  );
+  const animationControlIds = new Set(
+    animationParameters.flatMap(({ controlId, kind }) =>
+      kind === 'color' ? [controlId, `${controlId}Hex`] : [controlId, `${controlId}N`],
+    ),
+  );
+  const animationLockedControls = new Map<LockableControl, { disabled: boolean; title: string }>();
+  let animationMode = false;
+  let animationProject: AnimationProject | null = null;
+  let animationConfigSnapshot: ContourSettings | null = null;
+  let animationPlayheadMs = 0;
+  let selectedAnimationKeyframeId: string | null = null;
+  let animationPlaying = false;
+  let animationPlaybackFrame = 0;
+  let animationPlaybackStartedAt = 0;
+  let animationPlaybackOriginMs = 0;
+  let nextAnimationKeyframeId = 1;
+
+  function publishAnimationState(): void {
+    document.dispatchEvent(
+      new CustomEvent('animationstatechange', {
+        detail: {
+          mode: animationMode ? 'animation' : 'config',
+          durationMs: animationProject?.durationMs ?? 5000,
+          fps: animationProject?.fps ?? 30,
+          playheadMs: animationPlayheadMs,
+          selectedKeyframeId: selectedAnimationKeyframeId,
+          playing: animationPlaying,
+          keyframes: (animationProject?.keyframes ?? []).map(({ id, timeMs }) => ({ id, timeMs })),
+        },
+      }),
+    );
+  }
+
+  function syncAnimationControlValues(settings: ContourSettings): void {
+    const values = settings as unknown as Record<string, unknown>;
+    for (const descriptor of animationParameters) {
+      const value = values[descriptor.settingKey];
+      if (descriptor.kind === 'color') {
+        const color = String(value);
+        $<HTMLInputElement>(descriptor.controlId).value = color;
+        $<HTMLInputElement>(descriptor.controlId + 'Hex').value = color;
+        const swatch = document.getElementById('swatch');
+        if (swatch) swatch.style.background = color;
+      } else {
+        $<HTMLInputElement>(descriptor.controlId).value = String(value);
+        $<HTMLInputElement>(descriptor.controlId + 'N').value = String(value);
+      }
+    }
+  }
+
+  function syncAnimationControlLocks(): void {
+    if (!animationMode) return;
+    const canEdit = Boolean(selectedAnimationKeyframeId) && !animationPlaying;
+    for (const [control, original] of animationLockedControls) {
+      const editable = canEdit && animationControlIds.has(control.id) && !original.disabled;
+      control.disabled = !editable;
+      control.title = editable
+        ? original.title
+        : animationControlIds.has(control.id)
+          ? 'Select a keyframe to edit this animated parameter.'
+          : 'Return to Config mode to change this setting.';
+    }
+  }
+
+  function lockConfigControls(): void {
+    animationLockedControls.clear();
+    for (const control of document.querySelectorAll<LockableControl>(
+      '.rail input, .rail select, .rail button',
+    ))
+      animationLockedControls.set(control, { disabled: control.disabled, title: control.title });
+    syncAnimationControlLocks();
+  }
+
+  function unlockConfigControls(): void {
+    for (const [control, original] of animationLockedControls) {
+      control.disabled = original.disabled;
+      control.title = original.title;
+    }
+    animationLockedControls.clear();
+  }
+
+  function renderAnimationAt(timeMs: number, quick: boolean): void {
+    if (!animationProject) return;
+    const settings = evaluateAnimationSettings(animationProject, timeMs, animationParameters);
+    syncAnimationControlValues(settings);
+    redrawWithSettings(settings, quick);
+  }
+
+  function seekAnimation(timeMs: number, selectExact = false): void {
+    if (!animationProject) return;
+    animationPlayheadMs = clamp(timeMs, 0, animationProject.durationMs);
+    const exact = animationProject.keyframes.find(
+      (keyframe) => Math.abs(keyframe.timeMs - animationPlayheadMs) < 0.5,
+    );
+    selectedAnimationKeyframeId = selectExact || exact ? (exact?.id ?? null) : null;
+    syncAnimationControlLocks();
+    renderAnimationAt(animationPlayheadMs, true);
+    publishAnimationState();
+  }
+
+  function stopAnimationPlayback(settle = true): void {
+    if (!animationPlaying) return;
+    animationPlaying = false;
+    cancelAnimationFrame(animationPlaybackFrame);
+    syncAnimationControlLocks();
+    if (settle) renderAnimationAt(animationPlayheadMs, false);
+    publishAnimationState();
+  }
+
+  function tickAnimationPlayback(now: number): void {
+    if (!animationPlaying || !animationProject) return;
+    const elapsed = now - animationPlaybackStartedAt;
+    const rawTime = animationPlaybackOriginMs + elapsed;
+    if (rawTime >= animationProject.durationMs) {
+      if (animationProject.loopPreview) {
+        animationPlayheadMs = rawTime % animationProject.durationMs;
+        animationPlaybackStartedAt = now;
+        animationPlaybackOriginMs = animationPlayheadMs;
+      } else {
+        animationPlayheadMs = animationProject.durationMs;
+        stopAnimationPlayback();
+        return;
+      }
+    } else animationPlayheadMs = rawTime;
+    selectedAnimationKeyframeId = null;
+    renderAnimationAt(animationPlayheadMs, true);
+    publishAnimationState();
+    animationPlaybackFrame = requestAnimationFrame(tickAnimationPlayback);
+  }
+
+  function toggleAnimationPlayback(): void {
+    if (!animationProject) return;
+    if (animationPlaying) {
+      stopAnimationPlayback();
+      return;
+    }
+    if (animationPlayheadMs >= animationProject.durationMs) animationPlayheadMs = 0;
+    animationPlaying = true;
+    selectedAnimationKeyframeId = null;
+    animationPlaybackStartedAt = performance.now();
+    animationPlaybackOriginMs = animationPlayheadMs;
+    syncAnimationControlLocks();
+    publishAnimationState();
+    animationPlaybackFrame = requestAnimationFrame(tickAnimationPlayback);
+  }
+
+  function enterAnimationMode(): void {
+    if (animationMode) return;
+    commitParameterHistory();
+    animationConfigSnapshot = cloneParameterSnapshot();
+    if (
+      !animationProject ||
+      JSON.stringify(animationProject.baseSettings) !== JSON.stringify(animationConfigSnapshot)
+    )
+      animationProject = createAnimationProject(animationConfigSnapshot, animationParameters);
+    animationMode = true;
+    animationPlayheadMs = 0;
+    selectedAnimationKeyframeId = animationProject.keyframes[0]?.id ?? null;
+    document.body.classList.add('animation-mode');
+    lockConfigControls();
+    renderAnimationAt(0, false);
+    publishAnimationState();
+  }
+
+  function leaveAnimationMode(): void {
+    if (!animationMode) return;
+    stopAnimationPlayback(false);
+    animationMode = false;
+    document.body.classList.remove('animation-mode');
+    unlockConfigControls();
+    if (animationConfigSnapshot) restoreParameterSnapshot(animationConfigSnapshot);
+    animationConfigSnapshot = null;
+    publishAnimationState();
+  }
+
+  function animationControlId(id: string): string {
+    if (animationParameterByControl.has(id)) return id;
+    for (const suffix of ['Hex', 'N']) {
+      const candidate = id.endsWith(suffix) ? id.slice(0, -suffix.length) : '';
+      if (animationParameterByControl.has(candidate)) return candidate;
+    }
+    return '';
+  }
+
+  function handleAnimationParameterInput(event: Event, exact: boolean): void {
+    if (!animationMode || !animationProject || !selectedAnimationKeyframeId) return;
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    const controlId = animationControlId(target.id);
+    const descriptor = animationParameterByControl.get(controlId);
+    if (!descriptor) return;
+    event.stopImmediatePropagation();
+    if (descriptor.kind === 'color' && target.id.endsWith('Hex') && !exact) return;
+    const value = descriptor.kind === 'color' ? target.value : Number(target.value);
+    animationProject = updateAnimationKeyframeValue(
+      animationProject,
+      selectedAnimationKeyframeId,
+      descriptor.settingKey,
+      value,
+      animationParameters,
+    );
+    renderAnimationAt(animationPlayheadMs, !exact);
+    publishAnimationState();
+  }
+  document.addEventListener('input', (event) => handleAnimationParameterInput(event, false), true);
+  document.addEventListener('change', (event) => handleAnimationParameterInput(event, true), true);
+
+  document.addEventListener('animationmodechange', (event) => {
+    const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
+    if (mode === 'animation') enterAnimationMode();
+    else if (mode === 'config') leaveAnimationMode();
+  });
+  document.addEventListener('animationstaterequest', publishAnimationState);
+  document.addEventListener('animationcommand', (event) => {
+    if (!animationMode || !animationProject) return;
+    const detail = (event as CustomEvent<AnimationCommandDetail>).detail || {};
+    if (detail.type === 'play-toggle') toggleAnimationPlayback();
+    else if (detail.type === 'seek') {
+      stopAnimationPlayback(false);
+      seekAnimation(Number(detail.timeMs));
+    } else if (detail.type === 'select' && detail.id) {
+      stopAnimationPlayback(false);
+      const keyframe = animationProject.keyframes.find((candidate) => candidate.id === detail.id);
+      if (keyframe) seekAnimation(keyframe.timeMs, true);
+    } else if (detail.type === 'add') {
+      const id = `keyframe-${nextAnimationKeyframeId++}`;
+      const next = addAnimationKeyframe(
+        animationProject,
+        animationPlayheadMs,
+        id,
+        animationParameters,
+      );
+      if (next !== animationProject) {
+        animationProject = next;
+        selectedAnimationKeyframeId = id;
+        syncAnimationControlLocks();
+        publishAnimationState();
+      }
+    } else if (detail.type === 'delete' && selectedAnimationKeyframeId) {
+      const previous = animationProject;
+      animationProject = removeAnimationKeyframe(animationProject, selectedAnimationKeyframeId);
+      if (animationProject !== previous) {
+        const prior = [...animationProject.keyframes]
+          .reverse()
+          .find((keyframe) => keyframe.timeMs <= animationPlayheadMs);
+        seekAnimation(prior?.timeMs ?? 0, true);
+      }
+    } else if (detail.type === 'duration') {
+      animationProject = updateAnimationTiming(animationProject, {
+        durationMs: Number(detail.durationMs),
+      });
+      animationPlayheadMs = Math.min(animationPlayheadMs, animationProject.durationMs);
+      publishAnimationState();
+    } else if (detail.type === 'fps') {
+      animationProject = updateAnimationTiming(animationProject, { fps: Number(detail.fps) });
+      publishAnimationState();
+    }
+  });
+  publishAnimationState();
 
   /* export */
   function updateExportSize(): void {

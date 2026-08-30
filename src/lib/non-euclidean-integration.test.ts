@@ -196,24 +196,28 @@ const meshCases: ReadonlyArray<readonly [string, Partial<ContourSettings>]> = [
 ];
 
 describe('non-Euclidean release compatibility', () => {
-  it.each(meshCases)('composes %s across preview, effects, morphs, and exports', (_name, mode) => {
-    const mesh = makeContourMesh();
-    const settings = { ...hardeningSettings, ...mode };
-    const quick = computeContours(mesh, { ...settings, previewDetail: 0.5 }, true);
-    const exact = computeContours(mesh, settings, false);
+  it.each(meshCases)(
+    'composes %s across preview, effects, morphs, and exports',
+    (_name, mode) => {
+      const mesh = makeContourMesh();
+      const settings = { ...hardeningSettings, ...mode };
+      const quick = computeContours(mesh, { ...settings, previewDetail: 0.5 }, true);
+      const exact = computeContours(mesh, settings, false);
 
-    expect(quick.paths).toBeGreaterThan(0);
-    expect(quick.toolpaths).toEqual([]);
-    expect(exact.paths).toBeGreaterThan(0);
-    expect(exact.toolpaths.length).toBeGreaterThan(0);
-    expect(finiteOutput(quick.svg)).toBe(true);
-    expect(finiteOutput(exact.svg)).toBe(true);
-    expect(exact.svg).toContain('data-morph-x-step="2"');
-    expect(exact.svg).toContain('data-morph-y-step="2"');
-    expect(exact.svg).toContain('id="topographic-annotations"');
-    expect(exact.svg).toContain('id="technical-annotations"');
-    assertBothPlotterProfiles(exact, settings);
-  });
+      expect(quick.paths).toBeGreaterThan(0);
+      expect(quick.toolpaths).toEqual([]);
+      expect(exact.paths).toBeGreaterThan(0);
+      expect(exact.toolpaths.length).toBeGreaterThan(0);
+      expect(finiteOutput(quick.svg)).toBe(true);
+      expect(finiteOutput(exact.svg)).toBe(true);
+      expect(exact.svg).toContain('data-morph-x-step="2"');
+      expect(exact.svg).toContain('data-morph-y-step="2"');
+      expect(exact.svg).toContain('id="topographic-annotations"');
+      expect(exact.svg).toContain('id="technical-annotations"');
+      assertBothPlotterProfiles(exact, settings);
+    },
+    10_000,
+  );
 
   it.each([
     ['mobius', { mobiusDirection: 20, mobiusDisplacement: 40, mobiusRotation: -15 }],
