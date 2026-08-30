@@ -57,6 +57,13 @@ import {
   createGCodeExportPreflight,
   type GCodeExportPreflight,
 } from './slicer-export';
+import {
+  GrblStreamCancelledError,
+  grblCommands,
+  streamGrblProgram,
+  WebSerialGrblConnection,
+  webSerialProvider,
+} from './grbl-serial';
 import { createAnimationHistory } from './animation-history';
 import {
   loadAnimationProject,
@@ -4132,6 +4139,144 @@ if (typeof document !== 'undefined') {
   publishAnimationState();
 
   /* export */
+  const serialProvider = webSerialProvider();
+  let serialConnection: WebSerialGrblConnection | null = null;
+  let serialStreamController: AbortController | null = null;
+  let serialStreaming = false;
+  let serialHeld = false;
+  let serialConnecting = false;
+
+  function syncSerialControls(status?: string): void {
+    const connected = Boolean(serialConnection?.connected);
+    const connect = $<HTMLButtonElement>('gcodeSerialConnect');
+    const send = $<HTMLButtonElement>('gcodeSerialSend');
+    const stop = $<HTMLButtonElement>('gcodeSerialStop');
+    connect.disabled = !serialProvider || serialStreaming || serialConnecting;
+    connect.textContent = connected ? 'Disconnect' : 'Connect';
+    send.disabled = !connected || serialStreaming || serialHeld;
+    stop.disabled = !serialStreaming;
+    if (status) $('gcodeSerialStatus').textContent = status;
+  }
+
+  if (!serialProvider) {
+    syncSerialControls('Unavailable in this browser');
+    $('gcodeSerialNote').textContent =
+      'Web Serial is unavailable. Use Chrome or Edge on desktop over HTTPS or localhost.';
+  } else syncSerialControls();
+
+  $('gcodeSerialConnect').addEventListener('click', async () => {
+    try {
+      if (serialConnection) {
+        await serialConnection.disconnect();
+        serialConnection = null;
+        serialHeld = false;
+        syncSerialControls('Not connected');
+        return;
+      }
+      if (!serialProvider || serialConnecting) return;
+      serialConnecting = true;
+      syncSerialControls('Choose a serial port…');
+      const connection = new WebSerialGrblConnection(serialProvider, (error) => {
+        if (serialConnection !== connection) return;
+        syncSerialControls(error?.message || 'Plotter disconnected');
+        queueMicrotask(async () => {
+          try {
+            await connection.disconnect();
+          } catch {
+            // The physical port is already gone; release browser stream locks best-effort.
+          }
+          if (serialConnection === connection) serialConnection = null;
+          syncSerialControls('Plotter disconnected');
+        });
+      });
+      await connection.connect();
+      serialConnection = connection;
+      serialHeld = false;
+      serialConnecting = false;
+      $('gcodeSerialNote').textContent =
+        'Connects at 115200 baud in Chrome or Edge. Commands stay local and are sent one at a time after GRBL acknowledges them.';
+      syncSerialControls('Connected · 115200 baud');
+      toast('GRBL plotter connected');
+    } catch (error) {
+      serialConnection = null;
+      serialConnecting = false;
+      syncSerialControls('Connection failed');
+      if (error instanceof DOMException && error.name === 'NotFoundError')
+        toast('Serial connection cancelled');
+      else toast(errorMessage(error));
+    }
+  });
+
+  $('gcodeSerialSend').addEventListener('click', async () => {
+    const connection = serialConnection;
+    if (!connection?.connected || serialStreaming) return;
+    try {
+      await waitForCurrentRender();
+      const exported = createCurrentExport(state);
+      if (exported.extension !== 'gcode') throw new Error('Select G-code before sending.');
+      const preflight = createGCodeExportPreflight(state);
+      const commandCount = grblCommands(exported.content).length;
+      const durationMinutes = Math.max(
+        1,
+        Math.ceil(preflight.validation.stats.estimatedSeconds / 60),
+      );
+      const confirmed = window.confirm(
+        `Send ${commandCount} commands to ${resolveGCodeProfile(state.gcodeProfile).machine}?\n\n` +
+          `The plot is estimated to take about ${durationMinutes} minute${durationMinutes === 1 ? '' : 's'}. ` +
+          'Set the rear-left origin, secure the sheet, frame the job with the pen raised, and keep the emergency stop within reach.',
+      );
+      if (!confirmed) return;
+
+      serialStreaming = true;
+      serialStreamController = new AbortController();
+      const progress = $<HTMLProgressElement>('gcodeSerialProgress');
+      progress.max = Math.max(1, commandCount);
+      progress.value = 0;
+      syncSerialControls(`Sending 0 / ${commandCount}`);
+      await streamGrblProgram(exported.content, connection, {
+        signal: serialStreamController.signal,
+        onProgramPause: () => {
+          syncSerialControls('Paused · change pen');
+          return window.confirm(
+            'GRBL has reached an M0 pen-change pause. Change the pen, then choose OK to resume. Choose Cancel to stop this plot.',
+          );
+        },
+        onProgress: ({ completed, total }) => {
+          progress.max = Math.max(1, total);
+          progress.value = completed;
+          syncSerialControls(`Sending ${completed} / ${total}`);
+        },
+      });
+      syncSerialControls('Plot complete');
+      toast('G-code plot complete');
+    } catch (error) {
+      if (error instanceof GrblStreamCancelledError) {
+        serialHeld = true;
+        syncSerialControls('Stopped · feed hold');
+        $('gcodeSerialNote').textContent =
+          'GRBL is holding and the pen may still be down. Reset the controller before reconnecting and starting another plot.';
+        toast('Plot stopped — reset GRBL before reconnecting');
+      } else {
+        syncSerialControls('Transmission error');
+        toast(errorMessage(error));
+      }
+    } finally {
+      serialStreaming = false;
+      serialStreamController = null;
+      syncSerialControls();
+    }
+  });
+
+  $('gcodeSerialStop').addEventListener('click', async () => {
+    if (!serialStreaming) return;
+    serialStreamController?.abort();
+    try {
+      await serialConnection?.hold();
+    } catch (error) {
+      toast(errorMessage(error));
+    }
+  });
+
   function updateGCodePreflight(preflight: GCodeExportPreflight): void {
     const { validation } = preflight;
     const status = $('gcodePreflightStatus');

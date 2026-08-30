@@ -192,5 +192,9 @@ describe('OutputPanel composition boundaries', () => {
       'aria-label',
       'Validated G-code drawing and pen-up travel preview',
     );
+    expect(document.getElementById('gcodeSerialConnect')).toHaveTextContent('Connect');
+    expect(document.getElementById('gcodeSerialSend')).toBeDisabled();
+    expect(document.getElementById('gcodeSerialStop')).toBeDisabled();
+    expect(document.getElementById('gcodeSerialProgress')).toHaveValue(0);
   });
 });

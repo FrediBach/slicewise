@@ -83,6 +83,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `gcode-profiles.ts` is the single source of truth for machine names, origins, working envelopes, motion defaults, and legacy profile resolution. UUNA TEK 3.0 profiles cover the official landscape A3, A2, A1, and A0 working areas.
 - `gcode-layout.ts` resolves the physical export layout. When enabled, it rotates portrait toolpaths clockwise only when the canvas does not fit the selected machine directly but its swapped dimensions do; the serializer and preflight consume the same transformed runs.
 - `gcode-validation.ts` independently parses and simulates the serialized machine program. Its strict profile checks enforce setup order, the supported command subset, feeds, pen state, sheet bounds, safe pen changes/shutdown, and expose draw/travel segments plus preflight statistics.
+- `grbl-serial.ts` owns the Web Serial adapter and conservative GRBL sender. It removes export comments, preserves source-line diagnostics, sends one command at a time only after `ok`, surfaces `error:`/`ALARM:` responses, and uses GRBL feed hold for cancellation. `slicer.ts` owns permission prompts, motion confirmation, and connection/progress presentation.
 - `paper-orientation.ts` normalizes standard and custom dimensions into explicit portrait or landscape orientation. `slicer.ts` uses it to keep the Canvas selector, dimensions, and paper preset synchronized.
 - `slicer-export.ts` maps browser runtime state into SVG/G-code export artifacts and safe download names. It is DOM-free; `slicer.ts` remains responsible only for waiting for a current render, clipboard access, and initiating downloads.
 - `render-settings.ts` is the exhaustive browser-state-to-worker-settings adapter. Its key list is compile-time checked against `ContourSettings`, omits runtime/request-only fields, derives the document title, and detaches mutable morph maps.
@@ -95,7 +96,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 
 ### Browser orchestration
 
-`slicer.ts` is the integration boundary for browser-only behavior. It owns the current settings, binds form controls, schedules worker renders, connects the pure history timeline to DOM restoration, manages randomization, handles orbit/pan gestures, and coordinates preview and export. Keep computation that can run without `document`, `window`, or mutable UI state out of this module.
+`slicer.ts` is the integration boundary for browser-only behavior. It owns the current settings, binds form controls, schedules worker renders, connects the pure history timeline to DOM restoration, manages randomization, handles orbit/pan gestures, and coordinates preview, export, and direct serial plotting. Keep computation that can run without `document`, `window`, or mutable UI state out of this module.
 
 ## State and events
 

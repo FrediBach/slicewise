@@ -75,6 +75,7 @@ Coverage currently measures the focused core under active test:
 - `gcode.ts`
 - `gcode-layout.ts`
 - `gcode-profiles.ts`
+- `grbl-serial.ts`
 - `gcode-validation.ts`
 - `generativeMesh.ts`
 - `hyperbolic-tiling.ts`

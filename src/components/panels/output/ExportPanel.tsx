@@ -165,6 +165,36 @@ export function ExportPanel() {
               frame the sheet with the pen raised before plotting.
             </p>
           </div>
+          <div className="gcode-serial" aria-labelledby="gcodeSerialHeading">
+            <div className="gcode-preflight__heading">
+              <span id="gcodeSerialHeading">Direct connection · GRBL</span>
+              <strong id="gcodeSerialStatus" role="status" aria-live="polite">
+                Not connected
+              </strong>
+            </div>
+            <div className="gcode-serial__actions">
+              <button type="button" id="gcodeSerialConnect">
+                Connect
+              </button>
+              <button type="button" id="gcodeSerialSend" disabled>
+                Send to plotter
+              </button>
+              <button type="button" id="gcodeSerialStop" disabled>
+                Stop
+              </button>
+            </div>
+            <progress
+              id="gcodeSerialProgress"
+              className="gcode-serial__progress"
+              max="1"
+              value="0"
+              aria-label="G-code transmission progress"
+            />
+            <p className="gradient-note" id="gcodeSerialNote">
+              Connects at 115200 baud in Chrome or Edge. Commands stay local and are sent one at a
+              time after GRBL acknowledges them.
+            </p>
+          </div>
         </div>
       </FieldGroup>
     </Section>
