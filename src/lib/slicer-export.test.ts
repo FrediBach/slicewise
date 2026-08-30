@@ -195,6 +195,33 @@ describe('slicer export assembly', () => {
     ).toThrow(/X-.*outside/);
   });
 
+  it('warns when broad-nib footprints of distinct strokes may merge', () => {
+    const preflight = createGCodeExportPreflight(
+      exportState({
+        toolpaths: [
+          {
+            color: 'black',
+            label: 'close lines',
+            runs: [
+              [10, 10, 20, 10],
+              [10, 10.5, 20, 10.5],
+            ],
+          },
+        ],
+        uunaExpressiveMotion: {
+          ...defaultUunaExpressiveMotion(-2),
+          enabled: true,
+          nibWidth: 1,
+        },
+      }),
+    );
+
+    expect(preflight.broadNibSpacing?.nearbyRunPairs).toBe(1);
+    expect(preflight.validation.warnings).toContainEqual(
+      expect.objectContaining({ code: 'broad-nib-spacing' }),
+    );
+  });
+
   it('exports a preflight-validated UUNA calibration program', () => {
     const calibration = createUunaCalibrationExport(
       exportState({

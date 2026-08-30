@@ -121,4 +121,68 @@ describe('3D G-code toolpaths', () => {
     expect(compensateAngledTip(10, 20, -5, -3, 90, 0, true)).toEqual([10, 20]);
     expect(compensateAngledTip(10, 20, -5, -3, 30, 0, false)).toEqual([10, 20]);
   });
+
+  it('modulates pressure continuously by final-path arc length', () => {
+    const operations = createExpressiveOperations(
+      [
+        {
+          color: 'black',
+          runs: [
+            [
+              [0, 0],
+              [8, 0],
+            ],
+          ],
+        },
+      ],
+      0,
+      {
+        ...defaultUunaExpressiveMotion(),
+        mode: 'modulated',
+        maximumPressDepth: 1,
+        leadIn: 0,
+        leadOut: 0,
+        modulationDepth: 1,
+        modulationPeriod: 4,
+      },
+    );
+    const operation = operations.find(({ kind }) => kind === 'stroke');
+    expect(operation?.kind).toBe('stroke');
+    if (!operation || operation.kind !== 'stroke') return;
+    expect(operation.stroke.points[0].pressure).toBeCloseTo(1);
+    expect(operation.stroke.points[2].pressure).toBeCloseTo(0);
+    expect(operation.stroke.points[4].pressure).toBeCloseTo(1);
+  });
+
+  it('relieves pressure at tight corners while retaining straight-span pressure', () => {
+    const operations = createExpressiveOperations(
+      [
+        {
+          color: 'black',
+          runs: [
+            [
+              [0, 0],
+              [5, 0],
+              [5, 5],
+            ],
+          ],
+        },
+      ],
+      0,
+      {
+        ...defaultUunaExpressiveMotion(),
+        mode: 'curvature',
+        maximumPressDepth: 1,
+        leadIn: 0,
+        leadOut: 0,
+        curvatureRelief: 1,
+      },
+    );
+    const operation = operations.find(({ kind }) => kind === 'stroke');
+    expect(operation?.kind).toBe('stroke');
+    if (!operation || operation.kind !== 'stroke') return;
+    expect(operation.stroke.points[2].pressure).toBe(1);
+    expect(operation.stroke.points[5].pressure).toBe(0);
+    expect(operation.stroke.points[8].pressure).toBe(1);
+  });
 });

@@ -17,10 +17,14 @@ export function UunaExpressiveMotionControls() {
           optionDescriptions={{
             constant: 'Draws at Contact Z without additional pressure.',
             tapered: 'Eases from contact into the selected press depth and back at every stroke.',
+            modulated: 'Varies pressure periodically by final-path arc length.',
+            curvature: 'Relieves pressure around tight turns while preserving straighter spans.',
           }}
         >
           <option value="constant">Constant contact</option>
           <option value="tapered">Tapered pressure</option>
+          <option value="modulated">Pressure modulation</option>
+          <option value="curvature">Curvature relief</option>
         </SelectControl>
         <ValueControl
           id="uunaExpressiveContactZ"
@@ -43,6 +47,50 @@ export function UunaExpressiveMotionControls() {
             unit="mm"
             morphable={false}
           />
+          <div id="uunaExpressiveModulationControls" hidden>
+            <ValueControl
+              id="uunaExpressiveModulationDepth"
+              label="Modulation depth"
+              min="0"
+              max="100"
+              step="1"
+              value="0"
+              unit="%"
+              morphable={false}
+            />
+            <ValueControl
+              id="uunaExpressiveModulationPeriod"
+              label="Wavelength"
+              min="2"
+              max="200"
+              step="1"
+              value="20"
+              unit="mm"
+              morphable={false}
+            />
+            <ValueControl
+              id="uunaExpressiveModulationPhase"
+              label="Phase"
+              min="0"
+              max="359"
+              step="1"
+              value="0"
+              unit="°"
+              morphable={false}
+            />
+          </div>
+          <div id="uunaExpressiveCurvatureControls" hidden>
+            <ValueControl
+              id="uunaExpressiveCurvatureRelief"
+              label="Corner relief"
+              min="0"
+              max="100"
+              step="1"
+              value="0"
+              unit="%"
+              morphable={false}
+            />
+          </div>
           <ValueControl
             id="uunaExpressiveLeadIn"
             label="Lead-in"
@@ -100,9 +148,23 @@ export function UunaExpressiveMotionControls() {
         <Checkbox id="uunaExpressiveTipCompensation" defaultChecked>
           Compensate angled-tip offset
         </Checkbox>
+        <Checkbox id="uunaExpressivePreserveDirection" defaultChecked>
+          Preserve stroke direction
+        </Checkbox>
+        <ValueControl
+          id="uunaExpressiveNibWidth"
+          label="Nib width"
+          min="0"
+          max="20"
+          step="0.1"
+          value="0"
+          unit="mm"
+          morphable={false}
+        />
         <p className="gradient-note">
           Direction is measured clockwise on the canvas from +X. Auto-rotation carries it into
-          machine coordinates. Compensation uses Contact Z as the zero-offset plane.
+          machine coordinates. Compensation uses Contact Z as the zero-offset plane. Nib width adds
+          an approximate footprint preview and warns about nearby strokes; zero turns it off.
         </p>
         <button type="button" id="uunaCalibrationDownload" className="uuna-calibration">
           Download calibration G-code

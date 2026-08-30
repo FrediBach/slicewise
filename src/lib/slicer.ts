@@ -1287,14 +1287,24 @@ if (typeof document !== 'undefined') {
   bindExportPair('penDown', 'penDown');
   bindExportPair('zFeed', 'zFeed');
   type ExpressiveNumericKey =
-    'contactZ' | 'leadIn' | 'leadOut' | 'maximumPressDepth' | 'penAngle' | 'tiltDirection';
-  function bindExpressivePair(id: string, key: ExpressiveNumericKey): void {
+    | 'contactZ'
+    | 'leadIn'
+    | 'leadOut'
+    | 'maximumPressDepth'
+    | 'modulationDepth'
+    | 'modulationPeriod'
+    | 'modulationPhase'
+    | 'curvatureRelief'
+    | 'nibWidth'
+    | 'penAngle'
+    | 'tiltDirection';
+  function bindExpressivePair(id: string, key: ExpressiveNumericKey, scale = 1): void {
     const slider = $(id);
     const number = $(id + 'N');
     const apply = (value: string, from: 's' | 'n'): void => {
       const next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
       if (Number.isNaN(next)) return;
-      state.uunaExpressiveMotion[key] = next;
+      state.uunaExpressiveMotion[key] = next * scale;
       if (from !== 's') slider.value = String(next);
       if (from !== 'n') number.value = String(next);
       updateExportSize();
@@ -1306,6 +1316,11 @@ if (typeof document !== 'undefined') {
   bindExpressivePair('uunaExpressiveMaximumPressDepth', 'maximumPressDepth');
   bindExpressivePair('uunaExpressiveLeadIn', 'leadIn');
   bindExpressivePair('uunaExpressiveLeadOut', 'leadOut');
+  bindExpressivePair('uunaExpressiveModulationDepth', 'modulationDepth', 0.01);
+  bindExpressivePair('uunaExpressiveModulationPeriod', 'modulationPeriod');
+  bindExpressivePair('uunaExpressiveModulationPhase', 'modulationPhase');
+  bindExpressivePair('uunaExpressiveCurvatureRelief', 'curvatureRelief', 0.01);
+  bindExpressivePair('uunaExpressiveNibWidth', 'nibWidth');
   bindExpressivePair('uunaExpressivePenAngle', 'penAngle');
   bindExpressivePair('uunaExpressiveTiltDirection', 'tiltDirection');
   morphKeyById.set('color', 'color');
@@ -1594,7 +1609,9 @@ if (typeof document !== 'undefined') {
     const supported = resolveGCodeProfile(state.gcodeProfile).capabilities.coordinatedXYZ;
     $('uunaExpressiveMotionSection').hidden = !supported;
     $('uunaExpressiveMotionControls').hidden = !supported || !state.uunaExpressiveMotion.enabled;
-    $('uunaExpressivePressureControls').hidden = state.uunaExpressiveMotion.mode !== 'tapered';
+    $('uunaExpressivePressureControls').hidden = state.uunaExpressiveMotion.mode === 'constant';
+    $('uunaExpressiveModulationControls').hidden = state.uunaExpressiveMotion.mode !== 'modulated';
+    $('uunaExpressiveCurvatureControls').hidden = state.uunaExpressiveMotion.mode !== 'curvature';
   }
   $('uunaExpressiveMotionEnabled').addEventListener('change', (event) => {
     state.uunaExpressiveMotion.enabled = inputTarget(event).checked;
@@ -1602,13 +1619,19 @@ if (typeof document !== 'undefined') {
     updateExportSize();
   });
   $('uunaExpressiveMode').addEventListener('change', (event) => {
-    state.uunaExpressiveMotion.mode =
-      inputTarget(event).value === 'tapered' ? 'tapered' : 'constant';
+    const mode = inputTarget(event).value;
+    state.uunaExpressiveMotion.mode = ['tapered', 'modulated', 'curvature'].includes(mode)
+      ? (mode as UunaExpressiveMotion['mode'])
+      : 'constant';
     syncExpressiveMotionControls();
     updateExportSize();
   });
   $('uunaExpressiveTipCompensation').addEventListener('change', (event) => {
     state.uunaExpressiveMotion.tipCompensation = inputTarget(event).checked;
+    updateExportSize();
+  });
+  $('uunaExpressivePreserveDirection').addEventListener('change', (event) => {
+    state.uunaExpressiveMotion.preserveStrokeDirection = inputTarget(event).checked;
     updateExportSize();
   });
   syncExpressiveMotionControls();
@@ -4377,6 +4400,7 @@ if (typeof document !== 'undefined') {
     const svg = document.querySelector<SVGSVGElement>('#gcodePathPreview')!;
     const sheet = document.querySelector<SVGRectElement>('#gcodePreviewSheet')!;
     const draw = document.querySelector<SVGPathElement>('#gcodePreviewDraw')!;
+    const nibFootprint = document.querySelector<SVGPathElement>('#gcodePreviewNibFootprint')!;
     const pressureLow = document.querySelector<SVGPathElement>('#gcodePreviewPressureLow')!;
     const pressureMedium = document.querySelector<SVGPathElement>('#gcodePreviewPressureMedium')!;
     const pressureHigh = document.querySelector<SVGPathElement>('#gcodePreviewPressureHigh')!;
@@ -4390,11 +4414,15 @@ if (typeof document !== 'undefined') {
     const drawCommands: string[] = [];
     const travelCommands: string[] = [];
     const pressureCommands: [string[], string[], string[]] = [[], [], []];
+    const footprintCommands: string[] = [];
     for (const { from, to, kind, pressure } of validation.segments) {
       const command = `M${from[0]} ${screenY(from[1])}L${to[0]} ${screenY(to[1])}`;
       if (kind === 'travel') travelCommands.push(command);
       else if (!preflight.expressiveMotion) drawCommands.push(command);
-      else pressureCommands[pressure < 0.34 ? 0 : pressure < 0.67 ? 1 : 2].push(command);
+      else {
+        pressureCommands[pressure < 0.34 ? 0 : pressure < 0.67 ? 1 : 2].push(command);
+        footprintCommands.push(command);
+      }
     }
     svg.setAttribute(
       'viewBox',
@@ -4403,6 +4431,8 @@ if (typeof document !== 'undefined') {
     sheet.setAttribute('width', String(preflight.sheet.width));
     sheet.setAttribute('height', String(preflight.sheet.height));
     draw.setAttribute('d', drawCommands.join(''));
+    nibFootprint.setAttribute('d', footprintCommands.join(''));
+    nibFootprint.setAttribute('stroke-width', String(preflight.expressiveMotion?.nibWidth || 0));
     travel.setAttribute('d', travelCommands.join(''));
     pressureLow.setAttribute('d', pressureCommands[0].join(''));
     pressureMedium.setAttribute('d', pressureCommands[1].join(''));

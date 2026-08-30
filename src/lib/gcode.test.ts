@@ -203,4 +203,28 @@ describe('generateGCode', () => {
     expect(output.match(/; pen down/g)).toHaveLength(1);
     expect(output).not.toMatch(/X-5|X15/);
   });
+
+  it('records modulation and stroke-direction setup in expressive metadata', () => {
+    const output = generateGCode(
+      [group([[0, 0, 8, 0]])],
+      { width: 10, height: 10 },
+      {
+        origin: 'rear-left',
+        motion: {
+          kind: 'coordinated-xyz',
+          settings: {
+            ...defaultUunaExpressiveMotion(),
+            mode: 'modulated',
+            modulationDepth: 0.5,
+            modulationPeriod: 8,
+            modulationPhase: 90,
+          },
+        },
+      },
+    );
+
+    expect(output).toContain('arc-length pressure modulation');
+    expect(output).toContain('Pressure modulation: 50% depth; 8 mm wavelength; 90 degrees phase');
+    expect(output).toContain('Stroke direction: preserved');
+  });
 });

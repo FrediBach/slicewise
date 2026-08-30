@@ -18,7 +18,7 @@ Phases 1 and 2 are implemented in the application:
 - a preflight-validated calibration download contains a contact ladder, angle crosses, and taper fan;
 - direct serial confirmation calls out the physical angle, machine direction, Z range, compensation state, and calibration requirement.
 
-Hardware characterization remains open. Until coordinated motion is confirmed on target firmware, expressive motion remains calibration-required output. Phase 3 modulation, curvature response, directional stroke policies, and broad-nib footprint analysis are not implemented yet.
+Hardware characterization remains open. Until coordinated motion is confirmed on target firmware, expressive motion remains calibration-required output. Phase 3 arc-length modulation, curvature response, direction preservation, and broad-nib footprint guidance are implemented in software. Broad-nib preview and spacing checks are intentionally approximate and must be confirmed with the physical tool.
 
 UUNA TEK 3.0 has stepper-driven X, Y, and Z axes, while its advertised 0–90° pen angle appears to be a manually adjusted holder setting. I found no evidence that pen angle can be changed through G-code. The angle still matters computationally: changing Z with a tilted pen shifts the physical tip in X/Y, affects pressure, and changes broad-nib or brush behavior. [UUNA TEK specifications](https://uunatek.com/products/uuna-tek-3-0-a2-size-pen-plotter-drawing-robot-drawing-machine-writing-machine), [official G-code guide](https://uunatek.com/blogs/tips-and-tricks/beginner-s-guide-to-g-code-for-uuna-tek-3-0-pen-plotter-step-by-step-tutorial).
 
@@ -426,6 +426,8 @@ Status: implemented in software; physical characterization remains required.
 - Curvature pressure relief.
 - Stroke-direction policies.
 - Broad-nib footprint preview and spacing warnings.
+
+Status: implemented in software. Pressure modulation uses final-path arc length and smooth lead-in/out envelopes. Curvature relief responds to final-polyline turns. Direction preservation constrains travel optimization so asymmetric strokes are not reversed. The nib-width overlay and inter-run spacing warning are calibration guidance, not an exact model of flexible or anisotropic nib deformation.
 
 ### Phase 4: Surface compensation
 

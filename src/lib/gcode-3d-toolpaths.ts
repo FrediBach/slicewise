@@ -28,13 +28,15 @@ export type UunaExpressiveMotion = {
   tipCompensation: boolean;
   contactZ: number;
   maximumPressDepth: number;
-  mode: 'constant' | 'tapered';
+  mode: 'constant' | 'tapered' | 'modulated' | 'curvature';
   leadIn: number;
   leadOut: number;
   modulationDepth: number;
   modulationPeriod: number;
+  modulationPhase: number;
   curvatureRelief: number;
   preserveStrokeDirection: boolean;
+  nibWidth: number;
   surfaceCompensation: { mode: 'off' };
 };
 
@@ -54,8 +56,10 @@ export function defaultUunaExpressiveMotion(contactZ = -3): UunaExpressiveMotion
     leadOut: 2,
     modulationDepth: 0,
     modulationPeriod: 20,
+    modulationPhase: 0,
     curvatureRelief: 0,
     preserveStrokeDirection: true,
+    nibWidth: 0,
     surfaceCompensation: { mode: 'off' },
   };
 }
@@ -101,6 +105,7 @@ type ExpressiveOperationOptions = Pick<
   | 'mode'
   | 'modulationDepth'
   | 'modulationPeriod'
+  | 'modulationPhase'
   | 'penAngle'
   | 'surfaceCompensation'
   | 'tiltDirection'
@@ -201,7 +206,27 @@ function taperedPressure(
   return Math.min(entering, leaving);
 }
 
-/** Build constant-contact or tapered expressive operations from ordered machine-space runs. */
+function modulatedPressure(distance: number, period: number, depth: number, phase: number): number {
+  const wavelength = Math.max(EXPRESSIVE_RESAMPLE_STEP, finiteOr(period, 20));
+  const amount = clamp(finiteOr(depth, 0), 0, 1);
+  const radians = (distance / wavelength) * Math.PI * 2 + (finiteOr(phase, 0) * Math.PI) / 180;
+  const wave = 0.5 - 0.5 * Math.cos(radians);
+  return 1 - amount * wave;
+}
+
+function curvaturePressure(points: number[][], index: number, relief: number): number {
+  if (index <= 0 || index >= points.length - 1) return 1;
+  const previous = points[index - 1];
+  const point = points[index];
+  const next = points[index + 1];
+  const incoming = Math.atan2(point[1] - previous[1], point[0] - previous[0]);
+  const outgoing = Math.atan2(next[1] - point[1], next[0] - point[0]);
+  const turn = Math.abs(Math.atan2(Math.sin(outgoing - incoming), Math.cos(outgoing - incoming)));
+  const response = smoothstep(turn / (Math.PI / 2));
+  return 1 - clamp(finiteOr(relief, 0), 0, 1) * response;
+}
+
+/** Build expressive operations from ordered machine-space runs using final-path arc length. */
 export function createExpressiveOperations(
   groups: PreparedMachineGroup[],
   penUp: number,
@@ -227,19 +252,26 @@ export function createExpressiveOperations(
         stroke: {
           sourceRun,
           reversed: false,
-          points: sampled.points.map(([x, y], index) =>
-            machinePointForPressure(
-              x,
-              y,
-              taperedPressure(
-                sampled.distances[index],
-                sampled.length,
-                options.leadIn,
-                options.leadOut,
-              ),
-              options,
-            ),
-          ),
+          points: sampled.points.map(([x, y], index) => {
+            const envelope = taperedPressure(
+              sampled.distances[index],
+              sampled.length,
+              options.leadIn,
+              options.leadOut,
+            );
+            const behavior =
+              options.mode === 'modulated'
+                ? modulatedPressure(
+                    sampled.distances[index],
+                    options.modulationPeriod,
+                    options.modulationDepth,
+                    options.modulationPhase,
+                  )
+                : options.mode === 'curvature'
+                  ? curvaturePressure(sampled.points, index, options.curvatureRelief)
+                  : 1;
+            return machinePointForPressure(x, y, envelope * behavior, options);
+          }),
         },
       });
       sourceRun += 1;

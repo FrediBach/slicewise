@@ -83,7 +83,11 @@ export function clipToolpathGroups<T extends ToolpathGroupLike>(
   return clipped;
 }
 
-function mergeNearbyRuns(source: ToolpathRun[], tolerance: number): ToolpathRun[] {
+function mergeNearbyRuns(
+  source: ToolpathRun[],
+  tolerance: number,
+  preserveDirection = false,
+): ToolpathRun[] {
   const runs = source.map((run) => run.slice());
   if (tolerance <= 0) return runs;
   for (;;) {
@@ -96,12 +100,14 @@ function mergeNearbyRuns(source: ToolpathRun[], tolerance: number): ToolpathRun[
         const bStart = firstPoint(runs[j]),
           bEnd = lastPoint(runs[j]);
         if (samePoint(bStart, bEnd)) continue;
-        const gaps = [
-          distance(aEnd, bStart),
-          distance(aEnd, bEnd),
-          distance(aStart, bStart),
-          distance(aStart, bEnd),
-        ];
+        const gaps = preserveDirection
+          ? [distance(aEnd, bStart), Infinity, Infinity, distance(bEnd, aStart)]
+          : [
+              distance(aEnd, bStart),
+              distance(aEnd, bEnd),
+              distance(aStart, bStart),
+              distance(aStart, bEnd),
+            ];
         for (let mode = 0; mode < gaps.length; mode++)
           if (gaps[mode] <= tolerance && (!best || gaps[mode] < best.gap - 1e-12))
             best = { i, j, mode, gap: gaps[mode] };
@@ -142,10 +148,12 @@ export function optimizeRuns(
   source: ToolpathRun[],
   start: Point = [0, 0],
   mergeTolerance = 0.15,
+  preserveDirection = false,
 ): OptimizedRuns {
   const remaining = mergeNearbyRuns(
     source.filter((run) => run.length >= 4),
     Math.max(0, mergeTolerance),
+    preserveDirection,
   );
   const ordered: ToolpathRun[] = [];
   let cursor: Point = [...start];
@@ -155,7 +163,7 @@ export function optimizeRuns(
       bestDistance = Infinity;
     for (let i = 0; i < remaining.length; i++) {
       const startDistance = distance(cursor, firstPoint(remaining[i]));
-      const endDistance = distance(cursor, lastPoint(remaining[i]));
+      const endDistance = preserveDirection ? Infinity : distance(cursor, lastPoint(remaining[i]));
       if (startDistance < bestDistance) {
         bestDistance = startDistance;
         bestIndex = i;
@@ -173,7 +181,7 @@ export function optimizeRuns(
     cursor = lastPoint(next);
   }
 
-  for (let pass = 0; pass < 8; pass++) {
+  for (let pass = 0; !preserveDirection && pass < 8; pass++) {
     let bestI = -1,
       bestK = -1,
       bestGain = 1e-9;

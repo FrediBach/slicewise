@@ -1220,6 +1220,7 @@ select {
 }
 #gcodePreviewTravel,
 #gcodePreviewDraw,
+#gcodePreviewNibFootprint,
 #gcodePreviewPressureLow,
 #gcodePreviewPressureMedium,
 #gcodePreviewPressureHigh {
@@ -1234,6 +1235,13 @@ select {
 #gcodePreviewDraw {
   stroke: #171a18;
   stroke-width: 1;
+}
+#gcodePreviewNibFootprint {
+  fill: none;
+  stroke: #6f436f;
+  stroke-linecap: round;
+  opacity: 0.16;
+  vector-effect: none;
 }
 #gcodePreviewPressureLow {
   stroke: #4b90a6;

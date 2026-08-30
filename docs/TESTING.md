@@ -76,6 +76,7 @@ Coverage currently measures the focused core under active test:
 - `gcode-3d-toolpaths.ts`
 - `gcode-calibration.ts`
 - `gcode-layout.ts`
+- `gcode-nib-footprint.ts`
 - `gcode-profiles.ts`
 - `grbl-serial.ts`
 - `gcode-validation.ts`

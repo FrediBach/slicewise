@@ -189,6 +189,11 @@ describe('OutputPanel composition boundaries', () => {
     expect(document.getElementById('uunaExpressivePenAngleN')).toHaveValue(90);
     expect(document.getElementById('uunaExpressiveTiltDirectionN')).toHaveValue(0);
     expect(document.getElementById('uunaExpressiveTipCompensation')).toBeChecked();
+    expect(document.getElementById('uunaExpressivePreserveDirection')).toBeChecked();
+    expect(document.getElementById('uunaExpressiveModulationDepthN')).toHaveValue(0);
+    expect(document.getElementById('uunaExpressiveModulationPeriodN')).toHaveValue(20);
+    expect(document.getElementById('uunaExpressiveCurvatureReliefN')).toHaveValue(0);
+    expect(document.getElementById('uunaExpressiveNibWidthN')).toHaveValue(0);
     expect(document.getElementById('uunaCalibrationDownload')).toHaveTextContent(
       'Download calibration G-code',
     );
@@ -204,6 +209,7 @@ describe('OutputPanel composition boundaries', () => {
       'Validated G-code drawing and pen-up travel preview',
     );
     expect(document.getElementById('gcodePreviewPressureHigh')).toBeInTheDocument();
+    expect(document.getElementById('gcodePreviewNibFootprint')).toBeInTheDocument();
     expect(document.getElementById('gcodeSerialConnect')).toHaveTextContent('Connect');
     expect(document.getElementById('gcodeSerialSend')).toBeDisabled();
     expect(document.getElementById('gcodeSerialStop')).toBeDisabled();

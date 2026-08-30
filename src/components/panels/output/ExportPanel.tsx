@@ -153,6 +153,7 @@ export function ExportPanel() {
               <rect id="gcodePreviewSheet" x="0" y="0" width="1" height="1" />
               <path id="gcodePreviewTravel" />
               <path id="gcodePreviewDraw" />
+              <path id="gcodePreviewNibFootprint" />
               <path id="gcodePreviewPressureLow" />
               <path id="gcodePreviewPressureMedium" />
               <path id="gcodePreviewPressureHigh" />

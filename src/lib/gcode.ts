@@ -123,6 +123,8 @@ export function generateGCode(
           preparedRuns.flatMap((run) => [run.flat()]),
           cursor,
           mergeTolerance,
+          options.motion?.kind === 'coordinated-xyz' &&
+            options.motion.settings.preserveStrokeDirection,
         )
       : null;
     const orderedRuns = optimized
@@ -156,16 +158,33 @@ export function generateGCode(
   if (options.motion?.kind === 'coordinated-xyz') {
     const expressive = options.motion.settings;
     lines.push(
-      `; Motion: coordinated XYZ · ${expressive.mode === 'tapered' ? 'tapered pressure' : 'constant contact'}`,
+      `; Motion: coordinated XYZ · ${
+        expressive.mode === 'tapered'
+          ? 'tapered pressure'
+          : expressive.mode === 'modulated'
+            ? 'arc-length pressure modulation'
+            : expressive.mode === 'curvature'
+              ? 'curvature pressure relief'
+              : 'constant contact'
+      }`,
       `; Pen angle: ${clampPrecision(expressive.penAngle)} degrees above paper; set holder manually`,
       `; Pen tilt direction: ${clampPrecision(expressive.tiltDirection)} degrees in machine coordinates`,
       `; Tip offset compensation: ${expressive.tipCompensation ? 'enabled' : 'disabled'}`,
       `; Contact Z: ${clampPrecision(expressive.contactZ)} mm; maximum press depth: ${clampPrecision(expressive.maximumPressDepth)} mm`,
     );
-    if (expressive.mode === 'tapered')
+    if (expressive.mode !== 'constant')
       lines.push(
         `; Pressure ramps: ${clampPrecision(expressive.leadIn)} mm lead-in; ${clampPrecision(expressive.leadOut)} mm lead-out`,
       );
+    if (expressive.mode === 'modulated')
+      lines.push(
+        `; Pressure modulation: ${clampPrecision(expressive.modulationDepth * 100)}% depth; ${clampPrecision(expressive.modulationPeriod)} mm wavelength; ${clampPrecision(expressive.modulationPhase)} degrees phase`,
+      );
+    if (expressive.mode === 'curvature')
+      lines.push(`; Curvature relief: ${clampPrecision(expressive.curvatureRelief * 100)}%`);
+    lines.push(
+      `; Stroke direction: ${expressive.preserveStrokeDirection ? 'preserved' : 'optimizer may reverse runs'}`,
+    );
   }
   for (const comment of options.comments || []) lines.push(`; ${cleanComment(comment)}`);
   if (effects.kaleidoscope)

@@ -32,7 +32,7 @@ export type GCodeValidationOptions = {
         kind: 'coordinated-xyz';
         contactZ: number;
         maximumPressDepth: number;
-        mode: 'constant' | 'tapered';
+        mode: 'constant' | 'tapered' | 'modulated' | 'curvature';
         penAngle: number;
         tiltDirection: number;
         tipCompensation: boolean;

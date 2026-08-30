@@ -4,6 +4,7 @@ import { createUunaCalibrationOperations, UUNA_CALIBRATION_SHEET } from './gcode
 import { generateGCode } from './gcode';
 import { resolveGCodeMachineLayout, type GCodeLayoutRotation } from './gcode-layout';
 import { resolveGCodeProfile } from './gcode-profiles';
+import { analyzeBroadNibSpacing, type BroadNibSpacingAnalysis } from './gcode-nib-footprint';
 import { validateGCode, type GCodeValidationResult } from './gcode-validation';
 
 export interface ExportState {
@@ -51,6 +52,7 @@ export type GCodeExportPreflight = {
   sourceSheet: { width: number; height: number };
   validation: GCodeValidationResult;
   expressiveMotion: UunaExpressiveMotion | null;
+  broadNibSpacing: BroadNibSpacingAnalysis | null;
 };
 
 export function createGCodeExportPreflight(state: ExportState): GCodeExportPreflight {
@@ -111,35 +113,51 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
         state.vectorZoom4Enabled,
     },
   });
+  const validation = validateGCode(content, {
+    width: layout.sheet.width,
+    height: layout.sheet.height,
+    penUp: state.penUp,
+    penDown: state.penDown,
+    drawFeed: state.drawFeed,
+    travelFeed: state.travelFeed,
+    zFeed: state.zFeed,
+    machineWidth: profile.workingArea?.width,
+    machineHeight: profile.workingArea?.height,
+    motion: expressiveMotionEnabled
+      ? {
+          kind: 'coordinated-xyz',
+          contactZ: expressiveMotion!.contactZ,
+          maximumPressDepth: expressiveMotion!.maximumPressDepth,
+          mode: expressiveMotion!.mode,
+          penAngle: expressiveMotion!.penAngle,
+          tiltDirection: expressiveMotion!.tiltDirection,
+          tipCompensation: expressiveMotion!.tipCompensation,
+          zConvention: profile.capabilities.zConvention,
+        }
+      : undefined,
+  });
+  const broadNibSpacing =
+    expressiveMotion && expressiveMotion.nibWidth > 0
+      ? analyzeBroadNibSpacing(layout.groups, expressiveMotion.nibWidth)
+      : null;
+  if (broadNibSpacing?.nearbyRunPairs) {
+    const warning = {
+      severity: 'warning' as const,
+      code: 'broad-nib-spacing',
+      line: 0,
+      message: `${broadNibSpacing.nearbyRunPairs} stroke pair${broadNibSpacing.nearbyRunPairs === 1 ? '' : 's'} may merge with a ${expressiveMotion!.nibWidth} mm nib.`,
+    };
+    validation.issues.push(warning);
+    validation.warnings.push(warning);
+  }
   return {
     content,
     rotation: layout.rotation,
     sheet: layout.sheet,
     sourceSheet: layout.sourceSheet,
     expressiveMotion,
-    validation: validateGCode(content, {
-      width: layout.sheet.width,
-      height: layout.sheet.height,
-      penUp: state.penUp,
-      penDown: state.penDown,
-      drawFeed: state.drawFeed,
-      travelFeed: state.travelFeed,
-      zFeed: state.zFeed,
-      machineWidth: profile.workingArea?.width,
-      machineHeight: profile.workingArea?.height,
-      motion: expressiveMotionEnabled
-        ? {
-            kind: 'coordinated-xyz',
-            contactZ: expressiveMotion!.contactZ,
-            maximumPressDepth: expressiveMotion!.maximumPressDepth,
-            mode: expressiveMotion!.mode,
-            penAngle: expressiveMotion!.penAngle,
-            tiltDirection: expressiveMotion!.tiltDirection,
-            tipCompensation: expressiveMotion!.tipCompensation,
-            zConvention: profile.capabilities.zConvention,
-          }
-        : undefined,
-    }),
+    broadNibSpacing,
+    validation,
   };
 }
 
