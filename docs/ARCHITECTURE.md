@@ -47,7 +47,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `components/panels/*` groups markup by product feature. Panels should remain declarative and retain the DOM IDs consumed by the runtime.
 - Complex panel subsections live in feature-named subdirectories such as `components/panels/contours/`. These components may reorganize declarative markup, but the runtime-facing control IDs, hidden wrapper IDs, defaults, and custom-event contracts remain stable.
 - `components/panels/OutputPanel.tsx` is a compatibility barrel for the independently owned appearance, canvas, effects, vector-zoom, and export components under `components/panels/output/`. Callers should keep using the barrel unless they need one focused component in isolation.
-- Top-level parameter groups use native `details` accordions through `components/ui/section.tsx`. Collapsing a group only changes its presentation; its controls remain mounted so `lib/slicer.ts` can keep binding to their stable IDs.
+- Top-level parameter groups use native `details` accordions through `components/ui/section.tsx`. Their controls remain mounted when collapsed so `lib/slicer.ts` can keep binding to stable IDs. The Export section is the deliberate performance exception: while it is collapsed, background G-code serialization, validation, and path-preview updates are suspended; reopening it refreshes the preflight from the latest exact render.
 - `components/controls/FormControls.tsx` contains shared numeric, colour, checkbox, morph, and randomization controls.
 - `components/controls/GradientChooser.tsx` owns editable gradient-stop state.
 - `components/ui/*` contains small, style-oriented primitives without domain behavior.

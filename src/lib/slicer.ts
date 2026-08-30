@@ -65,6 +65,7 @@ import {
   createGCodeExportPreflight,
   createUunaCalibrationExport,
   createUunaSurfaceCalibrationExport,
+  shouldRefreshGCodePreflight,
   type GCodeExportPreflight,
 } from './slicer-export';
 import {
@@ -4565,12 +4566,22 @@ if (typeof document !== 'undefined') {
     if (!state.svg) return;
     let bytes = state.svgBytes;
     if (state.exportFormat === 'gcode') {
+      if (
+        !shouldRefreshGCodePreflight(
+          state.exportFormat,
+          $<HTMLDetailsElement>('exportSection').open,
+        )
+      )
+        return;
       const preflight = createGCodeExportPreflight(state);
       bytes = new TextEncoder().encode(preflight.content).byteLength;
       updateGCodePreflight(preflight);
     }
     $('rSize').textContent = (bytes / 1024).toFixed(1) + ' kB';
   }
+  $('exportSection').addEventListener('toggle', (event) => {
+    if ((event.currentTarget as HTMLDetailsElement).open) updateExportSize();
+  });
   $('uunaCalibrationDownload').addEventListener('click', () => {
     try {
       const calibration = createUunaCalibrationExport(state);

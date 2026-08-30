@@ -17,6 +17,7 @@ const uunaProfileIds: GCodeProfileId[] = [
 export function ExportPanel() {
   return (
     <Section
+      id="exportSection"
       title="Export"
       description="Choose the final format and configure plotter motion."
       badge="08"

@@ -7,6 +7,7 @@ import {
   createGCodeExportPreflight,
   createUunaCalibrationExport,
   createUunaSurfaceCalibrationExport,
+  shouldRefreshGCodePreflight,
   type ExportState,
 } from './slicer-export';
 
@@ -44,6 +45,12 @@ const exportState = (overrides: Partial<ExportState> = {}): ExportState => ({
 });
 
 describe('slicer export assembly', () => {
+  it('refreshes background G-code preflight only while its export section is open', () => {
+    expect(shouldRefreshGCodePreflight('gcode', true)).toBe(true);
+    expect(shouldRefreshGCodePreflight('gcode', false)).toBe(false);
+    expect(shouldRefreshGCodePreflight('svg', true)).toBe(false);
+  });
+
   it('returns SVG without running the G-code serializer', () => {
     expect(createCurrentExport(exportState())).toEqual({
       content: '<svg/>',

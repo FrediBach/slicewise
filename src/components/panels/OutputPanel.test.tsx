@@ -175,6 +175,7 @@ describe('OutputPanel composition boundaries', () => {
 
     unmount();
     render(<ExportPanel />);
+    expect(document.getElementById('exportSection')).not.toHaveAttribute('open');
     expect(screen.getByLabelText('File type')).toHaveValue('svg');
     expect(screen.getByLabelText('Machine')).toHaveValue('uunatek3-a3');
     expect(document.getElementById('gcodeAutoRotate')).toBeChecked();

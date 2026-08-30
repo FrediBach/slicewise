@@ -2,6 +2,7 @@ import { ChevronDown, Dices, Lock } from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 type SectionProps = {
+  id?: string;
   title: string;
   description: string;
   badge?: ReactNode;
@@ -24,6 +25,7 @@ function MorphIndicator() {
 }
 
 export function Section({
+  id,
   title,
   description,
   badge,
@@ -72,7 +74,7 @@ export function Section({
   };
 
   return (
-    <details ref={sectionRef} className="control-section" open={defaultOpen}>
+    <details id={id} ref={sectionRef} className="control-section" open={defaultOpen}>
       <summary className="section-heading">
         <span className="section-heading-copy">
           <span className="section-heading-meta">

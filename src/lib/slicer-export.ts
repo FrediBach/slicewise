@@ -59,6 +59,13 @@ export type GCodeExportPreflight = {
   broadNibSpacing: BroadNibSpacingAnalysis | null;
 };
 
+export function shouldRefreshGCodePreflight(
+  exportFormat: string,
+  exportSectionOpen: boolean,
+): boolean {
+  return exportFormat === 'gcode' && exportSectionOpen;
+}
+
 export function createGCodeExportPreflight(state: ExportState): GCodeExportPreflight {
   const profile = resolveGCodeProfile(state.gcodeProfile);
   const expressiveMotionEnabled =
