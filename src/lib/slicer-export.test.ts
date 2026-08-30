@@ -17,7 +17,7 @@ const exportState = (overrides: Partial<ExportState> = {}): ExportState => ({
   penUp: 3,
   penDown: -2,
   zFeed: 900,
-  gcodeProfile: 'uunatek3',
+  gcodeProfile: 'uunatek3-a3',
   clipToArtboard: true,
   optimizeTravel: false,
   mergeTolerance: 0.15,
@@ -57,6 +57,34 @@ describe('slicer export assembly', () => {
     expect(output).toContain('G0 X10 Y20 F4800');
     expect(output).toContain('Vector zoom: enlarged detail, borders, and dashed leaders');
     expect(output).toContain('Misregistration: offset colour copies are included');
+  });
+
+  it.each([
+    ['uunatek3-a3', 'A3', 420, 297],
+    ['uunatek3-a2', 'A2', 594, 420],
+    ['uunatek3-a1', 'A1', 841, 594],
+    ['uunatek3-a0', 'A0', 1189, 841],
+  ])('supports the %s machine profile', (gcodeProfile, size, pw, ph) => {
+    const preflight = createGCodeExportPreflight(
+      exportState({ gcodeProfile, pw, ph, toolpaths: [] }),
+    );
+
+    expect(preflight.validation.valid).toBe(true);
+    expect(preflight.content).toContain(`; Machine: UUNA TEK 3.0 ${size}`);
+    expect(preflight.content).toContain(`; Sheet: ${pw} x ${ph} mm`);
+    expect(preflight.content).toContain('; Origin: rear-left of sheet');
+  });
+
+  it('keeps the legacy UUNA A3 identifier compatible', () => {
+    expect(createGCodeExport(exportState({ gcodeProfile: 'uunatek3' }))).toContain(
+      '; Machine: UUNA TEK 3.0 A3',
+    );
+  });
+
+  it('blocks an artboard that exceeds the selected UUNA working area', () => {
+    expect(() =>
+      createGCodeExport(exportState({ gcodeProfile: 'uunatek3-a3', pw: 421, ph: 297 })),
+    ).toThrow(/421 × 297 mm artboard exceeds.*420 × 297 mm working area/);
   });
 
   it('preflights the serialized machine path before export', () => {

@@ -1,5 +1,6 @@
 import { type ContourToolpathGroup } from './contour-engine';
 import { generateGCode } from './gcode';
+import { resolveGCodeProfile } from './gcode-profiles';
 import { validateGCode, type GCodeValidationResult } from './gcode-validation';
 
 export interface ExportState {
@@ -44,7 +45,7 @@ export type GCodeExportPreflight = {
 };
 
 export function createGCodeExportPreflight(state: ExportState): GCodeExportPreflight {
-  const isUunaTek = state.gcodeProfile === 'uunatek3';
+  const profile = resolveGCodeProfile(state.gcodeProfile);
   const content = generateGCode(
     state.toolpaths,
     { width: state.pw, height: state.ph },
@@ -55,8 +56,8 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
       penUp: state.penUp,
       penDown: state.penDown,
       zFeed: state.zFeed,
-      machine: isUunaTek ? 'UUNA TEK 3.0 A3' : 'Generic Z-axis plotter',
-      origin: isUunaTek ? 'rear-left' : 'bottom-left',
+      machine: profile.machine,
+      origin: profile.origin,
       clipToArtboard: state.clipToArtboard,
       optimizeTravel: state.optimizeTravel,
       mergeTolerance: state.mergeTolerance,
@@ -87,6 +88,8 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
       drawFeed: state.drawFeed,
       travelFeed: state.travelFeed,
       zFeed: state.zFeed,
+      machineWidth: profile.workingArea?.width,
+      machineHeight: profile.workingArea?.height,
     }),
   };
 }

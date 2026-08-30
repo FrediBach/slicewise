@@ -20,6 +20,8 @@ export type GCodeValidationOptions = {
   drawFeed: number;
   travelFeed: number;
   zFeed: number;
+  machineWidth?: number;
+  machineHeight?: number;
   minimumDrawSegment?: number;
 };
 
@@ -117,6 +119,18 @@ export function validateGCode(
     line: number,
     message: string,
   ) => issues.push({ severity, code, line, message });
+  if (
+    options.machineWidth !== undefined &&
+    options.machineHeight !== undefined &&
+    (options.width > options.machineWidth + EPSILON ||
+      options.height > options.machineHeight + EPSILON)
+  )
+    addIssue(
+      'error',
+      'machine-area-exceeded',
+      0,
+      `The ${options.width} × ${options.height} mm artboard exceeds this machine’s ${options.machineWidth} × ${options.machineHeight} mm working area.`,
+    );
   const requireSetup = (line: number) => {
     if (!unitsSet || !absoluteSet || !feedModeSet)
       addIssue(

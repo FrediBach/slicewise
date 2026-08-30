@@ -79,7 +79,8 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `generativeMesh.ts` generates indexed meshes from implicit fields. Its worker transfers array buffers rather than cloning large arrays.
 - `svg-mesh.ts` converts filled SVG artwork into extruded mesh geometry or pruned medial/scale-axis centreline polylines.
 - `toolpaths.ts` owns rectangular clipping, near-endpoint joining, greedy run ordering, and reversible 2-opt refinement.
-- `gcode.ts` converts grouped toolpaths into machine instructions, applies an export-time clipping safety net, and owns plotter-profile defaults.
+- `gcode.ts` converts grouped toolpaths into machine instructions, applies an export-time clipping safety net, and supplies conservative serializer fallbacks.
+- `gcode-profiles.ts` is the single source of truth for machine names, origins, working envelopes, motion defaults, and legacy profile resolution. UUNA TEK 3.0 profiles cover the official landscape A3, A2, A1, and A0 working areas.
 - `gcode-validation.ts` independently parses and simulates the serialized machine program. Its strict profile checks enforce setup order, the supported command subset, feeds, pen state, sheet bounds, safe pen changes/shutdown, and expose draw/travel segments plus preflight statistics.
 - `slicer-export.ts` maps browser runtime state into SVG/G-code export artifacts and safe download names. It is DOM-free; `slicer.ts` remains responsible only for waiting for a current render, clipboard access, and initiating downloads.
 - `render-settings.ts` is the exhaustive browser-state-to-worker-settings adapter. Its key list is compile-time checked against `ContourSettings`, omits runtime/request-only fields, derives the document title, and detaches mutable morph maps.

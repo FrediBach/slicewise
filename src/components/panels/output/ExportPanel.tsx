@@ -1,5 +1,17 @@
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../../controls/FormControls';
 import { Section } from '../../ui/section';
+import {
+  DEFAULT_GCODE_PROFILE_ID,
+  GCODE_PROFILES,
+  type GCodeProfileId,
+} from '../../../lib/gcode-profiles';
+
+const uunaProfileIds: GCodeProfileId[] = [
+  'uunatek3-a3',
+  'uunatek3-a2',
+  'uunatek3-a1',
+  'uunatek3-a0',
+];
 
 export function ExportPanel() {
   return (
@@ -26,16 +38,27 @@ export function ExportPanel() {
           <SelectControl
             id="gcodeProfile"
             label="Machine"
-            defaultValue="uunatek3"
+            defaultValue={DEFAULT_GCODE_PROFILE_ID}
             rowClassName="select-row"
             optionDescriptions={{
-              uunatek3:
-                'Uses rear-left origin conventions and pen settings tuned for the UUNA TEK 3.0.',
+              ...Object.fromEntries(
+                uunaProfileIds.map((id) => [
+                  id,
+                  `Uses the ${GCODE_PROFILES[id].workingArea!.width} × ${GCODE_PROFILES[id].workingArea!.height} mm rear-left working area and UUNA TEK motion defaults.`,
+                ]),
+              ),
               generic:
                 'Uses a bottom-left origin and conservative defaults for a generic Z-axis plotter.',
             }}
           >
-            <option value="uunatek3">UUNA TEK 3.0 · A3</option>
+            {uunaProfileIds.map((id) => {
+              const profile = GCODE_PROFILES[id];
+              return (
+                <option key={id} value={id}>
+                  {profile.label} · {profile.workingArea!.width} × {profile.workingArea!.height} mm
+                </option>
+              );
+            })}
             <option value="generic">Generic Z-axis plotter</option>
           </SelectControl>
           <ValueControl
@@ -102,8 +125,7 @@ export function ExportPanel() {
             morphable={false}
           />
           <p className="gradient-note" id="gcodeProfileNote">
-            UUNA TEK rear-left origin with 3 mm pen drop. Set the machine origin at the sheet’s
-            rear-left corner before plotting.
+            {GCODE_PROFILES[DEFAULT_GCODE_PROFILE_ID].note}
           </p>
           <div className="gcode-preflight" aria-labelledby="gcodePreflightHeading">
             <div className="gcode-preflight__heading">

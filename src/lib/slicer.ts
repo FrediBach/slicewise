@@ -45,6 +45,7 @@ import { setDisabled, setDisabledPair } from './control-state';
 import { createRenderSettingsSnapshot } from './render-settings';
 import { ParameterHistory } from './parameter-history';
 import { normalizeParameterSnapshot } from './parameter-migrations';
+import { DEFAULT_GCODE_PROFILE_ID, resolveGCodeProfile } from './gcode-profiles';
 import {
   createCurrentExport,
   createExportFilename,
@@ -427,7 +428,7 @@ const state: AppState = {
   morphStepsY: 4,
   morphTargets2: {},
   exportFormat: 'svg',
-  gcodeProfile: 'uunatek3',
+  gcodeProfile: DEFAULT_GCODE_PROFILE_ID,
   drawFeed: 3000,
   travelFeed: 6000,
   optimizeTravel: true,
@@ -1505,44 +1506,19 @@ if (typeof document !== 'undefined') {
     rebuildSVG();
   });
 
-  type GCodeProfile = {
-    drawFeed: number;
-    travelFeed: number;
-    penUp: number;
-    penDown: number;
-    zFeed: number;
-    note: string;
-  };
-  type GCodeNumericKey = Exclude<keyof GCodeProfile, 'note'>;
-  const gcodeProfiles: Record<string, GCodeProfile> = {
-    uunatek3: {
-      drawFeed: 3000,
-      travelFeed: 6000,
-      penUp: 0,
-      penDown: -3,
-      zFeed: 2000,
-      note: 'UUNA TEK rear-left origin with 3 mm pen drop. Set the machine origin at the sheet’s rear-left corner before plotting.',
-    },
-    generic: {
-      drawFeed: 1200,
-      travelFeed: 3000,
-      penUp: 5,
-      penDown: 0,
-      zFeed: 600,
-      note: 'Generic bottom-left origin. Confirm Z heights, speeds, and origin for your machine before plotting.',
-    },
-  };
+  type GCodeNumericKey = 'drawFeed' | 'travelFeed' | 'penUp' | 'penDown' | 'zFeed';
   function setExportPair(id: string, key: GCodeNumericKey, value: number): void {
     dynamicState[key] = value;
     $(id).value = String(value);
     $(id + 'N').value = String(value);
   }
   $('gcodeProfile').addEventListener('change', (event) => {
-    state.gcodeProfile = inputTarget(event).value;
-    const profile = gcodeProfiles[state.gcodeProfile];
+    const profile = resolveGCodeProfile(inputTarget(event).value);
+    state.gcodeProfile = profile.id;
     for (const key of ['drawFeed', 'travelFeed', 'penUp', 'penDown', 'zFeed'] as GCodeNumericKey[])
       setExportPair(key, key, profile[key]);
     $('gcodeProfileNote').textContent = profile.note;
+    if (profile.workingArea) setArtboardSize(profile.workingArea.width, profile.workingArea.height);
     updateExportSize();
   });
 
@@ -2251,13 +2227,17 @@ if (typeof document !== 'undefined') {
     );
     setSelectValue('paperPreset', match?.[0] || 'custom');
   }
+  function setArtboardSize(width: number, height: number): void {
+    [state.pw, state.ph] = [width, height];
+    $('pw').value = String(width);
+    $('ph').value = String(height);
+    syncPaperPreset();
+    redraw(false);
+  }
   $('paperPreset').addEventListener('change', (e) => {
     const size = paperSizes[inputTarget(e).value];
     if (!size) return;
-    [state.pw, state.ph] = size;
-    $('pw').value = String(state.pw);
-    $('ph').value = String(state.ph);
-    redraw(false);
+    setArtboardSize(...size);
   });
   for (const id of ['pw', 'ph'] as const)
     $(id).addEventListener('input', (e) => {
@@ -4158,7 +4138,9 @@ if (typeof document !== 'undefined') {
     const origin = document.querySelector<SVGCircleElement>('#gcodePreviewOrigin')!;
     const padding = Math.max(state.pw, state.ph) * 0.025;
     const screenY = (machineY: number) =>
-      state.gcodeProfile === 'uunatek3' ? machineY : state.ph - machineY;
+      resolveGCodeProfile(state.gcodeProfile).origin === 'rear-left'
+        ? machineY
+        : state.ph - machineY;
     const drawCommands: string[] = [];
     const travelCommands: string[] = [];
     for (const { from, to, kind } of validation.segments) {

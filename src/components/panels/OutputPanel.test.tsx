@@ -175,7 +175,10 @@ describe('OutputPanel composition boundaries', () => {
     unmount();
     render(<ExportPanel />);
     expect(screen.getByLabelText('File type')).toHaveValue('svg');
-    expect(screen.getByLabelText('Machine')).toHaveValue('uunatek3');
+    expect(screen.getByLabelText('Machine')).toHaveValue('uunatek3-a3');
+    expect(document.querySelector('option[value="uunatek3-a0"]')).toHaveTextContent(
+      'UUNA TEK 3.0 · A0 · 1189 × 841 mm',
+    );
     expect(document.getElementById('gcodeControls')).toBeInTheDocument();
     expect(document.getElementById('gcodePreflightStatus')).toHaveTextContent(
       'Waiting for an exact render',

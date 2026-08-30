@@ -108,6 +108,24 @@ describe('validateGCode', () => {
     expect(result.warnings.map(({ code }) => code)).toContain('tiny-draw-segment');
   });
 
+  it('rejects an artboard larger than the selected machine working area', () => {
+    const output = generateGCode([], profile, { ...profile, origin: 'rear-left' });
+    const result = validateGCode(output, {
+      ...profile,
+      machineWidth: 80,
+      machineHeight: 60,
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: 'machine-area-exceeded',
+        line: 0,
+        message: expect.stringContaining('100 × 80 mm artboard'),
+      }),
+    );
+  });
+
   it('reports duplicate words and missing program termination', () => {
     const result = validateGCode('G21\nG90\nG94\nG1 Z0 Z-3 F2000', profile);
 
