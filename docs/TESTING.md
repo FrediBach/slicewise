@@ -48,6 +48,7 @@ Prioritize observable contracts and failure-prone transformations:
 - Render snapshots: exhaustive worker keys, omission of browser-only state, derived metadata, and detached mutable values.
 - Parameter history and migrations: duplicate suppression, branch truncation, bounded eviction, snapshot isolation, legacy compatibility, and invalid saved values.
 - Animation projects: detached base settings, complete keyframe capture, exact endpoints, easing, typed interpolation, discrete seed behavior, timeline editing boundaries, and forced suppression of the separate Morph grid.
+- Animation video export: endpoint-inclusive frame timing, timestamps, even dimensions, codec fallback, opaque backgrounds, safe filenames, progress/cancellation, and resource cleanup.
 
 Avoid snapshots of entire panels. They are noisy and do not prove that controls remain connected to the imperative runtime. Prefer assertions about accessible controls, event payloads, and exported data.
 
@@ -65,6 +66,7 @@ Coverage currently measures the focused core under active test:
 - `animation-interpolation.ts`
 - `animation-migrations.ts`
 - `animation-validation.ts`
+- `animation-video-export.ts`
 - `block-glitch.ts`
 - `colorPair.ts`
 - `contour-engine.ts`
@@ -94,6 +96,7 @@ Coverage currently measures the focused core under active test:
 - `toolpaths.ts`
 - `vector-zoom.ts`
 - `wraparound-tear.ts`
+- `video-encoder.ts`
 - `FormControls.tsx`
 - `GradientChooser.tsx`
 

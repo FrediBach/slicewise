@@ -13,6 +13,10 @@ const animationState = {
   playheadMs: 2500,
   selectedKeyframeId: 'middle',
   playing: false,
+  exporting: false,
+  videoExportSupportKnown: true,
+  videoExportSupported: true,
+  videoExportCodec: 'vp9' as const,
   canUndo: true,
   canRedo: false,
   keyframes: [
@@ -176,5 +180,63 @@ describe('animation workspace controls', () => {
       { type: 'scrub-end', timeMs: 3200 },
     ]);
     document.removeEventListener('animationcommand', onCommand);
+  });
+
+  it('starts supported exports and exposes progress cancellation', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Export video' }));
+    expect((onCommand.mock.calls.at(-1)![0] as CustomEvent).detail).toEqual({ type: 'export' });
+
+    act(() => {
+      document.dispatchEvent(
+        new CustomEvent('animationstatechange', {
+          detail: { ...animationState, exporting: true },
+        }),
+      );
+      document.dispatchEvent(
+        new CustomEvent('animationexportprogress', {
+          detail: {
+            phase: 'rendering',
+            frame: 42,
+            total: 150,
+            elapsedMs: 65_000,
+            message: 'Rendering frame 42 / 150',
+          },
+        }),
+      );
+    });
+
+    expect(screen.getByText(/Rendering frame 42 \/ 150 · 1:05/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel video export' }));
+    expect((onCommand.mock.calls.at(-1)![0] as CustomEvent).detail).toEqual({
+      type: 'export-cancel',
+    });
+    expect(screen.getByLabelText('Animation playhead')).toBeDisabled();
+    document.removeEventListener('animationcommand', onCommand);
+  });
+
+  it('explains when WebCodecs video export is unavailable', () => {
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('animationstatechange', {
+          detail: {
+            ...animationState,
+            videoExportSupported: false,
+            videoExportCodec: null,
+          },
+        }),
+      ),
+    );
+
+    expect(screen.getByRole('button', { name: 'Export video' })).toBeDisabled();
+    expect(screen.getByText(/WebCodecs VP9\/VP8 is not supported/)).toBeInTheDocument();
   });
 });

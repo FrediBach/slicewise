@@ -53,7 +53,7 @@ The workspace mode switch changes between static configuration and timeline anim
 | Parameter                   | Type and default       | What it does                                                                                                                                                   |
 | --------------------------- | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Duration                    | Number; **5 s**        | Sets the timeline length. It cannot be shortened past the final keyframe.                                                                                      |
-| FPS                         | Integer; **30**; 1–120 | Sets the playhead step and the intended future export frame rate. Preview playback remains clock-based and may drop visual frames when contour rendering lags. |
+| FPS                         | Integer; **30**; 1–120 | Sets the playhead step and video-export frame rate. Preview playback remains clock-based and may drop visual frames when contour rendering lags.               |
 | Playhead                    | Timeline range         | Scrubs through calculated in-between settings. Controls are read-only between keyframes.                                                                       |
 | Add keyframe                | Action                 | Captures every morphable value at the current calculated playhead state and selects the new keyframe for editing.                                              |
 | Duplicate selected keyframe | Action                 | Copies the complete selected keyframe one frame later when that time is available, otherwise at the nearest earlier free frame.                                |
@@ -61,10 +61,11 @@ The workspace mode switch changes between static configuration and timeline anim
 | Outgoing easing             | Choice; **Linear**     | Applies Linear, Ease in, Ease out, Ease in & out, or Hold timing to the segment after the selected keyframe. The final keyframe has no outgoing segment.       |
 | Loop                        | Boolean; **on**        | Restarts preview playback at time zero after the duration. It defaults off when the system requests reduced motion.                                            |
 | Play / pause                | Action                 | Previews the animation with quick worker renders and settles on an exact render when paused.                                                                   |
+| Export video                | Action                 | Renders every frame exactly and downloads an opaque, silent WebM at the artboard aspect ratio with a 1080-pixel long edge. VP9 is preferred with VP8 fallback. |
 
 Keyframe diamonds can be selected or dragged along the timeline; occupied times are rejected and the time-zero keyframe cannot move. Space toggles playback, arrows step one frame, Shift + arrows step ten frames, K adds a keyframe, Delete/Backspace removes the selection, Home/End jump to the timeline boundaries, and Ctrl/⌘ Z handles animation-scoped undo while Animation mode is active.
 
-Numeric parameters interpolate linearly. Integer counts round after interpolation. Ink colour interpolates per RGB channel. Seed parameters hold their earlier value until the next keyframe so seeded geometry does not reshuffle continuously. The first implementation keeps animation projects in memory while the page remains open; persistent animation projects and video encoding are follow-up work.
+Numeric parameters interpolate linearly. Integer counts round after interpolation. Ink colour interpolates per RGB channel. Seed parameters hold their earlier value until the next keyframe so seeded geometry does not reshuffle continuously. Video export is available when the browser exposes WebCodecs VP9 or VP8 encoding; unsupported browsers retain timeline editing and playback. Export runs sequentially, remains local to the browser, and can be cancelled. Animation projects remain in memory while the page is open; persistence is follow-up work.
 
 ## View
 

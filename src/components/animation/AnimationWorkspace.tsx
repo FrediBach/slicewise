@@ -10,6 +10,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { type AnimationEasing } from '../../lib/animation-project';
+import { formatAnimationExportElapsed } from '../../lib/animation-video-export';
 
 type AnimationUiKeyframe = {
   id: string;
@@ -24,6 +25,10 @@ type AnimationUiState = {
   playheadMs: number;
   selectedKeyframeId: string | null;
   playing: boolean;
+  exporting: boolean;
+  videoExportSupportKnown: boolean;
+  videoExportSupported: boolean;
+  videoExportCodec: 'vp9' | 'vp8' | null;
   canUndo: boolean;
   canRedo: boolean;
   keyframes: AnimationUiKeyframe[];
@@ -37,9 +42,29 @@ const initialState: AnimationUiState = {
   playheadMs: 0,
   selectedKeyframeId: null,
   playing: false,
+  exporting: false,
+  videoExportSupportKnown: false,
+  videoExportSupported: false,
+  videoExportCodec: null,
   canUndo: false,
   canRedo: false,
   keyframes: [],
+};
+
+type AnimationExportUiState = {
+  phase: 'idle' | 'rendering' | 'encoding' | 'finalizing' | 'complete' | 'cancelled' | 'error';
+  frame: number;
+  total: number;
+  elapsedMs: number;
+  message: string;
+};
+
+const initialExportState: AnimationExportUiState = {
+  phase: 'idle',
+  frame: 0,
+  total: 0,
+  elapsedMs: 0,
+  message: '',
 };
 
 function useAnimationUiState(): AnimationUiState {
@@ -49,6 +74,16 @@ function useAnimationUiState(): AnimationUiState {
     document.addEventListener('animationstatechange', update);
     document.dispatchEvent(new CustomEvent('animationstaterequest'));
     return () => document.removeEventListener('animationstatechange', update);
+  }, []);
+  return state;
+}
+
+function useAnimationExportState(): AnimationExportUiState {
+  const [state, setState] = useState(initialExportState);
+  useEffect(() => {
+    const update = (event: CustomEvent<AnimationExportUiState>) => setState(event.detail);
+    document.addEventListener('animationexportprogress', update);
+    return () => document.removeEventListener('animationexportprogress', update);
   }, []);
   return state;
 }
@@ -85,6 +120,7 @@ export function AnimationModeSwitch() {
           key={mode}
           className={state.mode === mode ? 'is-active' : ''}
           aria-pressed={state.mode === mode}
+          disabled={state.exporting}
           onClick={() =>
             document.dispatchEvent(new CustomEvent('animationmodechange', { detail: { mode } }))
           }
@@ -98,6 +134,7 @@ export function AnimationModeSwitch() {
 
 export function AnimationTimeline() {
   const state = useAnimationUiState();
+  const exportState = useAnimationExportState();
   const trackRef = useRef<HTMLDivElement>(null);
   const draggingId = useRef<string | null>(null);
   const selected = state.keyframes.find(({ id }) => id === state.selectedKeyframeId);
@@ -105,6 +142,7 @@ export function AnimationTimeline() {
   const selectedIsProtected = selected?.timeMs === 0;
   const selectedHasOutgoingSegment =
     selectedIndex >= 0 && selectedIndex < state.keyframes.length - 1;
+  const locked = state.playing || state.exporting;
 
   useEffect(() => {
     if (state.mode !== 'animation') return;
@@ -145,6 +183,7 @@ export function AnimationTimeline() {
           <button
             type="button"
             aria-label="Jump to animation start"
+            disabled={state.exporting}
             onClick={() => command('seek', { timeMs: 0 })}
           >
             <SkipBack size={14} />
@@ -152,6 +191,7 @@ export function AnimationTimeline() {
           <button
             type="button"
             aria-label={state.playing ? 'Pause animation' : 'Play animation'}
+            disabled={state.exporting}
             onClick={() => command('play-toggle')}
           >
             {state.playing ? <Pause size={14} /> : <Play size={14} />}
@@ -159,6 +199,7 @@ export function AnimationTimeline() {
           <button
             type="button"
             aria-label="Jump to animation end"
+            disabled={state.exporting}
             onClick={() => command('jump-end')}
           >
             <SkipForward size={14} />
@@ -175,7 +216,7 @@ export function AnimationTimeline() {
             max="3600"
             step="0.1"
             value={state.durationMs / 1000}
-            disabled={state.playing}
+            disabled={locked}
             onChange={(event) => numericCommand('duration', event.target.value, 1000)}
           />
           s
@@ -185,7 +226,7 @@ export function AnimationTimeline() {
           <select
             aria-label="Animation FPS"
             value={state.fps}
-            disabled={state.playing}
+            disabled={locked}
             onChange={(event) => numericCommand('fps', event.target.value)}
           >
             {[24, 30, 60].map((fps) => (
@@ -199,7 +240,7 @@ export function AnimationTimeline() {
           <input
             type="checkbox"
             checked={state.loopPreview}
-            disabled={state.playing}
+            disabled={locked}
             onChange={(event) => command('loop', { enabled: event.target.checked })}
           />
           Loop
@@ -211,7 +252,7 @@ export function AnimationTimeline() {
           <button
             type="button"
             aria-label="Add keyframe"
-            disabled={state.playing}
+            disabled={locked}
             onClick={() => command('add')}
           >
             <DiamondPlus size={14} /> Add
@@ -219,7 +260,7 @@ export function AnimationTimeline() {
           <button
             type="button"
             aria-label="Duplicate selected keyframe"
-            disabled={!selected || state.playing}
+            disabled={!selected || locked}
             onClick={() => command('duplicate')}
           >
             <CopyPlus size={14} /> Duplicate
@@ -227,21 +268,39 @@ export function AnimationTimeline() {
           <button
             type="button"
             aria-label="Delete selected keyframe"
-            disabled={!selected || selectedIsProtected || state.playing}
+            disabled={!selected || selectedIsProtected || locked}
             onClick={() => command('delete')}
           >
             <Trash2 size={14} />
           </button>
         </div>
-        <button
-          type="button"
-          className="animation-export-button"
-          aria-label="Export video"
-          disabled
-          title="Video export is added in Phase 6."
-        >
-          <Download size={14} /> Export video
-        </button>
+        {state.exporting ? (
+          <button
+            type="button"
+            className="animation-export-button"
+            aria-label="Cancel video export"
+            onClick={() => command('export-cancel')}
+          >
+            Cancel export
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="animation-export-button"
+            aria-label="Export video"
+            disabled={!state.videoExportSupported}
+            title={
+              !state.videoExportSupportKnown
+                ? 'Checking video encoder support…'
+                : state.videoExportSupported
+                  ? `Export WebM using ${state.videoExportCodec?.toUpperCase()}`
+                  : 'Video export requires a browser with WebCodecs VP9 or VP8 encoding.'
+            }
+            onClick={() => command('export')}
+          >
+            <Download size={14} /> Export video
+          </button>
+        )}
       </div>
       <div className="animation-properties">
         <label>
@@ -249,7 +308,7 @@ export function AnimationTimeline() {
           <select
             aria-label="Outgoing keyframe easing"
             value={selected?.easingToNext ?? 'linear'}
-            disabled={!selectedHasOutgoingSegment || state.playing}
+            disabled={!selectedHasOutgoingSegment || locked}
             onChange={(event) => command('easing', { easing: event.target.value })}
           >
             <option value="linear">Linear</option>
@@ -259,7 +318,15 @@ export function AnimationTimeline() {
             <option value="hold">Hold</option>
           </select>
         </label>
-        <span>{state.canUndo ? 'Animation undo available' : 'Animation history at start'}</span>
+        {state.exporting ? (
+          <output className="animation-export-progress" aria-live="polite">
+            {exportState.message} · {formatAnimationExportElapsed(exportState.elapsedMs)}
+          </output>
+        ) : state.videoExportSupportKnown && !state.videoExportSupported ? (
+          <span role="status">Video export unavailable: WebCodecs VP9/VP8 is not supported.</span>
+        ) : (
+          <span>{state.canUndo ? 'Animation undo available' : 'Animation history at start'}</span>
+        )}
       </div>
       <div className="animation-track-scroll">
         <div className="animation-track" ref={trackRef}>
@@ -269,7 +336,7 @@ export function AnimationTimeline() {
             max={state.durationMs}
             step={1000 / state.fps}
             value={state.playheadMs}
-            disabled={state.playing}
+            disabled={locked}
             aria-label="Animation playhead"
             aria-valuetext={formatTime(state.playheadMs)}
             onInput={(event) => command('scrub', { timeMs: Number(event.currentTarget.value) })}
@@ -290,10 +357,10 @@ export function AnimationTimeline() {
                   style={{ left: `${(keyframe.timeMs / state.durationMs) * 100}%` }}
                   aria-label={`${isProtected ? 'Protected keyframe' : 'Keyframe'} at ${formatTime(keyframe.timeMs)}`}
                   aria-pressed={state.selectedKeyframeId === keyframe.id}
-                  disabled={state.playing}
+                  disabled={locked}
                   onClick={() => command('select', { id: keyframe.id })}
                   onPointerDown={(event) => {
-                    if (isProtected || state.playing) return;
+                    if (isProtected || locked) return;
                     draggingId.current = keyframe.id;
                     event.currentTarget.setPointerCapture?.(event.pointerId);
                     command('select', { id: keyframe.id });

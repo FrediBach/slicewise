@@ -1500,6 +1500,11 @@ body.animation-mode .section-randomize {
   width: 112px;
   height: 24px;
 }
+.animation-export-progress {
+  color: #4c514b;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+}
 .animation-track-scroll {
   min-width: 0;
   overflow-x: auto;

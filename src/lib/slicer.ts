@@ -54,6 +54,21 @@ import {
   stepAnimationPlayhead,
 } from './animation-playback';
 import {
+  AnimationExportCancelledError,
+  animationVideoBackground,
+  animationVideoFilename,
+  animationVideoFrame,
+  animationVideoFrameCount,
+  throwIfAnimationExportCancelled,
+} from './animation-video-export';
+import {
+  createVideoEncoderAdapter,
+  detectAnimationVideoCodec,
+  rasterizeAnimationSvg,
+  type AnimationVideoCodec,
+  type VideoEncoderAdapter,
+} from './video-encoder';
+import {
   addAnimationKeyframe,
   createAnimationProject,
   duplicateAnimationKeyframe,
@@ -465,6 +480,11 @@ if (typeof document !== 'undefined') {
   let queuedRender: RenderRequest | null = null,
     activeRender: RenderRequest | null = null,
     renderInFlight = false;
+  let animationExportRenderWaiter: {
+    requestId: number;
+    resolve: (result: ContourResult) => void;
+    reject: (error: Error) => void;
+  } | null = null;
   let renderWaiters: Array<() => void> = [];
   let renderTimer = 0,
     lastDispatch = 0,
@@ -618,7 +638,7 @@ if (typeof document !== 'undefined') {
     if (wait > 1) renderTimer = setTimeout(dispatchRender, wait);
     else requestAnimationFrame(dispatchRender);
   }
-  function requestRender(options: RenderRequestOptions): void {
+  function requestRender(options: RenderRequestOptions): number | null {
     // Preserve a queued final-quality request; otherwise only the latest input
     // matters. This coalesces pointer and slider events while the worker is busy.
     const quality = coalesceRenderQuality(options.quality, options.purpose, queuedRender);
@@ -627,7 +647,7 @@ if (typeof document !== 'undefined') {
       quality === 'quick' ? previewDetail(previewPerformance) : undefined,
     );
     if (prepared.history === 'record') scheduleParameterHistory();
-    if (!state.mesh) return;
+    if (!state.mesh) return null;
     const id = ++requestId;
     latestRenderPurpose = prepared.purpose;
     if (prepared.purpose === 'config') latestConfigRequestId = id;
@@ -639,6 +659,7 @@ if (typeof document !== 'undefined') {
     };
     syncPreviewBusy();
     scheduleRender();
+    return id;
   }
   function redraw(quick: boolean): void {
     requestRender({
@@ -689,7 +710,12 @@ if (typeof document !== 'undefined') {
         latestPurpose: latestRenderPurpose,
         allowStaleQuickPreview: state.dragging && completedRequest.purpose === 'config',
       });
-      if (disposition === 'commit' || disposition === 'preview') {
+      if (disposition === 'capture') {
+        if (animationExportRenderWaiter?.requestId === data.id) {
+          animationExportRenderWaiter.resolve(data.result);
+          animationExportRenderWaiter = null;
+        }
+      } else if (disposition === 'commit' || disposition === 'preview') {
         const applyStarted = performance.now();
         if (disposition === 'commit') applyRender(data.result, completedRequest);
         else applyPreview(data.result, completedRequest);
@@ -699,6 +725,10 @@ if (typeof document !== 'undefined') {
     } else if (data.meshVersion === meshVersion && data.type === 'error') {
       failedRequestId = data.id;
       if (completedRequest?.purpose === 'config') failedConfigRequestId = data.id;
+      if (animationExportRenderWaiter?.requestId === data.id) {
+        animationExportRenderWaiter.reject(new Error(data.message));
+        animationExportRenderWaiter = null;
+      }
       showError(data.message);
     }
     notifyRenderWaiters();
@@ -713,6 +743,8 @@ if (typeof document !== 'undefined') {
     renderInFlight = false;
     failedRequestId = requestId;
     if (failedPurpose === 'config') failedConfigRequestId = latestConfigRequestId;
+    animationExportRenderWaiter?.reject(new Error('The contour worker stopped unexpectedly'));
+    animationExportRenderWaiter = null;
     notifyRenderWaiters();
     syncPreviewBusy();
     showError('The contour worker stopped unexpectedly — reload the page to restart it');
@@ -3300,13 +3332,23 @@ if (typeof document !== 'undefined') {
   let nextAnimationKeyframeId = 1;
   let draggingAnimationKeyframeId: string | null = null;
   let animationGestureActive = false;
+  let animationExporting = false;
+  let animationExportController: AbortController | null = null;
+  let animationVideoSupportKnown = false;
+  let animationVideoCodec: AnimationVideoCodec | null = null;
+  let animationVideoSupportRequest = 0;
 
   function isAnimationModeActive(): boolean {
     return animationMode;
   }
 
   function animationGestureEditable(): boolean {
-    return animationMode && !animationPlaying && selectedAnimationKeyframeId !== null;
+    return (
+      animationMode &&
+      !animationPlaying &&
+      !animationExporting &&
+      selectedAnimationKeyframeId !== null
+    );
   }
 
   function interactiveGestureSettings(): ContourSettings {
@@ -3374,6 +3416,25 @@ if (typeof document !== 'undefined') {
     animationHistoryTimer = setTimeout(commitAnimationHistory, 180);
   }
 
+  async function refreshAnimationVideoSupport(): Promise<void> {
+    if (!animationProject) return;
+    const request = ++animationVideoSupportRequest;
+    animationVideoSupportKnown = false;
+    animationVideoCodec = null;
+    publishAnimationState();
+    try {
+      const { width, height, bitrate } = animationProject.export;
+      const codec = await detectAnimationVideoCodec(width, height, bitrate);
+      if (request !== animationVideoSupportRequest) return;
+      animationVideoCodec = codec;
+    } catch {
+      if (request !== animationVideoSupportRequest) return;
+      animationVideoCodec = null;
+    }
+    animationVideoSupportKnown = true;
+    publishAnimationState();
+  }
+
   function publishAnimationState(): void {
     document.dispatchEvent(
       new CustomEvent('animationstatechange', {
@@ -3385,6 +3446,10 @@ if (typeof document !== 'undefined') {
           playheadMs: animationPlayheadMs,
           selectedKeyframeId: selectedAnimationKeyframeId,
           playing: animationPlaying,
+          exporting: animationExporting,
+          videoExportSupportKnown: animationVideoSupportKnown,
+          videoExportSupported: animationVideoCodec !== null,
+          videoExportCodec: animationVideoCodec,
           canUndo: animationHistory?.status.canUndo ?? false,
           canRedo: animationHistory?.status.canRedo ?? false,
           keyframes: (animationProject?.keyframes ?? []).map(({ id, timeMs, easingToNext }) => ({
@@ -3416,16 +3481,19 @@ if (typeof document !== 'undefined') {
 
   function syncAnimationControlLocks(): void {
     if (!animationMode) return;
-    const canEdit = Boolean(selectedAnimationKeyframeId) && !animationPlaying;
+    const canEdit =
+      Boolean(selectedAnimationKeyframeId) && !animationPlaying && !animationExporting;
     for (const [control, original] of animationLockedControls) {
       const editable = canEdit && animationControlIds.has(control.id) && !original.disabled;
       control.disabled = !editable;
       control.title = editable
         ? original.title
         : animationControlIds.has(control.id)
-          ? animationPlaying
-            ? 'Pause playback to edit this animated parameter.'
-            : 'Move the playhead to a keyframe to edit this animated parameter.'
+          ? animationExporting
+            ? 'Video export is in progress.'
+            : animationPlaying
+              ? 'Pause playback to edit this animated parameter.'
+              : 'Move the playhead to a keyframe to edit this animated parameter.'
           : 'Return to Config mode to change this setting.';
     }
   }
@@ -3554,6 +3622,166 @@ if (typeof document !== 'undefined') {
     animationPlaybackFrame = requestAnimationFrame(tickAnimationPlayback);
   }
 
+  function renderAnimationExportFrame(settings: ContourSettings): Promise<ContourResult> {
+    if (animationExportRenderWaiter)
+      return Promise.reject(new Error('A video frame render is already pending'));
+    return new Promise<ContourResult>((resolve, reject) => {
+      const id = requestRender({
+        settings,
+        quality: 'exact',
+        history: 'ignore',
+        purpose: 'animation-export',
+      });
+      if (id === null) {
+        reject(new Error('Load a source before exporting video'));
+        return;
+      }
+      animationExportRenderWaiter = { requestId: id, resolve, reject };
+    });
+  }
+
+  type AnimationExportProgressPhase =
+    'idle' | 'rendering' | 'encoding' | 'finalizing' | 'complete' | 'cancelled' | 'error';
+
+  function publishAnimationExportProgress(
+    phase: AnimationExportProgressPhase,
+    message: string,
+    frame: number,
+    total: number,
+    startedAt: number,
+  ): void {
+    document.dispatchEvent(
+      new CustomEvent('animationexportprogress', {
+        detail: {
+          phase,
+          frame,
+          total,
+          elapsedMs: Math.max(0, performance.now() - startedAt),
+          message,
+        },
+      }),
+    );
+  }
+
+  function downloadAnimationVideo(blob: Blob): void {
+    const anchor = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    anchor.href = url;
+    anchor.download = animationVideoFilename(state.name);
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function exportAnimationVideo(): Promise<void> {
+    if (!animationProject || animationExporting) return;
+    stopAnimationPlayback(false);
+    clearAnimationSettle();
+    const project = animationProject;
+    const controller = new AbortController();
+    const { signal } = controller;
+    const startedAt = performance.now();
+    const total = animationVideoFrameCount(project.durationMs, project.fps);
+    const canvas = document.createElement('canvas');
+    canvas.width = project.export.width;
+    canvas.height = project.export.height;
+    let adapter: VideoEncoderAdapter | null = null;
+    let completedFrames = 0;
+    animationExportController = controller;
+    animationExporting = true;
+    syncAnimationControlLocks();
+    publishAnimationState();
+
+    try {
+      const codec = await detectAnimationVideoCodec(
+        project.export.width,
+        project.export.height,
+        project.export.bitrate,
+      );
+      if (!codec) throw new Error('This browser cannot encode VP9 or VP8 WebM video');
+      animationVideoCodec = codec;
+      adapter = await createVideoEncoderAdapter({
+        canvas,
+        width: project.export.width,
+        height: project.export.height,
+        fps: project.fps,
+        bitrate: project.export.bitrate,
+        codec,
+      });
+
+      for (let index = 0; index < total; index++) {
+        throwIfAnimationExportCancelled(signal);
+        const frame = animationVideoFrame(index, total, project.durationMs, project.fps);
+        publishAnimationExportProgress(
+          'rendering',
+          `Rendering frame ${index + 1} / ${total}`,
+          index + 1,
+          total,
+          startedAt,
+        );
+        const settings = evaluateAnimationSettings(project, frame.timeMs, animationParameters);
+        const result = await renderAnimationExportFrame(settings);
+        throwIfAnimationExportCancelled(signal);
+        await rasterizeAnimationSvg(result.svg, canvas, animationVideoBackground(settings));
+        throwIfAnimationExportCancelled(signal);
+        publishAnimationExportProgress(
+          'encoding',
+          `Encoding frame ${index + 1} / ${total}`,
+          index + 1,
+          total,
+          startedAt,
+        );
+        await adapter.addFrame(frame);
+        completedFrames = index + 1;
+        throwIfAnimationExportCancelled(signal);
+      }
+
+      publishAnimationExportProgress(
+        'finalizing',
+        'Finalizing WebM video',
+        total,
+        total,
+        startedAt,
+      );
+      const blob = await adapter.finalize();
+      throwIfAnimationExportCancelled(signal);
+      downloadAnimationVideo(blob);
+      publishAnimationExportProgress(
+        'complete',
+        `Exported ${total} frames`,
+        total,
+        total,
+        startedAt,
+      );
+      toast(`Saved ${animationVideoFilename(state.name)}`);
+    } catch (error) {
+      try {
+        await adapter?.cancel();
+      } catch {
+        // Preserve the original export error while still attempting encoder cleanup.
+      }
+      if (error instanceof AnimationExportCancelledError) {
+        publishAnimationExportProgress(
+          'cancelled',
+          'Video export cancelled',
+          completedFrames,
+          total,
+          startedAt,
+        );
+        toast('Video export cancelled');
+      } else {
+        const message = errorMessage(error);
+        publishAnimationExportProgress('error', message, completedFrames, total, startedAt);
+        toast(message);
+      }
+    } finally {
+      animationExportController = null;
+      animationExporting = false;
+      syncAnimationControlLocks();
+      renderAnimationAt(animationPlayheadMs, false);
+      publishAnimationState();
+    }
+  }
+
   function enterAnimationMode(): void {
     if (animationMode) return;
     commitParameterHistory();
@@ -3576,10 +3804,11 @@ if (typeof document !== 'undefined') {
     lockConfigControls();
     renderAnimationAt(0, false);
     publishAnimationState();
+    void refreshAnimationVideoSupport();
   }
 
   function leaveAnimationMode(): void {
-    if (!animationMode) return;
+    if (!animationMode || animationExporting) return;
     stopAnimationPlayback(false);
     clearAnimationSettle();
     commitAnimationHistory();
@@ -3603,7 +3832,8 @@ if (typeof document !== 'undefined') {
   }
 
   function handleAnimationParameterInput(event: Event, exact: boolean): void {
-    if (!animationMode || !animationProject || !selectedAnimationKeyframeId) return;
+    if (!animationMode || !animationProject || !selectedAnimationKeyframeId || animationExporting)
+      return;
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
     const controlId = animationControlId(target.id);
@@ -3669,6 +3899,11 @@ if (typeof document !== 'undefined') {
   document.addEventListener('animationcommand', (event) => {
     if (!animationMode || !animationProject) return;
     const detail = (event as CustomEvent<AnimationCommandDetail>).detail || {};
+    if (detail.type === 'export-cancel') {
+      animationExportController?.abort();
+      return;
+    }
+    if (animationExporting) return;
     if (
       animationPlaying &&
       [
@@ -3686,7 +3921,8 @@ if (typeof document !== 'undefined') {
       ].includes(detail.type ?? '')
     )
       return;
-    if (detail.type === 'play-toggle') toggleAnimationPlayback();
+    if (detail.type === 'export') void exportAnimationVideo();
+    else if (detail.type === 'play-toggle') toggleAnimationPlayback();
     else if (detail.type === 'seek') {
       stopAnimationPlayback(false);
       seekAnimation(Number(detail.timeMs));
