@@ -4,7 +4,7 @@ import {
   type LaneSequenceMap,
   type PlayableSequencerEvent,
 } from './sequencer-events';
-import { laneStepDuration, tickValue, TRANSPORT_PPQ } from './sequencer-playback';
+import { laneStepDuration, nextBarTick, tickValue, TRANSPORT_PPQ } from './sequencer-playback';
 import type { SequencerProject } from './sequencer-project';
 
 export interface WebAudioEngineOptions {
@@ -15,6 +15,7 @@ export interface WebAudioEngineOptions {
   setIntervalFn?: (callback: () => void, milliseconds: number) => ReturnType<typeof setInterval>;
   clearIntervalFn?: (handle: ReturnType<typeof setInterval>) => void;
   renderEvent?: (context: AudioContext, event: PlayableSequencerEvent, when: number) => void;
+  onSequenceSwap?: (tick: number) => void;
 }
 
 type ActiveVoice = {
@@ -52,6 +53,11 @@ export class WebAudioEngine {
   private pausedTick = 0;
   private scheduledUntil = 0;
   private running = false;
+  private pendingSwap: {
+    project: SequencerProject;
+    sequences: LaneSequenceMap;
+    tick: number;
+  } | null = null;
   private readonly activeVoices = new Set<ActiveVoice>();
   private readonly chokeGroups = new Map<string, ActiveVoice>();
 
@@ -81,6 +87,7 @@ export class WebAudioEngine {
   ): Promise<void> {
     this.project = project;
     this.sequences = sequences;
+    this.pendingSwap = null;
     if (!this.context || this.context.state === 'closed') {
       this.context = (this.options.contextFactory ?? defaultContextFactory)();
       if (!this.options.renderEvent) {
@@ -120,10 +127,35 @@ export class WebAudioEngine {
     this.scheduleWindow();
   }
 
+  /** Replaces a stopped phrase immediately or queues a running phrase at a safe bar boundary. */
+  setPhrase(
+    project: SequencerProject,
+    sequences: LaneSequenceMap,
+    requestedSwapTick?: number,
+  ): number | null {
+    if (!this.running || !this.context || !this.project) {
+      this.project = project;
+      this.sequences = sequences;
+      this.pendingSwap = null;
+      return null;
+    }
+    const scheduledTick =
+      this.originTick +
+      this.secondsToTicks(
+        Math.max(0, this.scheduledUntil - this.originAudioTime),
+        this.project.tempo,
+      );
+    const requested = Math.max(this.playheadTick, requestedSwapTick ?? this.playheadTick);
+    const tick = requested <= scheduledTick ? nextBarTick(this.project, scheduledTick) : requested;
+    this.pendingSwap = { project, sequences, tick };
+    return tick;
+  }
+
   async stop(): Promise<void> {
     this.running = false;
     this.pausedTick = 0;
     this.clearTimer();
+    this.pendingSwap = null;
     if (!this.context) return;
     this.stopActiveVoices(this.context.currentTime);
     this.master?.disconnect();
@@ -157,16 +189,44 @@ export class WebAudioEngine {
       this.originAudioTime,
     );
     if (windowEnd <= windowStart) return;
-    const fromTick =
-      this.originTick + this.secondsToTicks(windowStart - this.originAudioTime, this.project.tempo);
-    const toTick =
-      this.originTick + this.secondsToTicks(windowEnd - this.originAudioTime, this.project.tempo);
-    for (const event of compileProjectEvents(this.project, this.sequences, fromTick, toTick)) {
+    const fromTick = this.audioTimeToTick(windowStart);
+    const toTick = this.audioTimeToTick(windowEnd);
+    const swap = this.pendingSwap;
+    if (swap && swap.tick < fromTick) swap.tick = nextBarTick(this.project, fromTick);
+    if (swap && swap.tick >= fromTick && swap.tick < toTick) {
+      this.scheduleEvents(this.project, this.sequences, fromTick, swap.tick);
+      const swapAudioTime = this.tickToAudioTime(swap.tick);
+      this.project = swap.project;
+      this.sequences = swap.sequences;
+      this.originTick = swap.tick;
+      this.originAudioTime = swapAudioTime;
+      this.pendingSwap = null;
+      this.options.onSequenceSwap?.(swap.tick);
+      this.scheduleEvents(this.project, this.sequences, swap.tick, this.audioTimeToTick(windowEnd));
+    } else {
+      this.scheduleEvents(this.project, this.sequences, fromTick, toTick);
+    }
+    this.scheduledUntil = windowEnd;
+  }
+
+  private audioTimeToTick(audioTime: number): number {
+    return (
+      this.originTick +
+      this.secondsToTicks(audioTime - this.originAudioTime, this.project?.tempo ?? 120)
+    );
+  }
+
+  private scheduleEvents(
+    project: SequencerProject,
+    sequences: LaneSequenceMap,
+    fromTick: number,
+    toTick: number,
+  ): void {
+    for (const event of compileProjectEvents(project, sequences, fromTick, toTick)) {
       const when = this.tickToAudioTime(tickValue(event.tick));
       if (this.options.renderEvent) this.options.renderEvent(this.context, event, when);
       else this.renderBuiltInVoice(event, when);
     }
-    this.scheduledUntil = windowEnd;
   }
 
   private renderBuiltInVoice(event: PlayableSequencerEvent, when: number): void {

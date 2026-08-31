@@ -18,7 +18,7 @@ type AnimationUiKeyframe = {
   easingToNext: AnimationEasing;
 };
 type AnimationUiState = {
-  mode: 'config' | 'animation';
+  mode: 'config' | 'animation' | 'sequencer';
   durationMs: number;
   fps: number;
   loopPreview: boolean;
@@ -114,7 +114,7 @@ export function AnimationModeSwitch() {
   const state = useAnimationUiState();
   return (
     <div className="mode-switch" aria-label="Workspace mode">
-      {(['config', 'animation'] as const).map((mode) => (
+      {(['config', 'animation', 'sequencer'] as const).map((mode) => (
         <button
           type="button"
           key={mode}
@@ -125,7 +125,7 @@ export function AnimationModeSwitch() {
             document.dispatchEvent(new CustomEvent('animationmodechange', { detail: { mode } }))
           }
         >
-          {mode === 'config' ? 'Config' : 'Animation'}
+          {mode === 'config' ? 'Config' : mode === 'animation' ? 'Animation' : 'Sequencer'}
         </button>
       ))}
     </div>

@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { createDrumLane, createMelodicLane, createSequencerProject } from './sequencer-project';
 
 describe('sequencer project defaults', () => {
-  it('creates a versioned project with one deterministic melodic lane', () => {
+  it('creates a versioned project with deterministic melodic and drum lanes', () => {
     const project = createSequencerProject();
 
     expect(project.version).toBe(1);
-    expect(project.lanes).toEqual([createMelodicLane()]);
+    expect(project.lanes).toEqual([createMelodicLane(), createDrumLane()]);
     expect(project.lanes[0]).toMatchObject({
       kind: 'melodic',
       steps: 16,

@@ -118,6 +118,23 @@ import {
   type AnimationParameterDescriptor,
   type AnimationProject,
 } from './animation-project';
+import { createContourSequence, type ContourSequenceStep } from './contour-sequence';
+import { resolveStepTrigger } from './sequencer-probability';
+import {
+  createDrumLane,
+  createMelodicLane,
+  createSequencerProject,
+  type SequencerLane,
+  type SequencerProject,
+} from './sequencer-project';
+import {
+  laneStepDuration,
+  nextBarTick,
+  tickValue,
+  ticksPerBar,
+  TRANSPORT_PPQ,
+} from './sequencer-playback';
+import { WebAudioEngine } from './web-audio-engine';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -625,6 +642,7 @@ if (typeof document !== 'undefined') {
     state.svgBytes = result.bytes;
     state.toolpaths = result.toolpaths || [];
     state.sequenceSource = result.sequenceSource ?? null;
+    acceptExactSequencerSource(state.sequenceSource);
     applyPreview(result, request);
   }
   function notifyRenderWaiters(): void {
@@ -690,6 +708,10 @@ if (typeof document !== 'undefined') {
     );
     if (prepared.history === 'record') scheduleParameterHistory();
     if (!state.mesh) return null;
+    if (prepared.purpose === 'config' && prepared.quality === 'exact' && sequencerMode) {
+      sequencerAwaitingExact = true;
+      publishSequencerState();
+    }
     const id = ++requestId;
     latestRenderPurpose = prepared.purpose;
     if (prepared.purpose === 'config') latestConfigRequestId = id;
@@ -3535,6 +3557,20 @@ if (typeof document !== 'undefined') {
     ),
   );
   const animationLockedControls = new Map<LockableControl, { disabled: boolean; title: string }>();
+  let sequencerMode = false;
+  let sequencerProject: SequencerProject = createSequencerProject();
+  let sequencerSource: ContourSequenceSource | null = null;
+  let sequencerSequences = new Map<string, readonly ContourSequenceStep[]>();
+  let sequencerAwaitingExact = false;
+  let sequencerSwapTick: number | null = null;
+  let sequencerPlayheadFrame = 0;
+  let nextSequencerLaneId = 2;
+  const sequencerEngine = new WebAudioEngine({
+    onSequenceSwap: (tick) => {
+      if (sequencerSwapTick === tick) sequencerSwapTick = null;
+      publishSequencerState();
+    },
+  });
   let animationMode = false;
   let animationProject: AnimationProject | null = null;
   let animationHistory: ParameterHistory<AnimationProject> | null = null;
@@ -3562,6 +3598,167 @@ if (typeof document !== 'undefined') {
   let animationSaveTimer = 0;
   let animationSaveChain = Promise.resolve();
   let animationSaveFailed = false;
+
+  function sequencerModeName(): 'config' | 'animation' | 'sequencer' {
+    return sequencerMode ? 'sequencer' : animationMode ? 'animation' : 'config';
+  }
+
+  function buildSequencerSequences(): Map<string, readonly ContourSequenceStep[]> {
+    return new Map(
+      sequencerProject.lanes.map((lane) => [
+        lane.id,
+        createContourSequence(lane, sequencerSource ?? undefined),
+      ]),
+    );
+  }
+
+  function rebuildSequencerPhrase(): void {
+    sequencerSequences = buildSequencerSequences();
+    if (sequencerEngine.isRunning) {
+      const swapAt = nextBarTick(sequencerProject, sequencerEngine.playheadTick);
+      sequencerSwapTick = sequencerEngine.setPhrase(sequencerProject, sequencerSequences, swapAt);
+    } else {
+      sequencerEngine.setPhrase(sequencerProject, sequencerSequences);
+      sequencerSwapTick = null;
+    }
+    publishSequencerState();
+  }
+
+  function acceptExactSequencerSource(source: ContourSequenceSource | null): void {
+    sequencerSource = source;
+    sequencerAwaitingExact = false;
+    rebuildSequencerPhrase();
+  }
+
+  function positiveModulo(value: number, modulus: number): number {
+    return ((value % modulus) + modulus) % modulus;
+  }
+
+  function publishSequencerState(): void {
+    const playheadTick = sequencerEngine.playheadTick;
+    const barTicks = ticksPerBar(sequencerProject.timeSignature);
+    const beatTicks = TRANSPORT_PPQ * (4 / sequencerProject.timeSignature.denominator);
+    document.dispatchEvent(
+      new CustomEvent('sequencerstatechange', {
+        detail: {
+          mode: sequencerModeName(),
+          playing: sequencerEngine.isRunning,
+          playheadTick,
+          bar: Math.floor(playheadTick / barTicks) + 1,
+          beat: 1 + (playheadTick % barTicks) / beatTicks,
+          tempo: sequencerProject.tempo,
+          pendingShape: sequencerAwaitingExact || sequencerSwapTick !== null,
+          hasExactSource: sequencerSource !== null,
+          lanes: sequencerProject.lanes.map((lane) => {
+            const duration = tickValue(laneStepDuration(sequencerProject, lane));
+            const absoluteStep = Math.floor(playheadTick / duration);
+            const activeStep = positiveModulo(absoluteStep + Math.round(lane.phase), lane.steps);
+            const cycleIndex = Math.floor(absoluteStep / lane.steps);
+            return {
+              id: lane.id,
+              name: lane.name,
+              kind: lane.kind,
+              steps: lane.steps,
+              pulses: lane.pulses,
+              muted: lane.muted,
+              solo: lane.solo,
+              activeStep,
+              sequence: (sequencerSequences.get(lane.id) ?? []).map((step) => ({
+                index: step.index,
+                candidateHit: step.candidateHit,
+                willFire: resolveStepTrigger(sequencerProject.seed, lane, step, cycleIndex),
+                value: step.velocity,
+                label:
+                  step.kind === 'melodic'
+                    ? `${step.candidateHit ? 'hit' : 'rest'}, MIDI ${step.midiNote}`
+                    : `${step.candidateHit ? 'hit' : 'rest'}, ${step.voice}`,
+              })),
+            };
+          }),
+        },
+      }),
+    );
+  }
+
+  function animateSequencerPlayhead(): void {
+    cancelAnimationFrame(sequencerPlayheadFrame);
+    if (!sequencerEngine.isRunning) return;
+    publishSequencerState();
+    sequencerPlayheadFrame = requestAnimationFrame(animateSequencerPlayhead);
+  }
+
+  async function toggleSequencerPlayback(): Promise<void> {
+    if (sequencerEngine.isRunning) {
+      await sequencerEngine.pause();
+      cancelAnimationFrame(sequencerPlayheadFrame);
+    } else if (sequencerSource) {
+      await sequencerEngine.start(
+        sequencerProject,
+        sequencerSequences,
+        sequencerEngine.playheadTick,
+      );
+      animateSequencerPlayhead();
+    }
+    publishSequencerState();
+  }
+
+  function enterSequencerMode(): void {
+    if (sequencerMode || animationExporting) return;
+    if (animationMode) leaveAnimationMode();
+    sequencerMode = true;
+    sequencerSource = state.sequenceSource;
+    sequencerAwaitingExact = sequencerSource === null;
+    document.body.classList.add('sequencer-mode');
+    rebuildSequencerPhrase();
+    publishAnimationState();
+  }
+
+  function leaveSequencerMode(): void {
+    if (!sequencerMode) return;
+    sequencerMode = false;
+    document.body.classList.remove('sequencer-mode');
+    cancelAnimationFrame(sequencerPlayheadFrame);
+    void sequencerEngine.stop().then(() => publishSequencerState());
+    sequencerSwapTick = null;
+    publishSequencerState();
+  }
+
+  function updateSequencerProject(project: SequencerProject): void {
+    sequencerProject = project;
+    rebuildSequencerPhrase();
+  }
+
+  function replaceSequencerLane(
+    laneId: string,
+    update: (lane: SequencerLane) => SequencerLane,
+  ): void {
+    updateSequencerProject({
+      ...sequencerProject,
+      lanes: sequencerProject.lanes.map((lane) => (lane.id === laneId ? update(lane) : lane)),
+    });
+  }
+
+  function migrateSequencerLane(lane: SequencerLane, kind: SequencerLane['kind']): SequencerLane {
+    if (lane.kind === kind) return lane;
+    const replacement =
+      kind === 'melodic'
+        ? createMelodicLane(lane.id, lane.name.replace(/kick|drum/i, 'melody'))
+        : createDrumLane(lane.id, lane.name.replace(/pluck|melody/i, 'drum'));
+    return {
+      ...replacement,
+      steps: lane.steps,
+      pulses: Math.min(lane.pulses, lane.steps),
+      rotation: lane.rotation,
+      phase: lane.phase,
+      timing: lane.timing,
+      probability: lane.probability,
+      seedOffset: lane.seedOffset,
+      muted: lane.muted,
+      solo: lane.solo,
+      direction: lane.direction,
+      contourInfluence: lane.contourInfluence,
+    };
+  }
 
   function isAnimationModeActive(): boolean {
     return animationMode;
@@ -3685,7 +3882,7 @@ if (typeof document !== 'undefined') {
     document.dispatchEvent(
       new CustomEvent('animationstatechange', {
         detail: {
-          mode: animationMode ? 'animation' : 'config',
+          mode: sequencerModeName(),
           durationMs: animationProject?.durationMs ?? 5000,
           fps: animationProject?.fps ?? 30,
           loopPreview: animationProject?.loopPreview ?? true,
@@ -4030,6 +4227,7 @@ if (typeof document !== 'undefined') {
 
   async function enterAnimationMode(): Promise<void> {
     if (animationMode) return;
+    leaveSequencerMode();
     const transition = ++animationModeTransition;
     commitParameterHistory();
     animationConfigSnapshot = cloneParameterSnapshot();
@@ -4157,12 +4355,77 @@ if (typeof document !== 'undefined') {
   document.addEventListener('animationmodechange', (event) => {
     const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
     if (mode === 'animation') void enterAnimationMode();
+    else if (mode === 'sequencer') enterSequencerMode();
     else if (mode === 'config') {
       animationModeTransition++;
       leaveAnimationMode();
+      leaveSequencerMode();
+      publishAnimationState();
     }
   });
   document.addEventListener('animationstaterequest', publishAnimationState);
+  document.addEventListener('sequencerstaterequest', publishSequencerState);
+  document.addEventListener('sequencercommand', (event) => {
+    if (!sequencerMode) return;
+    const detail = (event as CustomEvent<Record<string, unknown>>).detail ?? {};
+    const type = String(detail.type ?? '');
+    const laneId = String(detail.laneId ?? '');
+    if (type === 'play-toggle') {
+      void toggleSequencerPlayback().catch((error) => toast(errorMessage(error)));
+    } else if (type === 'seek') {
+      sequencerEngine.seek(Number(detail.tick));
+      publishSequencerState();
+    } else if (type === 'step-transport') {
+      sequencerEngine.seek(
+        sequencerEngine.playheadTick + Number(detail.amount) * (TRANSPORT_PPQ / 4),
+      );
+      publishSequencerState();
+    } else if (type === 'seek-step') {
+      const lane = sequencerProject.lanes.find((candidate) => candidate.id === laneId);
+      if (!lane) return;
+      const requestedStep = positiveModulo(Number(detail.stepIndex), lane.steps);
+      const absoluteStep = positiveModulo(requestedStep - Math.round(lane.phase), lane.steps);
+      sequencerEngine.seek(absoluteStep * tickValue(laneStepDuration(sequencerProject, lane)));
+      publishSequencerState();
+    } else if (type === 'tempo') {
+      updateSequencerProject({
+        ...sequencerProject,
+        tempo: clamp(Math.round(Number(detail.value)), 40, 240),
+      });
+    } else if (type === 'lane-steps') {
+      replaceSequencerLane(laneId, (lane) => {
+        const steps = clamp(Math.round(Number(detail.value)), 1, 64);
+        return { ...lane, steps, pulses: Math.min(lane.pulses, steps) };
+      });
+    } else if (type === 'lane-pulses') {
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        pulses: clamp(Math.round(Number(detail.value)), 0, lane.steps),
+      }));
+    } else if (type === 'lane-mute') {
+      replaceSequencerLane(laneId, (lane) => ({ ...lane, muted: !lane.muted }));
+    } else if (type === 'lane-solo') {
+      replaceSequencerLane(laneId, (lane) => ({ ...lane, solo: !lane.solo }));
+    } else if (type === 'lane-kind') {
+      const kind = detail.kind === 'drum' ? 'drum' : 'melodic';
+      replaceSequencerLane(laneId, (lane) => migrateSequencerLane(lane, kind));
+    } else if (type === 'lane-delete') {
+      updateSequencerProject({
+        ...sequencerProject,
+        lanes: sequencerProject.lanes.filter((lane) => lane.id !== laneId),
+      });
+    } else if (type === 'lane-add') {
+      const id = `${detail.kind === 'drum' ? 'drum' : 'melody'}-${nextSequencerLaneId++}`;
+      const lane =
+        detail.kind === 'drum'
+          ? createDrumLane(id, `Contour drum ${nextSequencerLaneId - 1}`)
+          : createMelodicLane(id, `Contour melody ${nextSequencerLaneId - 1}`);
+      updateSequencerProject({
+        ...sequencerProject,
+        lanes: [...sequencerProject.lanes, lane],
+      });
+    }
+  });
   document.addEventListener('animationcommand', (event) => {
     if (!animationMode || !animationProject) return;
     const detail = (event as CustomEvent<AnimationCommandDetail>).detail || {};

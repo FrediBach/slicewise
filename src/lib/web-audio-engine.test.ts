@@ -109,6 +109,64 @@ describe('WebAudioEngine', () => {
     await engine.stop();
   });
 
+  it('swaps a queued phrase exactly at the requested unscheduled bar boundary', async () => {
+    const context = {
+      currentTime: 0,
+      state: 'running' as AudioContextState,
+      resume: vi.fn(async () => undefined),
+      suspend: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+    };
+    let timerCallback = (): void => undefined;
+    const rendered: Array<{ name: string; tick: number }> = [];
+    const swaps: number[] = [];
+    const first = createSequencerProject();
+    const firstLane = {
+      ...createMelodicLane('first', 'First phrase'),
+      steps: 4,
+      pulses: 4,
+      rotation: 0 as const,
+    };
+    first.lanes = [firstLane];
+    first.tempo = 120;
+    const second = createSequencerProject();
+    const secondLane = {
+      ...createMelodicLane('second', 'Second phrase'),
+      steps: 4,
+      pulses: 4,
+      rotation: 0 as const,
+    };
+    second.lanes = [secondLane];
+    second.tempo = 120;
+    const engine = new WebAudioEngine({
+      contextFactory: () => context as unknown as AudioContext,
+      setIntervalFn: (callback) => {
+        timerCallback = callback;
+        return 1 as unknown as ReturnType<typeof setInterval>;
+      },
+      clearIntervalFn: () => undefined,
+      onSequenceSwap: (tick) => swaps.push(tick),
+      renderEvent: (_context, event) =>
+        rendered.push({
+          name: event.lane.name,
+          tick: event.tick.numerator / event.tick.denominator,
+        }),
+    });
+
+    await engine.start(first, new Map([[firstLane.id, createContourSequence(firstLane)]]));
+    expect(
+      engine.setPhrase(second, new Map([[secondLane.id, createContourSequence(secondLane)]]), 3840),
+    ).toBe(3840);
+
+    context.currentTime = 1.95;
+    timerCallback();
+
+    expect(swaps).toEqual([3840]);
+    expect(rendered).toContainEqual({ name: 'Second phrase', tick: 3840 });
+    expect(rendered).not.toContainEqual({ name: 'First phrase', tick: 3840 });
+    await engine.stop();
+  });
+
   it('skips stale events after a throttled polling gap', async () => {
     const context = {
       currentTime: 0,

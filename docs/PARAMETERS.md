@@ -4,6 +4,14 @@ This document describes the user-facing parameters in Slicewise as implemented i
 
 Select controls show a short information banner for the active option. The banner updates after direct selection, randomization, snapshot restoration, and undo or redo.
 
+## Workspace modes
+
+The top workspace switch offers Config, Animation, and Sequencer. Sequencer keeps the contour controls editable and turns the latest exact contour result into a deterministic phrase. Quick interaction previews never replace the musical source. If an exact result arrives during playback, its lane grids appear immediately and the sounding phrase changes at the next unscheduled global bar.
+
+The Sequencer transport provides play/pause, return to start, a bar/beat readout, and tempo from **40–240 BPM** (default **110**). Space toggles playback, Home returns to the start, and Left/Right move by one sixteenth-note transport step when focus is not in a form control. Web Audio is created only by the Play gesture and is closed on leaving Sequencer mode.
+
+Each lane exposes its melodic/drum type, **1–64** steps, **0–Steps** Euclidean pulses, mute, solo, deletion, and an accessible step grid. The initial project contains one contour-mapped pluck lane and one synthesized kick lane. Add Melody and Add Drum create independent rows. Changing lane type uses that type's explicit defaults while retaining shared rhythm, timing, probability, mute, solo, direction, and contour-influence settings.
+
 ## Source model
 
 | Parameter (ID)                          | Type and default                   | What it does                                                                                                                                                                                                                                                |

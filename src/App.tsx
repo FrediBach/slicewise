@@ -14,6 +14,7 @@ import {
   ExportPanel,
 } from './components/panels/OutputPanel';
 import { AnimationModeSwitch, AnimationTimeline } from './components/animation/AnimationWorkspace';
+import { SequencerWorkspace } from './components/sequencer/SequencerWorkspace';
 
 export default function App() {
   useEffect(() => {
@@ -155,6 +156,7 @@ export default function App() {
           <div className="toast" id="toast" />
         </div>
         <AnimationTimeline />
+        <SequencerWorkspace />
       </main>
     </div>
   );

@@ -179,6 +179,6 @@ export function createSequencerProject(): SequencerProject {
     seed: 1,
     resetBars: 0,
     harmony: { root: 0, scale: 'minor-pentatonic' },
-    lanes: [createMelodicLane()],
+    lanes: [createMelodicLane(), createDrumLane()],
   };
 }
