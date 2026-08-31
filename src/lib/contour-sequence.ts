@@ -11,6 +11,7 @@ export interface SequenceStepBase {
   index: number;
   sourcePosition: number;
   candidateHit: boolean;
+  contourValues: Readonly<Record<ContourFeatureKey, number>>;
 }
 
 export interface MelodicSequenceStep extends SequenceStepBase {
@@ -84,26 +85,41 @@ function mappedFeature(
   return normalized.map((value) => 0.5 + (value - 0.5) * amount);
 }
 
-function contourEnergy(
+const featureKeys: readonly ContourFeatureKey[] = [
+  'level',
+  'pathCount',
+  'length',
+  'area',
+  'centroidX',
+  'centroidY',
+  'closedness',
+  'roughness',
+];
+
+function mappedContourValues(
   slices: readonly ContourSliceFeature[],
   steps: number,
   influence: number,
-): number[] {
+): Record<ContourFeatureKey, number[]> {
+  return Object.fromEntries(
+    featureKeys.map((key) => [key, mappedFeature(slices, key, steps, influence)]),
+  ) as Record<ContourFeatureKey, number[]>;
+}
+
+function contourEnergy(values: Readonly<Record<ContourFeatureKey, readonly number[]>>): number[] {
   const sources: ContourFeatureKey[] = ['area', 'length', 'roughness', 'pathCount'];
-  const mapped = sources.map((key) => mappedFeature(slices, key, steps, influence));
   return Array.from(
-    { length: steps },
-    (_, index) => mapped.reduce((sum, values) => sum + values[index], 0) / mapped.length,
+    { length: values.area.length },
+    (_, index) => sources.reduce((sum, key) => sum + values[key][index], 0) / sources.length,
   );
 }
 
-function gatePattern(lane: SequencerLane, slices: readonly ContourSliceFeature[]): boolean[] {
+function gatePattern(
+  lane: SequencerLane,
+  values: Readonly<Record<ContourFeatureKey, readonly number[]>>,
+): boolean[] {
   if (lane.rotation === 'auto')
-    return autoRotateEuclidean(
-      lane.steps,
-      lane.pulses,
-      contourEnergy(slices, lane.steps, lane.contourInfluence),
-    ).pattern;
+    return autoRotateEuclidean(lane.steps, lane.pulses, contourEnergy(values)).pattern;
   return rotateRhythm(euclideanRhythm(lane.steps, lane.pulses), lane.rotation);
 }
 
@@ -115,14 +131,10 @@ function melodicSteps(
   lane: MelodicLane,
   slices: readonly ContourSliceFeature[],
 ): MelodicSequenceStep[] {
-  const pitch = mappedFeature(slices, lane.melody.pitchSource, lane.steps, lane.contourInfluence);
-  const velocity = mappedFeature(
-    slices,
-    lane.melody.velocitySource,
-    lane.steps,
-    lane.contourInfluence,
-  );
-  const gate = mappedFeature(slices, lane.melody.gateSource, lane.steps, lane.contourInfluence);
+  const values = mappedContourValues(slices, lane.steps, lane.contourInfluence);
+  const pitch = values[lane.melody.pitchSource];
+  const velocity = values[lane.melody.velocitySource];
+  const gate = values[lane.melody.gateSource];
   const notes = quantizeFeatureToMidi(pitch, {
     root: lane.melody.root,
     scale: lane.melody.scale,
@@ -133,12 +145,15 @@ function melodicSteps(
     maximumLeap: lane.melody.maximumLeap,
     valuesAreNormalized: true,
   });
-  const pattern = gatePattern(lane, slices);
+  const pattern = gatePattern(lane, values);
   return notes.map((midiNote, index) => ({
     kind: 'melodic',
     index,
     sourcePosition: sourcePosition(index, notes.length),
     candidateHit: pattern[index],
+    contourValues: Object.fromEntries(
+      featureKeys.map((key) => [key, values[key][index]]),
+    ) as Record<ContourFeatureKey, number>,
     midiNote,
     velocity: lerp(lane.melody.velocityMinimum, lane.melody.velocityMaximum, velocity[index]),
     gate: lerp(lane.melody.gateMinimum, lane.melody.gateMaximum, gate[index]),
@@ -146,18 +161,20 @@ function melodicSteps(
 }
 
 function drumSteps(lane: DrumLane, slices: readonly ContourSliceFeature[]): DrumSequenceStep[] {
-  const mapped = (key: ContourFeatureKey): number[] =>
-    mappedFeature(slices, key, lane.steps, lane.contourInfluence);
-  const velocity = mapped(lane.drum.velocitySource);
-  const decay = mapped(lane.drum.decaySource);
-  const tone = mapped(lane.drum.toneSource);
-  const pan = mapped(lane.drum.panSource);
-  const pattern = gatePattern(lane, slices);
+  const values = mappedContourValues(slices, lane.steps, lane.contourInfluence);
+  const velocity = values[lane.drum.velocitySource];
+  const decay = values[lane.drum.decaySource];
+  const tone = values[lane.drum.toneSource];
+  const pan = values[lane.drum.panSource];
+  const pattern = gatePattern(lane, values);
   return pattern.map((candidateHit, index) => ({
     kind: 'drum',
     index,
     sourcePosition: sourcePosition(index, pattern.length),
     candidateHit,
+    contourValues: Object.fromEntries(
+      featureKeys.map((key) => [key, values[key][index]]),
+    ) as Record<ContourFeatureKey, number>,
     voice: lane.drum.voice,
     midiNote: clamp(Math.round(lane.drum.midiNote), 0, 127),
     velocity: lerp(lane.drum.velocityMinimum, lane.drum.velocityMaximum, velocity[index]),
