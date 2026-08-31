@@ -63,6 +63,21 @@ function validProbability(value: Record<string, unknown>): boolean {
   );
 }
 
+function validVariation(value: Record<string, unknown>): boolean {
+  if (value.target === 'off') return true;
+  if (
+    !['accent', 'octave', 'articulation', 'ratchet'].includes(String(value.target)) ||
+    !isRecord(value.probability) ||
+    value.probability.mode === 'off' ||
+    !validProbability(value.probability)
+  )
+    return false;
+  if (value.target === 'accent') return within(value.amount, 0, 1);
+  if (value.target === 'octave') return [12, 24].includes(Number(value.amount));
+  if (value.target === 'articulation') return within(value.amount, 0, 0.9);
+  return [2, 3, 4].includes(Number(value.amount));
+}
+
 function validMelody(value: Record<string, unknown>): boolean {
   return (
     within(value.root, 0, 11) &&
@@ -131,7 +146,9 @@ function validLane(lane: unknown): lane is SequencerLane {
     typeof lane.muted !== 'boolean' ||
     typeof lane.solo !== 'boolean' ||
     !['forward', 'reverse', 'ping-pong'].includes(String(lane.direction)) ||
-    !within(lane.contourInfluence, 0, 100)
+    !within(lane.contourInfluence, 0, 100) ||
+    !isRecord(lane.variation) ||
+    !validVariation(lane.variation)
   )
     return false;
   if (!(
@@ -141,16 +158,40 @@ function validLane(lane: unknown): lane is SequencerLane {
   ))
     return false;
   if (!validProbability(lane.probability)) return false;
+  if (lane.kind === 'drum' && lane.variation.target === 'octave') return false;
   return (
-    (lane.kind === 'melodic' && isRecord(lane.melody) && validMelody(lane.melody)) ||
-    (lane.kind === 'drum' && isRecord(lane.drum) && validDrum(lane.drum))
+    (lane.kind === 'melodic' &&
+      ['contour-pluck', 'body-bass', 'fragmentation-pluck'].includes(String(lane.preset)) &&
+      isRecord(lane.melody) &&
+      validMelody(lane.melody)) ||
+    (lane.kind === 'drum' &&
+      ['contour-kick', 'fragmented-snare', 'roughness-percussion'].includes(String(lane.preset)) &&
+      isRecord(lane.drum) &&
+      validDrum(lane.drum))
   );
 }
 
+function migrateProject(candidate: Record<string, unknown>): Record<string, unknown> {
+  if (candidate.version !== 1 || !Array.isArray(candidate.lanes)) return candidate;
+  return {
+    ...candidate,
+    version: SEQUENCER_PROJECT_VERSION,
+    lanes: candidate.lanes.map((lane) => {
+      if (!isRecord(lane)) return lane;
+      return {
+        ...lane,
+        preset: lane.kind === 'drum' ? 'contour-kick' : 'contour-pluck',
+        variation: { target: 'off' },
+      };
+    }),
+  };
+}
+
 export function restoreStoredSequencerProject(value: unknown): SequencerProject | null {
-  const candidate =
+  const storedCandidate =
     isRecord(value) && value.storageVersion === 1 && 'project' in value ? value.project : value;
-  if (!isRecord(candidate)) return null;
+  if (!isRecord(storedCandidate)) return null;
+  const candidate = migrateProject(storedCandidate);
   if (
     candidate.version !== SEQUENCER_PROJECT_VERSION ||
     typeof candidate.name !== 'string' ||

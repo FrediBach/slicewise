@@ -1,12 +1,16 @@
 import type { ContourFeatureKey } from './contour-features';
 
-export const SEQUENCER_PROJECT_VERSION = 1 as const;
+export const SEQUENCER_PROJECT_VERSION = 2 as const;
 
 export type ScaleName =
   'minor-pentatonic' | 'major-pentatonic' | 'major' | 'natural-minor' | 'dorian' | 'chromatic';
 export type ProbabilityCurve = 'linear' | 'ease-in' | 'ease-out' | 'threshold';
 export type VariationMode = 'repeat' | 'evolve';
 export type LaneDirection = 'forward' | 'reverse' | 'ping-pong';
+export type MelodicLanePreset = 'contour-pluck' | 'body-bass' | 'fragmentation-pluck';
+export type DrumLanePreset = 'contour-kick' | 'fragmented-snare' | 'roughness-percussion';
+export type LanePreset = MelodicLanePreset | DrumLanePreset;
+export type VariationTarget = 'accent' | 'octave' | 'articulation' | 'ratchet';
 
 export type LaneTiming =
   | { mode: 'grid'; subdivision: '1/4' | '1/8' | '1/16' | '1/32' }
@@ -31,6 +35,14 @@ export type LaneProbability =
       holdCycles: 1 | 2 | 4 | 8;
     };
 
+export type LaneVariation =
+  | { target: 'off' }
+  | {
+      target: VariationTarget;
+      probability: Exclude<LaneProbability, { mode: 'off' }>;
+      amount: number;
+    };
+
 export interface SequencerLaneBase {
   id: string;
   name: string;
@@ -45,6 +57,7 @@ export interface SequencerLaneBase {
   solo: boolean;
   direction: LaneDirection;
   contourInfluence: number;
+  variation: LaneVariation;
 }
 
 export interface MelodicLaneSettings {
@@ -86,9 +99,14 @@ export interface DrumLaneSettings {
 
 export type MelodicLane = SequencerLaneBase & {
   kind: 'melodic';
+  preset: MelodicLanePreset;
   melody: MelodicLaneSettings;
 };
-export type DrumLane = SequencerLaneBase & { kind: 'drum'; drum: DrumLaneSettings };
+export type DrumLane = SequencerLaneBase & {
+  kind: 'drum';
+  preset: DrumLanePreset;
+  drum: DrumLaneSettings;
+};
 export type SequencerLane = MelodicLane | DrumLane;
 
 export interface SequencerProject {
@@ -117,12 +135,18 @@ const laneBase = (id: string, name: string): SequencerLaneBase => ({
   solo: false,
   direction: 'forward',
   contourInfluence: 100,
+  variation: { target: 'off' },
 });
 
-export function createMelodicLane(id = 'melody-1', name = 'Contour pluck'): MelodicLane {
-  return {
+export function createMelodicLane(
+  id = 'melody-1',
+  name = 'Contour pluck',
+  preset: MelodicLanePreset = 'contour-pluck',
+): MelodicLane {
+  const lane: MelodicLane = {
     ...laneBase(id, name),
     kind: 'melodic',
+    preset: 'contour-pluck',
     melody: {
       root: 0,
       scale: 'minor-pentatonic',
@@ -142,13 +166,19 @@ export function createMelodicLane(id = 'melody-1', name = 'Contour pluck'): Melo
       polyphony: 1,
     },
   };
+  return preset === 'contour-pluck' ? lane : applyLanePreset(lane, preset);
 }
 
-export function createDrumLane(id = 'drum-1', name = 'Contour kick'): DrumLane {
-  return {
+export function createDrumLane(
+  id = 'drum-1',
+  name = 'Contour kick',
+  preset: DrumLanePreset = 'contour-kick',
+): DrumLane {
+  const lane: DrumLane = {
     ...laneBase(id, name),
     pulses: 4,
     kind: 'drum',
+    preset: 'contour-kick',
     drum: {
       voice: 'kick',
       midiNote: 36,
@@ -165,6 +195,180 @@ export function createDrumLane(id = 'drum-1', name = 'Contour kick'): DrumLane {
       panMinimum: 0,
       panMaximum: 0,
       chokeGroup: null,
+    },
+  };
+  return preset === 'contour-kick' ? lane : applyLanePreset(lane, preset);
+}
+
+const contourCondition = (
+  source: ContourFeatureKey,
+  minimum: number,
+  maximum: number,
+  inverted = false,
+): Exclude<LaneProbability, { mode: 'off' }> => ({
+  mode: 'contour',
+  source,
+  minimum,
+  maximum,
+  curve: 'ease-in',
+  inverted,
+  variation: 'evolve',
+  holdCycles: 1,
+});
+
+/** Applies musical/mapping defaults while retaining lane identity and transport state. */
+export function applyLanePreset(lane: MelodicLane, preset: MelodicLanePreset): MelodicLane;
+export function applyLanePreset(lane: DrumLane, preset: DrumLanePreset): DrumLane;
+export function applyLanePreset(lane: SequencerLane, preset: LanePreset): SequencerLane {
+  if (lane.kind === 'melodic') {
+    if (preset === 'body-bass')
+      return {
+        ...lane,
+        name: 'Body bass',
+        preset,
+        pulses: Math.min(lane.steps, 5),
+        variation: {
+          target: 'accent',
+          probability: contourCondition('length', 25, 85),
+          amount: 0.3,
+        },
+        melody: {
+          ...lane.melody,
+          voice: 'bass',
+          pitchSource: 'area',
+          velocitySource: 'length',
+          gateSource: 'closedness',
+          lowestOctave: 2,
+          octaveRange: 2,
+          maximumLeap: 5,
+          gateMinimum: 0.45,
+          gateMaximum: 0.95,
+        },
+      };
+    if (preset === 'fragmentation-pluck')
+      return {
+        ...lane,
+        name: 'Fragmentation pluck',
+        preset,
+        pulses: Math.min(lane.steps, 7),
+        variation: {
+          target: 'octave',
+          probability: contourCondition('pathCount', 10, 65),
+          amount: 12,
+        },
+        melody: {
+          ...lane.melody,
+          voice: 'pluck',
+          pitchSource: 'centroidY',
+          velocitySource: 'pathCount',
+          gateSource: 'closedness',
+          lowestOctave: 3,
+          octaveRange: 2,
+          gateMinimum: 0.15,
+          gateMaximum: 0.65,
+        },
+      };
+    const defaults = createMelodicLane(lane.id);
+    return {
+      ...defaults,
+      steps: lane.steps,
+      pulses: Math.min(defaults.pulses, lane.steps),
+      rotation: lane.rotation,
+      phase: lane.phase,
+      timing: lane.timing,
+      probability: lane.probability,
+      seedOffset: lane.seedOffset,
+      muted: lane.muted,
+      solo: lane.solo,
+      direction: lane.direction,
+      contourInfluence: lane.contourInfluence,
+    };
+  }
+  if (preset === 'fragmented-snare')
+    return {
+      ...lane,
+      name: 'Fragmented snare',
+      preset,
+      pulses: Math.min(lane.steps, 5),
+      variation: {
+        target: 'articulation',
+        probability: contourCondition('pathCount', 20, 80),
+        amount: 0.55,
+      },
+      drum: {
+        ...lane.drum,
+        voice: 'snare',
+        midiNote: 38,
+        velocitySource: 'pathCount',
+        decaySource: 'closedness',
+        toneSource: 'roughness',
+        panMinimum: -0.15,
+        panMaximum: 0.15,
+      },
+    };
+  if (preset === 'roughness-percussion')
+    return {
+      ...lane,
+      name: 'Roughness percussion',
+      preset,
+      pulses: Math.min(lane.steps, 9),
+      variation: {
+        target: 'ratchet',
+        probability: contourCondition('roughness', 5, 60),
+        amount: 3,
+      },
+      drum: {
+        ...lane.drum,
+        voice: 'closed-hat',
+        midiNote: 42,
+        velocitySource: 'roughness',
+        decaySource: 'roughness',
+        toneSource: 'roughness',
+        panMinimum: -0.35,
+        panMaximum: 0.35,
+        chokeGroup: 'hats',
+      },
+    };
+  const defaults = createDrumLane(lane.id);
+  return {
+    ...defaults,
+    steps: lane.steps,
+    pulses: Math.min(defaults.pulses, lane.steps),
+    rotation: lane.rotation,
+    phase: lane.phase,
+    timing: lane.timing,
+    probability: lane.probability,
+    seedOffset: lane.seedOffset,
+    muted: lane.muted,
+    solo: lane.solo,
+    direction: lane.direction,
+    contourInfluence: lane.contourInfluence,
+  };
+}
+
+export function setLaneVariationTarget(
+  lane: SequencerLane,
+  target: LaneVariation['target'],
+): SequencerLane {
+  if (target === 'off') return { ...lane, variation: { target: 'off' } };
+  if (target === 'octave' && lane.kind === 'drum') return lane;
+  const source =
+    target === 'accent'
+      ? lane.kind === 'melodic'
+        ? lane.melody.velocitySource
+        : lane.drum.velocitySource
+      : target === 'articulation'
+        ? lane.kind === 'melodic'
+          ? lane.melody.gateSource
+          : lane.drum.decaySource
+        : 'roughness';
+  return {
+    ...lane,
+    variation: {
+      target,
+      probability: contourCondition(source, 15, 70),
+      amount:
+        target === 'octave' ? 12 : target === 'ratchet' ? 2 : target === 'accent' ? 0.25 : 0.5,
     },
   };
 }

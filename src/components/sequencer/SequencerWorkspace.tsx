@@ -43,6 +43,18 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 function LaneRow({ lane }: { lane: SequencerUiLane }) {
+  const presets =
+    lane.kind === 'melodic'
+      ? [
+          ['contour-pluck', 'Contour pluck'],
+          ['body-bass', 'Body / bass'],
+          ['fragmentation-pluck', 'Fragment / pluck'],
+        ]
+      : [
+          ['contour-kick', 'Contour kick'],
+          ['fragmented-snare', 'Fragment / snare'],
+          ['roughness-percussion', 'Rough percussion'],
+        ];
   return (
     <div className="sequencer-lane" data-kind={lane.kind}>
       <div className="sequencer-lane-settings">
@@ -54,6 +66,32 @@ function LaneRow({ lane }: { lane: SequencerUiLane }) {
         >
           <option value="melodic">Melodic</option>
           <option value="drum">Drum</option>
+        </select>
+        <select
+          aria-label={`${lane.name} preset`}
+          value={lane.preset}
+          onChange={(event) =>
+            command('lane-preset', { laneId: lane.id, preset: event.target.value })
+          }
+        >
+          {presets.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={`${lane.name} variation`}
+          value={lane.variationTarget}
+          onChange={(event) =>
+            command('lane-variation', { laneId: lane.id, target: event.target.value })
+          }
+        >
+          <option value="off">No variation</option>
+          <option value="accent">Accent</option>
+          {lane.kind === 'melodic' && <option value="octave">Octave</option>}
+          <option value="articulation">Articulation</option>
+          <option value="ratchet">Ratchet</option>
         </select>
         <label>
           Steps
@@ -117,6 +155,7 @@ function LaneRow({ lane }: { lane: SequencerUiLane }) {
             className={[
               step.candidateHit ? 'is-hit' : '',
               step.candidateHit && !step.willFire ? 'is-skipped' : '',
+              step.expressive ? 'is-expressive' : '',
               lane.activeStep === step.index ? 'is-current' : '',
             ]
               .filter(Boolean)

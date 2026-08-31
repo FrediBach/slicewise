@@ -1,5 +1,12 @@
 import type { ContourSequenceStep } from './contour-sequence';
-import { compileProjectEvents, type LaneSequenceMap } from './sequencer-events';
+import {
+  compileProjectEvents,
+  eventArticulation,
+  eventMidiNote,
+  eventRatchetCount,
+  eventVelocity,
+  type LaneSequenceMap,
+} from './sequencer-events';
 import { laneStepDuration, tickValue, ticksPerBar, TRANSPORT_PPQ } from './sequencer-playback';
 import type { MelodicLane, SequencerLane, SequencerProject } from './sequencer-project';
 
@@ -84,18 +91,23 @@ function laneTrack(
   const laneSequences = new Map([[lane.id, sequences.get(lane.id) ?? []]]);
   const laneProject = { ...project, lanes: [lane] };
   for (const event of audible ? compileProjectEvents(laneProject, laneSequences, 0, endTick) : []) {
-    const start = clamp(Math.round(tickValue(event.tick)), 0, endTick);
+    const baseStart = clamp(Math.round(tickValue(event.tick)), 0, endTick);
     const step = event.step;
-    const velocity = clamp(Math.round(step.velocity * 127), 1, 127);
-    const note = clamp(Math.round(step.midiNote), 0, 127);
+    const velocity = clamp(Math.round(eventVelocity(event) * 127), 1, 127);
+    const note = eventMidiNote(event);
     const duration = tickValue(laneStepDuration(project, lane));
+    const ratchets = eventRatchetCount(event);
+    const ratchetTicks = duration / ratchets;
     const noteTicks =
       step.kind === 'melodic'
-        ? Math.max(1, Math.round(duration * step.gate))
-        : Math.max(1, Math.min(120, Math.round(duration / 2)));
-    const end = Math.min(endTick, start + noteTicks);
-    events.push({ tick: start, order: 1, bytes: [0x90 | channel, note, velocity] });
-    events.push({ tick: end, order: 0, bytes: [0x80 | channel, note, 0] });
+        ? Math.max(1, Math.round(ratchetTicks * step.gate * eventArticulation(event)))
+        : Math.max(1, Math.min(120, Math.round((ratchetTicks / 2) * eventArticulation(event))));
+    for (let ratchet = 0; ratchet < ratchets; ratchet++) {
+      const start = clamp(Math.round(baseStart + ratchet * ratchetTicks), 0, endTick);
+      const end = Math.min(endTick, start + noteTicks);
+      events.push({ tick: start, order: 1, bytes: [0x90 | channel, note, velocity] });
+      events.push({ tick: end, order: 0, bytes: [0x80 | channel, note, 0] });
+    }
   }
   return serializeTrack(events, endTick);
 }

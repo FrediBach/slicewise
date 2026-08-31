@@ -109,6 +109,49 @@ describe('WebAudioEngine', () => {
     await engine.stop();
   });
 
+  it('schedules deterministic ratchets evenly within the lane step', async () => {
+    const context = {
+      currentTime: 0,
+      state: 'running' as AudioContextState,
+      resume: vi.fn(async () => undefined),
+      suspend: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+    };
+    const rendered: number[] = [];
+    const project = createSequencerProject();
+    project.tempo = 120;
+    const lane = {
+      ...createMelodicLane(),
+      pulses: 16,
+      rotation: 0 as const,
+      variation: {
+        target: 'ratchet' as const,
+        probability: {
+          mode: 'fixed' as const,
+          chance: 100,
+          variation: 'repeat' as const,
+          holdCycles: 1 as const,
+        },
+        amount: 3,
+      },
+    };
+    project.lanes = [lane];
+    const engine = new WebAudioEngine({
+      contextFactory: () => context as unknown as AudioContext,
+      setIntervalFn: () => 1 as unknown as ReturnType<typeof setInterval>,
+      clearIntervalFn: () => undefined,
+      renderEvent: (_context, _event, when) => rendered.push(when),
+    });
+
+    await engine.start(project, new Map([[lane.id, createContourSequence(lane)]]));
+
+    expect(rendered).toHaveLength(3);
+    expect(rendered[0]).toBeCloseTo(0.02);
+    expect(rendered[1] - rendered[0]).toBeCloseTo(1 / 24);
+    expect(rendered[2] - rendered[1]).toBeCloseTo(1 / 24);
+    await engine.stop();
+  });
+
   it('swaps a queued phrase exactly at the requested unscheduled bar boundary', async () => {
     const context = {
       currentTime: 0,

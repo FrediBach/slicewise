@@ -47,6 +47,23 @@ describe('sequencer storage', () => {
     expect(restoreStoredSequencerProject(corruptLane)).toBeNull();
   });
 
+  it('migrates version-one lanes to explicit neutral expression settings', () => {
+    const legacy = structuredClone(createSequencerProject()) as unknown as Record<string, unknown>;
+    legacy.version = 1;
+    for (const lane of legacy.lanes as Array<Record<string, unknown>>) {
+      delete lane.preset;
+      delete lane.variation;
+    }
+
+    const restored = restoreStoredSequencerProject(legacy);
+
+    expect(restored?.version).toBe(2);
+    expect(restored?.lanes.map((lane) => [lane.preset, lane.variation])).toEqual([
+      ['contour-pluck', { target: 'off' }],
+      ['contour-kick', { target: 'off' }],
+    ]);
+  });
+
   it('returns null for unavailable or malformed local storage', () => {
     expect(loadSequencerProject({ getItem: () => '{bad', setItem: () => undefined })).toBeNull();
     expect(

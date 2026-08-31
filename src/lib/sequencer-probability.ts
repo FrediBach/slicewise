@@ -1,5 +1,10 @@
 import type { ContourSequenceStep } from './contour-sequence';
-import type { LaneProbability, ProbabilityCurve, SequencerLane } from './sequencer-project';
+import type {
+  LaneProbability,
+  ProbabilityCurve,
+  SequencerLane,
+  VariationTarget,
+} from './sequencer-project';
 
 const clamp = (value: number, minimum: number, maximum: number): number =>
   Math.min(maximum, Math.max(minimum, value));
@@ -29,11 +34,14 @@ export function seededProbabilityValue(
   seedOffset: number,
   heldCycle: number | null,
   stepIndex: number,
+  coordinate = 'trigger',
 ): number {
-  const coordinate = `${Math.round(projectSeed)}|${laneId}|${Math.round(seedOffset)}|${heldCycle ?? 'repeat'}|${Math.round(stepIndex)}`;
+  const baseCoordinate = `${Math.round(projectSeed)}|${laneId}|${Math.round(seedOffset)}|${heldCycle ?? 'repeat'}|${Math.round(stepIndex)}`;
+  const seedCoordinate =
+    coordinate === 'trigger' ? baseCoordinate : `${baseCoordinate}|${coordinate}`;
   let hash = 0x811c9dc5;
-  for (let index = 0; index < coordinate.length; index++) {
-    hash ^= coordinate.charCodeAt(index);
+  for (let index = 0; index < seedCoordinate.length; index++) {
+    hash ^= seedCoordinate.charCodeAt(index);
     hash = Math.imul(hash, 0x01000193);
   }
   hash ^= hash >>> 16;
@@ -42,6 +50,37 @@ export function seededProbabilityValue(
   hash = Math.imul(hash, 0x846ca68b);
   hash ^= hash >>> 16;
   return (hash >>> 0) / 0x100000000;
+}
+
+export interface ResolvedStepVariation {
+  target: VariationTarget | 'off';
+  amount: number;
+}
+
+export function resolveStepVariation(
+  projectSeed: number,
+  lane: SequencerLane,
+  step: ContourSequenceStep,
+  cycleIndex: number,
+): ResolvedStepVariation {
+  const variation = lane.variation;
+  if (variation.target === 'off') return { target: 'off', amount: 0 };
+  const probability = variation.probability;
+  const heldCycle = probabilityHeldCycle(probability, cycleIndex);
+  const contourValue =
+    probability.mode === 'contour' ? step.contourValues[probability.source] : 0.5;
+  const enabled =
+    seededProbabilityValue(
+      projectSeed,
+      lane.id,
+      lane.seedOffset,
+      heldCycle,
+      step.index,
+      `variation:${variation.target}`,
+    ) < probabilityChance(probability, contourValue);
+  return enabled
+    ? { target: variation.target, amount: variation.amount }
+    : { target: 'off', amount: 0 };
 }
 
 export function probabilityHeldCycle(

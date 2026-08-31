@@ -119,11 +119,14 @@ import {
   type AnimationProject,
 } from './animation-project';
 import { createContourSequence, type ContourSequenceStep } from './contour-sequence';
-import { resolveStepTrigger } from './sequencer-probability';
+import { resolveStepTrigger, resolveStepVariation } from './sequencer-probability';
 import {
+  applyLanePreset,
   createDrumLane,
   createMelodicLane,
   createSequencerProject,
+  setLaneVariationTarget,
+  type LanePreset,
   type SequencerLane,
   type SequencerProject,
 } from './sequencer-project';
@@ -3669,21 +3672,33 @@ if (typeof document !== 'undefined') {
               id: lane.id,
               name: lane.name,
               kind: lane.kind,
+              preset: lane.preset,
+              variationTarget: lane.variation.target,
               steps: lane.steps,
               pulses: lane.pulses,
               muted: lane.muted,
               solo: lane.solo,
               activeStep,
-              sequence: (sequencerSequences.get(lane.id) ?? []).map((step) => ({
-                index: step.index,
-                candidateHit: step.candidateHit,
-                willFire: resolveStepTrigger(sequencerProject.seed, lane, step, cycleIndex),
-                value: step.velocity,
-                label:
-                  step.kind === 'melodic'
-                    ? `${step.candidateHit ? 'hit' : 'rest'}, MIDI ${step.midiNote}`
-                    : `${step.candidateHit ? 'hit' : 'rest'}, ${step.voice}`,
-              })),
+              sequence: (sequencerSequences.get(lane.id) ?? []).map((step) => {
+                const variation = resolveStepVariation(
+                  sequencerProject.seed,
+                  lane,
+                  step,
+                  cycleIndex,
+                );
+                const variationLabel = variation.target === 'off' ? '' : `, ${variation.target}`;
+                return {
+                  index: step.index,
+                  candidateHit: step.candidateHit,
+                  willFire: resolveStepTrigger(sequencerProject.seed, lane, step, cycleIndex),
+                  expressive: variation.target !== 'off',
+                  value: step.velocity,
+                  label:
+                    (step.kind === 'melodic'
+                      ? `${step.candidateHit ? 'hit' : 'rest'}, MIDI ${step.midiNote}`
+                      : `${step.candidateHit ? 'hit' : 'rest'}, ${step.voice}`) + variationLabel,
+                };
+              }),
             };
           }),
         },
@@ -3798,6 +3813,7 @@ if (typeof document !== 'undefined') {
       solo: lane.solo,
       direction: lane.direction,
       contourInfluence: lane.contourInfluence,
+      variation: lane.variation,
     };
   }
 
@@ -4456,6 +4472,24 @@ if (typeof document !== 'undefined') {
     } else if (type === 'lane-kind') {
       const kind = detail.kind === 'drum' ? 'drum' : 'melodic';
       replaceSequencerLane(laneId, (lane) => migrateSequencerLane(lane, kind));
+    } else if (type === 'lane-preset') {
+      replaceSequencerLane(laneId, (lane) => {
+        const preset = String(detail.preset) as LanePreset;
+        if (
+          (lane.kind === 'melodic' &&
+            ['contour-pluck', 'body-bass', 'fragmentation-pluck'].includes(preset)) ||
+          (lane.kind === 'drum' &&
+            ['contour-kick', 'fragmented-snare', 'roughness-percussion'].includes(preset))
+        )
+          return applyLanePreset(lane as never, preset as never) as SequencerLane;
+        return lane;
+      });
+    } else if (type === 'lane-variation') {
+      const target = String(detail.target);
+      if (!['off', 'accent', 'octave', 'articulation', 'ratchet'].includes(target)) return;
+      replaceSequencerLane(laneId, (lane) =>
+        setLaneVariationTarget(lane, target as Parameters<typeof setLaneVariationTarget>[1]),
+      );
     } else if (type === 'lane-delete') {
       updateSequencerProject({
         ...sequencerProject,

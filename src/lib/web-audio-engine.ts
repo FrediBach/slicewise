@@ -1,6 +1,10 @@
 import type { DrumSequenceStep, MelodicSequenceStep } from './contour-sequence';
 import {
   compileProjectEvents,
+  eventArticulation,
+  eventMidiNote,
+  eventRatchetCount,
+  eventVelocity,
   type LaneSequenceMap,
   type PlayableSequencerEvent,
 } from './sequencer-events';
@@ -224,8 +228,15 @@ export class WebAudioEngine {
   ): void {
     for (const event of compileProjectEvents(project, sequences, fromTick, toTick)) {
       const when = this.tickToAudioTime(tickValue(event.tick));
-      if (this.options.renderEvent) this.options.renderEvent(this.context, event, when);
-      else this.renderBuiltInVoice(event, when);
+      const ratchets = eventRatchetCount(event);
+      const stepSeconds =
+        (tickValue(laneStepDuration(project, event.lane)) / TRANSPORT_PPQ) *
+        (60 / clamp(project.tempo, 40, 240));
+      for (let ratchet = 0; ratchet < ratchets; ratchet++) {
+        const ratchetWhen = when + (ratchet * stepSeconds) / ratchets;
+        if (this.options.renderEvent) this.options.renderEvent(this.context, event, ratchetWhen);
+        else this.renderBuiltInVoice(event, ratchetWhen);
+      }
     }
   }
 
@@ -254,7 +265,11 @@ export class WebAudioEngine {
     if (!lane) return;
     const stepTicks = tickValue(laneStepDuration(this.project!, lane));
     const duration = clamp(
-      (stepTicks / TRANSPORT_PPQ) * (60 / clamp(this.project!.tempo, 40, 240)) * step.gate,
+      ((stepTicks / TRANSPORT_PPQ) *
+        (60 / clamp(this.project!.tempo, 40, 240)) *
+        step.gate *
+        eventArticulation(event)) /
+        eventRatchetCount(event),
       0.025,
       3,
     );
@@ -267,12 +282,12 @@ export class WebAudioEngine {
         : lane.melody.voice === 'soft-lead'
           ? 'sine'
           : 'triangle';
-    oscillator.frequency.setValueAtTime(midiFrequency(step.midiNote), when);
+    oscillator.frequency.setValueAtTime(midiFrequency(eventMidiNote(event)), when);
     filter.type = 'lowpass';
     filter.frequency.setValueAtTime(700 + step.velocity * 4200, when);
     filter.Q.value = lane.melody.voice === 'pluck' ? 5 : 1.2;
     gain.gain.setValueAtTime(0.0001, when);
-    gain.gain.linearRampToValueAtTime(clamp(step.velocity, 0, 1) * 0.28, when + 0.004);
+    gain.gain.linearRampToValueAtTime(eventVelocity(event) * 0.28, when + 0.004);
     gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
     oscillator.connect(filter).connect(gain).connect(this.master!);
     oscillator.start(when);
@@ -285,10 +300,15 @@ export class WebAudioEngine {
     if (!lane) return;
     const chokeGroup = lane.drum.chokeGroup;
     if (chokeGroup) this.choke(chokeGroup, when);
-    if (step.voice === 'kick') this.renderKick(step, when, chokeGroup);
-    else if (step.voice === 'snare') this.renderSnare(step, when, chokeGroup);
-    else if (step.voice === 'tom') this.renderTom(step, when, chokeGroup);
-    else this.renderNoiseDrum(step, when, chokeGroup);
+    const expressiveStep = {
+      ...step,
+      velocity: eventVelocity(event),
+      decay: (step.decay * eventArticulation(event)) / eventRatchetCount(event),
+    };
+    if (step.voice === 'kick') this.renderKick(expressiveStep, when, chokeGroup);
+    else if (step.voice === 'snare') this.renderSnare(expressiveStep, when, chokeGroup);
+    else if (step.voice === 'tom') this.renderTom(expressiveStep, when, chokeGroup);
+    else this.renderNoiseDrum(expressiveStep, when, chokeGroup);
   }
 
   private renderKick(step: DrumSequenceStep, when: number, chokeGroup: string | null): void {

@@ -4,6 +4,7 @@ import {
   probabilityChance,
   probabilityCurve,
   probabilityHeldCycle,
+  resolveStepVariation,
   resolveStepTrigger,
   seededProbabilityValue,
 } from './sequencer-probability';
@@ -125,5 +126,26 @@ describe('sequencer probability', () => {
 
     expect(steps.map((step) => resolveStepTrigger(7, lane, step, 0))).toEqual([false, true]);
     expect(steps.map((step) => resolveStepTrigger(7, lane, step, 0))).toEqual([false, true]);
+  });
+
+  it('resolves expression independently from trigger probability', () => {
+    const lane = {
+      ...createMelodicLane(),
+      probability: { mode: 'off' as const },
+      variation: {
+        target: 'accent' as const,
+        probability: {
+          mode: 'fixed' as const,
+          chance: 100,
+          variation: 'repeat' as const,
+          holdCycles: 1 as const,
+        },
+        amount: 0.25,
+      },
+    };
+    const step = createContourSequence(lane).find(({ candidateHit }) => candidateHit)!;
+
+    expect(resolveStepTrigger(11, lane, step, 0)).toBe(true);
+    expect(resolveStepVariation(11, lane, step, 0)).toEqual({ target: 'accent', amount: 0.25 });
   });
 });

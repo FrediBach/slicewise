@@ -22,16 +22,46 @@ const state: SequencerUiState = {
       id: 'melody-1',
       name: 'Contour pluck',
       kind: 'melodic',
+      preset: 'contour-pluck',
+      variationTarget: 'off',
       steps: 4,
       pulses: 2,
       muted: false,
       solo: false,
       activeStep: 1,
       sequence: [
-        { index: 0, candidateHit: true, willFire: true, value: 0.8, label: 'hit, MIDI 60' },
-        { index: 1, candidateHit: false, willFire: false, value: 0.4, label: 'rest, MIDI 62' },
-        { index: 2, candidateHit: true, willFire: false, value: 0.6, label: 'hit, MIDI 64' },
-        { index: 3, candidateHit: false, willFire: false, value: 0.5, label: 'rest, MIDI 67' },
+        {
+          index: 0,
+          candidateHit: true,
+          willFire: true,
+          expressive: false,
+          value: 0.8,
+          label: 'hit, MIDI 60',
+        },
+        {
+          index: 1,
+          candidateHit: false,
+          willFire: false,
+          expressive: false,
+          value: 0.4,
+          label: 'rest, MIDI 62',
+        },
+        {
+          index: 2,
+          candidateHit: true,
+          willFire: false,
+          expressive: false,
+          value: 0.6,
+          label: 'hit, MIDI 64',
+        },
+        {
+          index: 3,
+          candidateHit: false,
+          willFire: false,
+          expressive: false,
+          value: 0.5,
+          label: 'rest, MIDI 67',
+        },
       ],
     },
   ],
@@ -61,6 +91,8 @@ describe('sequencer workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Contour pluck step 1: hit, MIDI 60' }));
     await user.click(screen.getByRole('button', { name: 'Mute' }));
     await user.selectOptions(screen.getByLabelText('Contour pluck lane type'), 'drum');
+    await user.selectOptions(screen.getByLabelText('Contour pluck preset'), 'body-bass');
+    await user.selectOptions(screen.getByLabelText('Contour pluck variation'), 'accent');
     await user.selectOptions(screen.getByLabelText('MIDI export bars'), '8');
     await user.click(screen.getByRole('button', { name: 'MIDI' }));
 
@@ -69,6 +101,8 @@ describe('sequencer workspace', () => {
       { type: 'seek-step', laneId: 'melody-1', stepIndex: 0 },
       { type: 'lane-mute', laneId: 'melody-1' },
       { type: 'lane-kind', laneId: 'melody-1', kind: 'drum' },
+      { type: 'lane-preset', laneId: 'melody-1', preset: 'body-bass' },
+      { type: 'lane-variation', laneId: 'melody-1', target: 'accent' },
       { type: 'export-bars', value: 8 },
       { type: 'export-midi' },
     ]);
