@@ -68,6 +68,11 @@ import {
   sharpVertices,
   simplifyPolyline,
 } from './polyline-styling';
+import {
+  averageContourSequenceSources,
+  measureContourSlice,
+  type ContourSequenceSource,
+} from './contour-features';
 
 type NumericArray = ArrayLike<number> & Iterable<number>;
 type Vec2 = [x: number, y: number];
@@ -235,6 +240,8 @@ export interface ContourResult {
   W: number;
   H: number;
   quick: boolean;
+  /** Exact-render slice descriptors used by the optional contour sequencer. */
+  sequenceSource?: ContourSequenceSource;
 }
 
 export interface PointSegments {
@@ -2404,6 +2411,10 @@ function computeLineArtInstance(
   const runsByColor = palette.map((): Polyline[] => []);
   const runs: Polyline[] = [];
   const sourceRuns: Array<{ run: Polyline; sourceIndex: number }> = [];
+  const sequenceRuns = Array.from(
+    { length: Math.max(0, offsets.length - 1) },
+    (): Polyline[] => [],
+  );
   for (let runIndex = 0; runIndex + 1 < offsets.length; runIndex++) {
     const polyline: number[] = [];
     for (let point = offsets[runIndex]; point < offsets[runIndex + 1]; point++)
@@ -2417,9 +2428,24 @@ function computeLineArtInstance(
       const raw: Polyline = [];
       for (let point = 0; point < projectedRun.outputPoints.length; point += 3)
         raw.push(projectedRun.outputPoints[point], projectedRun.outputPoints[point + 1]);
-      if (raw.length >= 4) sourceRuns.push({ run: raw, sourceIndex: runIndex });
+      if (raw.length >= 4) {
+        sourceRuns.push({ run: raw, sourceIndex: runIndex });
+        sequenceRuns[runIndex].push(raw);
+      }
     }
   }
+  const sequenceSource: ContourSequenceSource | undefined = quick
+    ? undefined
+    : {
+        version: 1,
+        slices: Array.from({ length: Math.max(0, offsets.length - 1) }, (_, sourceIndex) =>
+          measureContourSlice(
+            sourceIndex,
+            sourceIndex / Math.max(1, offsets.length - 2),
+            sequenceRuns[sourceIndex],
+          ),
+        ),
+      };
   const yarnRuns = settings.yarnCurl
     ? selectYarnPolylines(
         sourceRuns.map(({ run }) => run),
@@ -2625,6 +2651,7 @@ ${artwork}
     W,
     H,
     quick,
+    sequenceSource,
     blueprintGeometry,
   };
 }
@@ -2837,6 +2864,7 @@ function computeContourInstance(
     10,
   );
   const curveStrength = (quality - 1) / 9;
+  let sequenceSource: ContourSequenceSource | undefined;
   if (
     fieldFeatures.continuousSpiral &&
     !fieldFeatures.divergence &&
@@ -2846,8 +2874,14 @@ function computeContourInstance(
   ) {
     const previewSettings = quick && N !== settings.lines ? { ...settings, lines: N } : settings;
     const { pts, values, segs } = spiralContours(mesh, field, previewSettings);
+    const phaseRuns = Array.from({ length: N }, (): Polyline[] => []);
     if (segs.length)
       for (const poly of chain(pts, segs)) {
+        if (!quick)
+          for (const chunk of splitPolylineByBands(poly, pts, values, N)) {
+            const indexes = Array.from({ length: chunk.pts.length / 3 }, (_, index) => index);
+            emitProjectedPath(indexes, chunk.pts, P, quality, vis, step, phaseRuns[chunk.band]);
+          }
         if (settings.gradientEnabled || indexedPalette.size) {
           const bandCount = indexedPalette.size ? N : gradient.length;
           for (const chunk of splitPolylineByBands(poly, pts, values, bandCount)) {
@@ -2876,11 +2910,22 @@ function computeContourInstance(
           }
         } else emitProjectedPath(poly, pts, P, quality, vis, step, out[0][0][0]);
       }
+    if (!quick)
+      sequenceSource = {
+        version: 1,
+        slices: phaseRuns.map((runs, index) =>
+          measureContourSlice(index, (index + 0.5) / Math.max(1, N), runs),
+        ),
+      };
   } else {
     const slices = contourSlices(mesh, settings, field, fieldFeatures, N, curveStrength);
+    const features: ContourSequenceSource['slices'] = [];
     for (let sliceIndex = 0; sliceIndex < slices.length; sliceIndex++) {
       const { position, metadata, worldPoints, polylines } = slices[sliceIndex];
-      if (!polylines.length) continue;
+      if (!polylines.length) {
+        if (!quick) features.push(measureContourSlice(sliceIndex, position, []));
+        continue;
+      }
       const explodeAmount = fieldFeatures.explodeAmount;
       const outputWorldPoints = explodeAmount
         ? explodeScalarFieldPoints(
@@ -2898,6 +2943,7 @@ function computeContourInstance(
           : 0);
       const tone = settings.halftone ? toneBand(position) : 0;
       const weight = weightBand(position, sliceIndex);
+      const projectedRuns: Polyline[] = [];
       for (const poly of polylines)
         emitProjectedPath(
           poly,
@@ -2906,11 +2952,14 @@ function computeContourInstance(
           quality,
           vis,
           step,
-          out[band][tone][weight],
+          projectedRuns,
           0,
           outputWorldPoints,
         );
+      out[band][tone][weight].push(...projectedRuns);
+      if (!quick) features.push(measureContourSlice(sliceIndex, position, projectedRuns));
     }
+    if (!quick) sequenceSource = { version: 1, slices: features };
   }
   if (settings.sil) {
     const { pts, segs } = silhouetteEdges(mesh, P);
@@ -3200,6 +3249,7 @@ ${artwork}
     W,
     H,
     quick,
+    sequenceSource,
     blueprintGeometry,
   };
 }
@@ -3348,5 +3398,6 @@ ${background}${layers}${documentOverlay(settings, blueprint)}
     W,
     H,
     quick,
+    sequenceSource: averageContourSequenceSources(results.map((result) => result.sequenceSource)),
   };
 }

@@ -1,5 +1,6 @@
 'use strict';
 import { createColorGradient, createColorPair } from './colorPair';
+import type { ContourSequenceSource } from './contour-features';
 import {
   type ContourMesh,
   type ContourResult,
@@ -163,6 +164,7 @@ type AppState = RenderSettings &
     svg: string;
     svgBytes: number;
     toolpaths: ContourToolpathGroup[];
+    sequenceSource: ContourSequenceSource | null;
     dragging: boolean;
   };
 
@@ -466,6 +468,7 @@ const state: AppState = {
   svg: '',
   svgBytes: 0,
   toolpaths: [],
+  sequenceSource: null,
   dragging: false,
 };
 const dynamicState = state as unknown as Record<string, unknown>;
@@ -621,6 +624,7 @@ if (typeof document !== 'undefined') {
     state.svg = result.svg;
     state.svgBytes = result.bytes;
     state.toolpaths = result.toolpaths || [];
+    state.sequenceSource = result.sequenceSource ?? null;
     applyPreview(result, request);
   }
   function notifyRenderWaiters(): void {

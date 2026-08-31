@@ -34,6 +34,23 @@ describe('computeContours', () => {
     expect(result.nodes).toBeGreaterThan(0);
     expect(result.toolpaths.length).toBeGreaterThan(0);
     expect(result.bytes).toBe(new TextEncoder().encode(result.svg).byteLength);
+    expect(result.sequenceSource?.version).toBe(1);
+    expect(result.sequenceSource?.slices).toHaveLength(contourSettings.lines);
+    expect(result.sequenceSource?.slices.some((slice) => slice.length > 0)).toBe(true);
+    expect(
+      result.sequenceSource?.slices.every((slice) =>
+        [
+          slice.level,
+          slice.pathCount,
+          slice.length,
+          slice.area,
+          slice.centroidX,
+          slice.centroidY,
+          slice.closedness,
+          slice.roughness,
+        ].every(Number.isFinite),
+      ),
+    ).toBe(true);
   });
 
   it('keeps quick previews lightweight and out of export toolpaths', () => {
@@ -46,6 +63,7 @@ describe('computeContours', () => {
     expect(result.svg).toContain('<path');
     expect(result.paths).toBeGreaterThan(0);
     expect(result.toolpaths).toEqual([]);
+    expect(result.sequenceSource).toBeUndefined();
   });
 
   it('allows quick previews to reach full contour and curve detail', () => {
@@ -124,6 +142,8 @@ describe('computeContours', () => {
     expect(result.toolpaths[0].label).toBe('SVG centreline');
     expect(result.toolpaths[0].runs[0]).toHaveLength(4);
     expect(result.svg).not.toMatch(/NaN|Infinity/);
+    expect(result.sequenceSource?.slices).toHaveLength(1);
+    expect(result.sequenceSource?.slices[0]).toMatchObject({ index: 0, level: 0, pathCount: 1 });
   });
 
   it('renders hyperbolic geodesics through matching SVG and G-code centreline runs', () => {
@@ -451,6 +471,15 @@ describe('computeContours', () => {
     expect(morphResult.toolpaths[0].runs[1]).toEqual(targetResult.toolpaths[0].runs[0]);
     expect(morphResult.svg).toContain('data-morph-x="0"');
     expect(morphResult.svg).toContain('data-morph-x="1"');
+    expect(morphResult.sequenceSource?.slices).toHaveLength(
+      startResult.sequenceSource?.slices.length,
+    );
+    for (let index = 0; index < (startResult.sequenceSource?.slices.length ?? 0); index++)
+      expect(morphResult.sequenceSource?.slices[index].length).toBeCloseTo(
+        ((startResult.sequenceSource?.slices[index].length ?? 0) +
+          (targetResult.sequenceSource?.slices[index].length ?? 0)) /
+          2,
+      );
   });
 
   it('retains nonlinear projection curvature in exact SVG and plotter runs', () => {

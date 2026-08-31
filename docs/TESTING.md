@@ -71,7 +71,9 @@ Coverage currently measures the focused core under active test:
 - `block-glitch.ts`
 - `colorPair.ts`
 - `contour-engine.ts`
+- `contour-features.ts`
 - `demo-meshes/index.ts`
+- `euclidean-rhythm.ts`
 - `gcode.ts`
 - `gcode-3d-toolpaths.ts`
 - `gcode-calibration.ts`
@@ -99,6 +101,7 @@ Coverage currently measures the focused core under active test:
 - `sample-and-hold.ts`
 - `scalar-fields.ts`
 - `scan-band-glitch.ts`
+- `sequencer-project.ts`
 - `slicer-export.ts`
 - `svg-mesh.ts`
 - `staggered-slices.ts`
