@@ -45,6 +45,17 @@ function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
+const contourFeatures = [
+  ['area', 'Area'],
+  ['length', 'Length'],
+  ['pathCount', 'Fragments'],
+  ['closedness', 'Closedness'],
+  ['roughness', 'Roughness'],
+  ['centroidX', 'Centroid X'],
+  ['centroidY', 'Centroid Y'],
+  ['level', 'Slice level'],
+] as const;
+
 function LaneRow({ lane }: { lane: SequencerUiLane }) {
   const presets =
     lane.kind === 'melodic'
@@ -61,90 +72,180 @@ function LaneRow({ lane }: { lane: SequencerUiLane }) {
   return (
     <div className="sequencer-lane" data-kind={lane.kind}>
       <div className="sequencer-lane-settings">
-        <strong>{lane.name}</strong>
-        <select
-          aria-label={`${lane.name} lane type`}
-          value={lane.kind}
-          onChange={(event) => command('lane-kind', { laneId: lane.id, kind: event.target.value })}
-        >
-          <option value="melodic">Melodic</option>
-          <option value="drum">Drum</option>
-        </select>
-        <select
-          aria-label={`${lane.name} preset`}
-          value={lane.preset}
-          onChange={(event) =>
-            command('lane-preset', { laneId: lane.id, preset: event.target.value })
-          }
-        >
-          {presets.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={`${lane.name} variation`}
-          value={lane.variationTarget}
-          onChange={(event) =>
-            command('lane-variation', { laneId: lane.id, target: event.target.value })
-          }
-        >
-          <option value="off">No variation</option>
-          <option value="accent">Accent</option>
-          {lane.kind === 'melodic' && <option value="octave">Octave</option>}
-          <option value="articulation">Articulation</option>
-          <option value="ratchet">Ratchet</option>
-        </select>
-        <label>
-          Steps
-          <input
-            aria-label={`${lane.name} steps`}
-            type="number"
-            min="1"
-            max="64"
-            value={lane.steps}
+        <div className="sequencer-lane-primary">
+          <strong>{lane.name}</strong>
+          <select
+            aria-label={`${lane.name} lane type`}
+            value={lane.kind}
             onChange={(event) =>
-              numericCommand('lane-steps', event.target.value, { laneId: lane.id })
+              command('lane-kind', { laneId: lane.id, kind: event.target.value })
             }
-          />
-        </label>
-        <label>
-          Pulses
-          <input
-            aria-label={`${lane.name} pulses`}
-            type="number"
-            min="0"
-            max={lane.steps}
-            value={lane.pulses}
+          >
+            <option value="melodic">Melodic</option>
+            <option value="drum">Drum</option>
+          </select>
+          <select
+            aria-label={`${lane.name} preset`}
+            value={lane.preset}
             onChange={(event) =>
-              numericCommand('lane-pulses', event.target.value, { laneId: lane.id })
+              command('lane-preset', { laneId: lane.id, preset: event.target.value })
             }
-          />
-        </label>
-        <button
-          type="button"
-          className={lane.muted ? 'is-active' : ''}
-          aria-pressed={lane.muted}
-          onClick={() => command('lane-mute', { laneId: lane.id })}
-        >
-          Mute
-        </button>
-        <button
-          type="button"
-          className={lane.solo ? 'is-active' : ''}
-          aria-pressed={lane.solo}
-          onClick={() => command('lane-solo', { laneId: lane.id })}
-        >
-          Solo
-        </button>
-        <button
-          type="button"
-          aria-label={`Delete ${lane.name}`}
-          onClick={() => command('lane-delete', { laneId: lane.id })}
-        >
-          <Trash2 size={12} />
-        </button>
+          >
+            {presets.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label={`${lane.name} variation`}
+            value={lane.variationTarget}
+            onChange={(event) =>
+              command('lane-variation', { laneId: lane.id, target: event.target.value })
+            }
+          >
+            <option value="off">No variation</option>
+            <option value="accent">Accent</option>
+            {lane.kind === 'melodic' && <option value="octave">Octave</option>}
+            <option value="articulation">Articulation</option>
+            <option value="ratchet">Ratchet</option>
+          </select>
+          <label>
+            Steps
+            <input
+              aria-label={`${lane.name} steps`}
+              type="number"
+              min="1"
+              max="64"
+              value={lane.steps}
+              onChange={(event) =>
+                numericCommand('lane-steps', event.target.value, { laneId: lane.id })
+              }
+            />
+          </label>
+          <label>
+            Pulses
+            <input
+              aria-label={`${lane.name} pulses`}
+              type="number"
+              min="0"
+              max={lane.steps}
+              value={lane.pulses}
+              onChange={(event) =>
+                numericCommand('lane-pulses', event.target.value, { laneId: lane.id })
+              }
+            />
+          </label>
+          <button
+            type="button"
+            className={lane.muted ? 'is-active' : ''}
+            aria-pressed={lane.muted}
+            onClick={() => command('lane-mute', { laneId: lane.id })}
+          >
+            Mute
+          </button>
+          <button
+            type="button"
+            className={lane.solo ? 'is-active' : ''}
+            aria-pressed={lane.solo}
+            onClick={() => command('lane-solo', { laneId: lane.id })}
+          >
+            Solo
+          </button>
+          <button
+            type="button"
+            aria-label={`Delete ${lane.name}`}
+            onClick={() => command('lane-delete', { laneId: lane.id })}
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+        <div className="sequencer-traversal-settings">
+          <label>
+            Travel
+            <select
+              aria-label={`${lane.name} slice travel direction`}
+              value={lane.direction}
+              onChange={(event) =>
+                command('lane-direction', { laneId: lane.id, direction: event.target.value })
+              }
+            >
+              <option value="forward">Forward</option>
+              <option value="reverse">Reverse</option>
+              <option value="ping-pong">Ping-pong</option>
+            </select>
+          </label>
+          <label>
+            From
+            <input
+              aria-label={`${lane.name} slice range start`}
+              type="number"
+              min="0"
+              max={lane.traversalEnd}
+              value={lane.traversalStart}
+              onChange={(event) =>
+                numericCommand('lane-traversal-start', event.target.value, { laneId: lane.id })
+              }
+            />
+          </label>
+          <label>
+            To
+            <input
+              aria-label={`${lane.name} slice range end`}
+              type="number"
+              min={lane.traversalStart}
+              max="100"
+              value={lane.traversalEnd}
+              onChange={(event) =>
+                numericCommand('lane-traversal-end', event.target.value, { laneId: lane.id })
+              }
+            />
+          </label>
+          <label>
+            Warp
+            <select
+              aria-label={`${lane.name} traversal geometry modulation`}
+              value={lane.modulationSource}
+              onChange={(event) =>
+                command('lane-traversal-source', { laneId: lane.id, source: event.target.value })
+              }
+            >
+              <option value="off">Uniform</option>
+              {contourFeatures.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Amount
+            <input
+              aria-label={`${lane.name} traversal modulation amount`}
+              type="number"
+              min="-100"
+              max="100"
+              value={lane.modulationAmount}
+              disabled={lane.modulationSource === 'off'}
+              onChange={(event) =>
+                numericCommand('lane-traversal-amount', event.target.value, { laneId: lane.id })
+              }
+            />
+          </label>
+          <label>
+            Shape
+            <input
+              aria-label={`${lane.name} contour influence`}
+              type="number"
+              min="0"
+              max="100"
+              value={lane.contourInfluence}
+              onChange={(event) =>
+                numericCommand('lane-contour-influence', event.target.value, { laneId: lane.id })
+              }
+            />
+          </label>
+        </div>
       </div>
       <div
         className="sequencer-steps"

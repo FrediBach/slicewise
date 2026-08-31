@@ -91,7 +91,11 @@ describe('createContourSequence', () => {
 
   it('keeps missing geometry deterministic and contour influence neutral', () => {
     const lane = { ...createMelodicLane(), steps: 4, contourInfluence: 0 };
-    expect(createContourSequence(lane)).toEqual(createContourSequence(lane, source));
+    const musicalValues = (sequence: ReturnType<typeof createContourSequence>) =>
+      sequence.map((step) => ({ ...step, sourceSliceIndexes: [] }));
+    expect(musicalValues(createContourSequence(lane))).toEqual(
+      musicalValues(createContourSequence(lane, source)),
+    );
   });
 });
 
@@ -110,5 +114,40 @@ describe('contourSlicesForStep', () => {
 
     expect(contourSlicesForStep(lane, source, 15).map(({ index }) => index)).toEqual([7]);
     expect(contourSlicesForStep(lane, source, -1).map(({ index }) => index)).toEqual([7]);
+  });
+
+  it('limits traversal to a lane range and dwells on geometry selected by modulation', () => {
+    const ranged = {
+      ...createMelodicLane(),
+      steps: 8,
+      traversal: {
+        start: 25,
+        end: 75,
+        modulationSource: 'off' as const,
+        modulationAmount: 0,
+      },
+    };
+    const rangedIndexes = ranged.steps
+      ? Array.from({ length: ranged.steps }, (_, index) =>
+          contourSlicesForStep(ranged, source, index).map((slice) => slice.index),
+        ).flat()
+      : [];
+    expect(Math.min(...rangedIndexes)).toBe(2);
+    expect(Math.max(...rangedIndexes)).toBe(5);
+
+    const modulated = {
+      ...createMelodicLane(),
+      steps: 16,
+      traversal: {
+        start: 0,
+        end: 100,
+        modulationSource: 'area' as const,
+        modulationAmount: 100,
+      },
+    };
+    const visits = Array.from({ length: modulated.steps }, (_, index) =>
+      contourSlicesForStep(modulated, source, index).some((slice) => slice.index === 5),
+    ).filter(Boolean);
+    expect(visits.length).toBeGreaterThan(2);
   });
 });

@@ -17,6 +17,12 @@ export interface SequencerUiLane {
   variationTarget: 'off' | 'accent' | 'octave' | 'articulation' | 'ratchet';
   steps: number;
   pulses: number;
+  direction: 'forward' | 'reverse' | 'ping-pong';
+  traversalStart: number;
+  traversalEnd: number;
+  modulationSource: string;
+  modulationAmount: number;
+  contourInfluence: number;
   muted: boolean;
   solo: boolean;
   activeStep: number;

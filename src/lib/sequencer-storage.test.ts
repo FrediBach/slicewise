@@ -57,10 +57,25 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(2);
+    expect(restored?.version).toBe(3);
     expect(restored?.lanes.map((lane) => [lane.preset, lane.variation])).toEqual([
       ['contour-pluck', { target: 'off' }],
       ['contour-kick', { target: 'off' }],
+    ]);
+    expect(restored?.lanes.every((lane) => lane.traversal.start === 0)).toBe(true);
+  });
+
+  it('migrates version-two projects to neutral full-stack traversal', () => {
+    const legacy = structuredClone(createSequencerProject()) as unknown as Record<string, unknown>;
+    legacy.version = 2;
+    for (const lane of legacy.lanes as Array<Record<string, unknown>>) delete lane.traversal;
+
+    const restored = restoreStoredSequencerProject(legacy);
+
+    expect(restored?.version).toBe(3);
+    expect(restored?.lanes.map(({ traversal }) => traversal)).toEqual([
+      { start: 0, end: 100, modulationSource: 'off', modulationAmount: 0 },
+      { start: 0, end: 100, modulationSource: 'off', modulationAmount: 0 },
     ]);
   });
 

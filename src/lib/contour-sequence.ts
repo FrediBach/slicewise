@@ -10,6 +10,7 @@ import type { DrumLane, MelodicLane, SequencerLane } from './sequencer-project';
 export interface SequenceStepBase {
   index: number;
   sourcePosition: number;
+  sourceSliceIndexes: readonly number[];
   candidateHit: boolean;
   contourValues: Readonly<Record<ContourFeatureKey, number>>;
 }
@@ -38,15 +39,54 @@ const clamp = (value: number, minimum: number, maximum: number): number =>
 const lerp = (minimum: number, maximum: number, amount: number): number =>
   minimum + (maximum - minimum) * amount;
 
-function orderedSlices(
+function traversalSlices(
   source: ContourSequenceSource | undefined,
-  direction: SequencerLane['direction'],
+  lane: SequencerLane,
 ): ContourSliceFeature[] {
   const slices = source?.slices.slice().sort((a, b) => a.index - b.index) ?? [];
-  if (direction === 'reverse') return slices.reverse();
-  if (direction === 'ping-pong' && slices.length > 2)
-    return [...slices, ...slices.slice(1, -1).reverse()];
-  return slices;
+  if (!slices.length) return [];
+  const start = Math.round((clamp(lane.traversal.start, 0, 100) / 100) * (slices.length - 1));
+  const end = Math.round((clamp(lane.traversal.end, 0, 100) / 100) * (slices.length - 1));
+  const selected = slices.slice(Math.min(start, end), Math.max(start, end) + 1);
+  if (lane.direction === 'reverse') return selected.reverse();
+  if (lane.direction === 'ping-pong' && selected.length > 2)
+    return [...selected, ...selected.slice(1, -1).reverse()];
+  return selected;
+}
+
+function traversalSliceGroups(
+  lane: SequencerLane,
+  source: ContourSequenceSource | undefined,
+): ContourSliceFeature[][] {
+  const slices = traversalSlices(source, lane);
+  if (!slices.length) return Array.from({ length: lane.steps }, () => []);
+  const { modulationSource, modulationAmount } = lane.traversal;
+  const depth = Math.abs(clamp(modulationAmount, -100, 100)) / 100;
+  const normalized =
+    modulationSource === 'off' || depth === 0
+      ? slices.map(() => 0.5)
+      : normalizeFeatureValues(slices.map((slice) => slice[modulationSource]));
+  const weights = normalized.map((value) => {
+    const shape = modulationAmount < 0 ? 1 - value : value;
+    return lerp(1, 0.15 + shape * 2.85, depth);
+  });
+  const offsets = [0];
+  for (const weight of weights) offsets.push(offsets.at(-1)! + weight);
+  const total = offsets.at(-1)!;
+  return Array.from({ length: lane.steps }, (_, stepIndex) => {
+    const start = (stepIndex * total) / lane.steps;
+    const end = ((stepIndex + 1) * total) / lane.steps;
+    const group = slices.filter(
+      (_slice, sliceIndex) => offsets[sliceIndex] < end && offsets[sliceIndex + 1] > start,
+    );
+    if (group.length) return [...new Map(group.map((slice) => [slice.index, slice])).values()];
+    const midpoint = (start + end) / 2;
+    const nearest = Math.min(
+      slices.length - 1,
+      Math.max(0, offsets.findIndex((offset) => offset > midpoint) - 1),
+    );
+    return [slices[nearest]];
+  });
 }
 
 /** Resolves a musical grid step back to the original contour slices it samples. */
@@ -55,13 +95,8 @@ export function contourSlicesForStep(
   source: ContourSequenceSource | undefined,
   stepIndex: number,
 ): ContourSliceFeature[] {
-  const slices = orderedSlices(source, lane.direction);
-  if (!slices.length) return [];
   const index = ((Math.round(stepIndex) % lane.steps) + lane.steps) % lane.steps;
-  const start = (index * slices.length) / lane.steps;
-  const end = ((index + 1) * slices.length) / lane.steps;
-  const sampled = slices.slice(Math.floor(start), Math.max(Math.floor(start) + 1, Math.ceil(end)));
-  return [...new Map(sampled.map((slice) => [slice.index, slice])).values()];
+  return traversalSliceGroups(lane, source)[index];
 }
 
 /** Area-averages a descriptor signal onto a stable musical grid. */
@@ -85,15 +120,13 @@ export function resampleFeatureValues(values: readonly number[], steps: number):
 }
 
 function mappedFeature(
-  slices: readonly ContourSliceFeature[],
+  groups: readonly (readonly ContourSliceFeature[])[],
   key: ContourFeatureKey,
-  steps: number,
   influence: number,
 ): number[] {
   const normalized = normalizeFeatureValues(
-    resampleFeatureValues(
-      slices.map((slice) => slice[key]),
-      steps,
+    groups.map((slices) =>
+      slices.length ? slices.reduce((sum, slice) => sum + slice[key], 0) / slices.length : 0,
     ),
   );
   const amount = clamp(influence, 0, 100) / 100;
@@ -112,12 +145,11 @@ const featureKeys: readonly ContourFeatureKey[] = [
 ];
 
 function mappedContourValues(
-  slices: readonly ContourSliceFeature[],
-  steps: number,
+  groups: readonly (readonly ContourSliceFeature[])[],
   influence: number,
 ): Record<ContourFeatureKey, number[]> {
   return Object.fromEntries(
-    featureKeys.map((key) => [key, mappedFeature(slices, key, steps, influence)]),
+    featureKeys.map((key) => [key, mappedFeature(groups, key, influence)]),
   ) as Record<ContourFeatureKey, number[]>;
 }
 
@@ -144,9 +176,9 @@ function sourcePosition(index: number, steps: number): number {
 
 function melodicSteps(
   lane: MelodicLane,
-  slices: readonly ContourSliceFeature[],
+  groups: readonly (readonly ContourSliceFeature[])[],
 ): MelodicSequenceStep[] {
-  const values = mappedContourValues(slices, lane.steps, lane.contourInfluence);
+  const values = mappedContourValues(groups, lane.contourInfluence);
   const pitch = values[lane.melody.pitchSource];
   const velocity = values[lane.melody.velocitySource];
   const gate = values[lane.melody.gateSource];
@@ -165,6 +197,7 @@ function melodicSteps(
     kind: 'melodic',
     index,
     sourcePosition: sourcePosition(index, notes.length),
+    sourceSliceIndexes: groups[index].map((slice) => slice.index),
     candidateHit: pattern[index],
     contourValues: Object.fromEntries(
       featureKeys.map((key) => [key, values[key][index]]),
@@ -175,8 +208,11 @@ function melodicSteps(
   }));
 }
 
-function drumSteps(lane: DrumLane, slices: readonly ContourSliceFeature[]): DrumSequenceStep[] {
-  const values = mappedContourValues(slices, lane.steps, lane.contourInfluence);
+function drumSteps(
+  lane: DrumLane,
+  groups: readonly (readonly ContourSliceFeature[])[],
+): DrumSequenceStep[] {
+  const values = mappedContourValues(groups, lane.contourInfluence);
   const velocity = values[lane.drum.velocitySource];
   const decay = values[lane.drum.decaySource];
   const tone = values[lane.drum.toneSource];
@@ -186,6 +222,7 @@ function drumSteps(lane: DrumLane, slices: readonly ContourSliceFeature[]): Drum
     kind: 'drum',
     index,
     sourcePosition: sourcePosition(index, pattern.length),
+    sourceSliceIndexes: groups[index].map((slice) => slice.index),
     candidateHit,
     contourValues: Object.fromEntries(
       featureKeys.map((key) => [key, values[key][index]]),
@@ -203,6 +240,6 @@ export function createContourSequence(
   lane: SequencerLane,
   source?: ContourSequenceSource,
 ): ContourSequenceStep[] {
-  const slices = orderedSlices(source, lane.direction);
-  return lane.kind === 'melodic' ? melodicSteps(lane, slices) : drumSteps(lane, slices);
+  const groups = traversalSliceGroups(lane, source);
+  return lane.kind === 'melodic' ? melodicSteps(lane, groups) : drumSteps(lane, groups);
 }

@@ -26,6 +26,12 @@ const state: SequencerUiState = {
       variationTarget: 'off',
       steps: 4,
       pulses: 2,
+      direction: 'forward',
+      traversalStart: 0,
+      traversalEnd: 100,
+      modulationSource: 'off',
+      modulationAmount: 0,
+      contourInfluence: 100,
       muted: false,
       solo: false,
       activeStep: 1,
@@ -141,5 +147,44 @@ describe('sequencer workspace', () => {
       { active: false },
     ]);
     document.removeEventListener('sequencerpreviewchange', onPreview);
+  });
+
+  it('publishes slice traversal and geometry modulation changes', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+
+    await user.selectOptions(
+      screen.getByLabelText('Contour pluck slice travel direction'),
+      'reverse',
+    );
+    fireEvent.change(screen.getByLabelText('Contour pluck slice range start'), {
+      target: { value: '20' },
+    });
+    fireEvent.change(screen.getByLabelText('Contour pluck slice range end'), {
+      target: { value: '80' },
+    });
+    await user.selectOptions(
+      screen.getByLabelText('Contour pluck traversal geometry modulation'),
+      'roughness',
+    );
+    fireEvent.change(screen.getByLabelText('Contour pluck traversal modulation amount'), {
+      target: { value: '-65' },
+    });
+    fireEvent.change(screen.getByLabelText('Contour pluck contour influence'), {
+      target: { value: '75' },
+    });
+
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'lane-direction', laneId: 'melody-1', direction: 'reverse' },
+      { type: 'lane-traversal-start', laneId: 'melody-1', value: 20 },
+      { type: 'lane-traversal-end', laneId: 'melody-1', value: 80 },
+      { type: 'lane-traversal-source', laneId: 'melody-1', source: 'roughness' },
+      { type: 'lane-traversal-amount', laneId: 'melody-1', value: -65 },
+      { type: 'lane-contour-influence', laneId: 'melody-1', value: 75 },
+    ]);
+    document.removeEventListener('sequencercommand', onCommand);
   });
 });

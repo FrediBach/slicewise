@@ -1612,10 +1612,17 @@ body.animation-mode .section-randomize {
 .sequencer-transport,
 .sequencer-playback,
 .sequencer-add-lanes,
-.sequencer-lane-settings {
+.sequencer-lane-primary,
+.sequencer-traversal-settings {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+.sequencer-lane-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
 }
 .sequencer-transport {
   min-width: 0;
@@ -1685,9 +1692,9 @@ body.animation-mode .section-randomize {
 .sequencer-ruler,
 .sequencer-lane {
   display: grid;
-  grid-template-columns: 510px minmax(520px, 1fr);
+  grid-template-columns: 610px minmax(520px, 1fr);
   gap: 9px;
-  min-width: 1040px;
+  min-width: 1140px;
 }
 .sequencer-ruler {
   padding: 0 4px 4px;
@@ -1709,7 +1716,7 @@ body.animation-mode .section-randomize {
   overflow: auto;
 }
 .sequencer-lane {
-  min-height: 46px;
+  min-height: 74px;
   padding: 5px 4px;
   border-top: 1px solid #d2d5d0;
 }
@@ -1725,6 +1732,12 @@ body.animation-mode .section-randomize {
 }
 .sequencer-lane-settings select {
   width: 92px;
+}
+.sequencer-traversal-settings {
+  padding-left: 91px;
+}
+.sequencer-traversal-settings select {
+  width: 82px;
 }
 .sequencer-lane-settings input {
   width: 38px;

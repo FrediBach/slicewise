@@ -1,6 +1,6 @@
 import type { ContourFeatureKey } from './contour-features';
 
-export const SEQUENCER_PROJECT_VERSION = 2 as const;
+export const SEQUENCER_PROJECT_VERSION = 3 as const;
 
 export type ScaleName =
   'minor-pentatonic' | 'major-pentatonic' | 'major' | 'natural-minor' | 'dorian' | 'chromatic';
@@ -11,6 +11,14 @@ export type MelodicLanePreset = 'contour-pluck' | 'body-bass' | 'fragmentation-p
 export type DrumLanePreset = 'contour-kick' | 'fragmented-snare' | 'roughness-percussion';
 export type LanePreset = MelodicLanePreset | DrumLanePreset;
 export type VariationTarget = 'accent' | 'octave' | 'articulation' | 'ratchet';
+
+export interface LaneTraversal {
+  start: number;
+  end: number;
+  modulationSource: ContourFeatureKey | 'off';
+  /** Negative values dwell on low feature values; positive values dwell on high values. */
+  modulationAmount: number;
+}
 
 export type LaneTiming =
   | { mode: 'grid'; subdivision: '1/4' | '1/8' | '1/16' | '1/32' }
@@ -56,6 +64,7 @@ export interface SequencerLaneBase {
   muted: boolean;
   solo: boolean;
   direction: LaneDirection;
+  traversal: LaneTraversal;
   contourInfluence: number;
   variation: LaneVariation;
 }
@@ -134,6 +143,7 @@ const laneBase = (id: string, name: string): SequencerLaneBase => ({
   muted: false,
   solo: false,
   direction: 'forward',
+  traversal: { start: 0, end: 100, modulationSource: 'off', modulationAmount: 0 },
   contourInfluence: 100,
   variation: { target: 'off' },
 });
@@ -281,6 +291,7 @@ export function applyLanePreset(lane: SequencerLane, preset: LanePreset): Sequen
       muted: lane.muted,
       solo: lane.solo,
       direction: lane.direction,
+      traversal: lane.traversal,
       contourInfluence: lane.contourInfluence,
     };
   }
@@ -342,6 +353,7 @@ export function applyLanePreset(lane: SequencerLane, preset: LanePreset): Sequen
     muted: lane.muted,
     solo: lane.solo,
     direction: lane.direction,
+    traversal: lane.traversal,
     contourInfluence: lane.contourInfluence,
   };
 }

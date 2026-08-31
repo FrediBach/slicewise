@@ -146,6 +146,12 @@ function validLane(lane: unknown): lane is SequencerLane {
     typeof lane.muted !== 'boolean' ||
     typeof lane.solo !== 'boolean' ||
     !['forward', 'reverse', 'ping-pong'].includes(String(lane.direction)) ||
+    !isRecord(lane.traversal) ||
+    !within(lane.traversal.start, 0, 100) ||
+    !within(lane.traversal.end, 0, 100) ||
+    lane.traversal.start > lane.traversal.end ||
+    !['off', ...featureKeys].includes(String(lane.traversal.modulationSource)) ||
+    !within(lane.traversal.modulationAmount, -100, 100) ||
     !within(lane.contourInfluence, 0, 100) ||
     !isRecord(lane.variation) ||
     !validVariation(lane.variation)
@@ -172,19 +178,40 @@ function validLane(lane: unknown): lane is SequencerLane {
 }
 
 function migrateProject(candidate: Record<string, unknown>): Record<string, unknown> {
-  if (candidate.version !== 1 || !Array.isArray(candidate.lanes)) return candidate;
-  return {
-    ...candidate,
-    version: SEQUENCER_PROJECT_VERSION,
-    lanes: candidate.lanes.map((lane) => {
-      if (!isRecord(lane)) return lane;
-      return {
-        ...lane,
-        preset: lane.kind === 'drum' ? 'contour-kick' : 'contour-pluck',
-        variation: { target: 'off' },
-      };
-    }),
-  };
+  if (!Array.isArray(candidate.lanes)) return candidate;
+  let migrated = candidate;
+  if (migrated.version === 1)
+    migrated = {
+      ...migrated,
+      version: 2,
+      lanes: (migrated.lanes as unknown[]).map((lane) => {
+        if (!isRecord(lane)) return lane;
+        return {
+          ...lane,
+          preset: lane.kind === 'drum' ? 'contour-kick' : 'contour-pluck',
+          variation: { target: 'off' },
+        };
+      }),
+    };
+  if (migrated.version === 2)
+    migrated = {
+      ...migrated,
+      version: SEQUENCER_PROJECT_VERSION,
+      lanes: (migrated.lanes as unknown[]).map((lane) =>
+        isRecord(lane)
+          ? {
+              ...lane,
+              traversal: {
+                start: 0,
+                end: 100,
+                modulationSource: 'off',
+                modulationAmount: 0,
+              },
+            }
+          : lane,
+      ),
+    };
+  return migrated;
 }
 
 export function restoreStoredSequencerProject(value: unknown): SequencerProject | null {

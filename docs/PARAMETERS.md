@@ -325,6 +325,20 @@ All numeric mask parameters support X and Y morph targets. This allows one morph
 
 Effects use a fixed composition order: contour generation, slice explosion, Humanizer geometry, yarn cutting and curling, Block glitch cutting and displacement, Scan-band glitch tearing, Staggered slices, Wraparound tear, Tile shuffle, Sample-and-hold, kaleidoscope mirroring, artboard and generative-mask clipping, vector zoom destination clearing/cropping/scaling, gradient and line-weight styling, halftone dashes, chromatic copies, topographic annotations, vector zoom guides, Misregistration copies with a second artboard/mask clip, then the technical blueprint overlay. All effect toggles can be enabled together. Randomization samples them independently while preserving individual locks.
 
+## Contour sequencer
+
+Sequencer projects are stored locally and each lane independently samples the exact slice descriptors from the current contour render.
+
+| Parameter | Type and default               | What it does                                                                                                                                                                |
+| --------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Travel    | Choice; **Forward**            | Moves through the selected slice range forward, in reverse, or forward then backward as a ping-pong traversal.                                                              |
+| From / To | Integers; **0% / 100%**; 0–100 | Limits the portion of the ordered contour stack available to this lane. Equal values hold the lane on one slice.                                                            |
+| Warp      | Choice; **Uniform**            | Selects area, length, fragment count, closedness, roughness, projected centroid, or slice level to modulate traversal speed. Uniform movement gives every slice equal time. |
+| Amount    | Integer; **0%**; −100–100      | Controls geometry-warp strength. Positive values dwell longer on high feature values; negative values dwell longer on low values.                                           |
+| Shape     | Integer; **100%**; 0–100       | Blends geometry-derived pitch, velocity, gate, decay, tone, pan, and automatic rotation toward neutral values without changing traversal.                                   |
+
+Traversal happens before musical mapping: range, direction, and geometry warp determine which source slices feed each step; the lane preset then maps those slices' descriptors into notes, dynamics, articulation, probability, and timbre. Hovering or focusing a step highlights its sampled slices in the main preview.
+
 ## Export
 
 | Parameter (ID)                                                       | Type and default                           | What it does                                                                                                                                                                                                                                                                                                                                                  |

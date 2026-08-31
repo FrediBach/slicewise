@@ -51,7 +51,7 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `components/controls/FormControls.tsx` contains shared numeric, colour, checkbox, morph, and randomization controls.
 - `components/controls/GradientChooser.tsx` owns editable gradient-stop state.
 - `components/ui/*` contains small, style-oriented primitives without domain behavior.
-- `components/sequencer/SequencerWorkspace.tsx` publishes `sequencerpreviewchange` while a step is hovered or focused. `lib/slicer.ts` resolves that step back to its exact projected slice descriptors and draws the centroid trail inside the transformed preview SVG; transport updates use the same overlay when no step is being inspected.
+- `components/sequencer/SequencerWorkspace.tsx` publishes `sequencerpreviewchange` while a step is hovered or focused. `lib/slicer.ts` resolves that step through its lane-specific range, direction, and geometry-warped traversal, then draws the exact sampled centroid trail inside the transformed preview SVG; transport updates use the same overlay when no step is being inspected.
 
 ### Geometry and export layer
 

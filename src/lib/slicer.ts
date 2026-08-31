@@ -118,11 +118,7 @@ import {
   type AnimationParameterDescriptor,
   type AnimationProject,
 } from './animation-project';
-import {
-  contourSlicesForStep,
-  createContourSequence,
-  type ContourSequenceStep,
-} from './contour-sequence';
+import { createContourSequence, type ContourSequenceStep } from './contour-sequence';
 import { resolveStepTrigger, resolveStepVariation } from './sequencer-probability';
 import {
   applyLanePreset,
@@ -3650,9 +3646,14 @@ if (typeof document !== 'undefined') {
   }
 
   function sequencerStepSlices(lane: SequencerLane, stepIndex: number) {
-    return contourSlicesForStep(lane, sequencerSource ?? undefined, stepIndex).filter(
+    const step = sequencerSequences.get(lane.id)?.[positiveModulo(stepIndex, lane.steps)];
+    const indexes = new Set(step?.sourceSliceIndexes ?? []);
+    return (sequencerSource?.slices ?? []).filter(
       (slice) =>
-        slice.pathCount > 0 && Number.isFinite(slice.centroidX) && Number.isFinite(slice.centroidY),
+        indexes.has(slice.index) &&
+        slice.pathCount > 0 &&
+        Number.isFinite(slice.centroidX) &&
+        Number.isFinite(slice.centroidY),
     );
   }
 
@@ -3757,6 +3758,12 @@ if (typeof document !== 'undefined') {
               variationTarget: lane.variation.target,
               steps: lane.steps,
               pulses: lane.pulses,
+              direction: lane.direction,
+              traversalStart: lane.traversal.start,
+              traversalEnd: lane.traversal.end,
+              modulationSource: lane.traversal.modulationSource,
+              modulationAmount: lane.traversal.modulationAmount,
+              contourInfluence: lane.contourInfluence,
               muted: lane.muted,
               solo: lane.solo,
               activeStep,
@@ -3768,6 +3775,12 @@ if (typeof document !== 'undefined') {
                   cycleIndex,
                 );
                 const variationLabel = variation.target === 'off' ? '' : `, ${variation.target}`;
+                const sourceSlices = sequencerStepSlices(lane, step.index).map(
+                  ({ index }) => index + 1,
+                );
+                const sourceLabel = sourceSlices.length
+                  ? `, slices ${Math.min(...sourceSlices)}–${Math.max(...sourceSlices)}`
+                  : '';
                 return {
                   index: step.index,
                   candidateHit: step.candidateHit,
@@ -3777,7 +3790,9 @@ if (typeof document !== 'undefined') {
                   label:
                     (step.kind === 'melodic'
                       ? `${step.candidateHit ? 'hit' : 'rest'}, MIDI ${step.midiNote}`
-                      : `${step.candidateHit ? 'hit' : 'rest'}, ${step.voice}`) + variationLabel,
+                      : `${step.candidateHit ? 'hit' : 'rest'}, ${step.voice}`) +
+                    variationLabel +
+                    sourceLabel,
                 };
               }),
             };
@@ -3894,6 +3909,7 @@ if (typeof document !== 'undefined') {
       muted: lane.muted,
       solo: lane.solo,
       direction: lane.direction,
+      traversal: lane.traversal,
       contourInfluence: lane.contourInfluence,
       variation: lane.variation,
     };
@@ -4554,6 +4570,66 @@ if (typeof document !== 'undefined') {
       replaceSequencerLane(laneId, (lane) => ({
         ...lane,
         pulses: clamp(Math.round(Number(detail.value)), 0, lane.steps),
+      }));
+    } else if (type === 'lane-direction') {
+      const direction = String(detail.direction);
+      if (!['forward', 'reverse', 'ping-pong'].includes(direction)) return;
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        direction: direction as SequencerLane['direction'],
+      }));
+    } else if (type === 'lane-traversal-start') {
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        traversal: {
+          ...lane.traversal,
+          start: clamp(Math.round(Number(detail.value)), 0, lane.traversal.end),
+        },
+      }));
+    } else if (type === 'lane-traversal-end') {
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        traversal: {
+          ...lane.traversal,
+          end: clamp(Math.round(Number(detail.value)), lane.traversal.start, 100),
+        },
+      }));
+    } else if (type === 'lane-traversal-source') {
+      const source = String(detail.source);
+      if (
+        ![
+          'off',
+          'level',
+          'pathCount',
+          'length',
+          'area',
+          'centroidX',
+          'centroidY',
+          'closedness',
+          'roughness',
+        ].includes(source)
+      )
+        return;
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        traversal: {
+          ...lane.traversal,
+          modulationSource: source as SequencerLane['traversal']['modulationSource'],
+          modulationAmount: source === 'off' ? 0 : lane.traversal.modulationAmount,
+        },
+      }));
+    } else if (type === 'lane-traversal-amount') {
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        traversal: {
+          ...lane.traversal,
+          modulationAmount: clamp(Math.round(Number(detail.value)), -100, 100),
+        },
+      }));
+    } else if (type === 'lane-contour-influence') {
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        contourInfluence: clamp(Math.round(Number(detail.value)), 0, 100),
       }));
     } else if (type === 'lane-mute') {
       replaceSequencerLane(laneId, (lane) => ({ ...lane, muted: !lane.muted }));
