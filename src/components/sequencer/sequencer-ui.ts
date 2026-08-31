@@ -9,10 +9,9 @@ export interface SequencerUiStep {
   label: string;
 }
 
-export interface SequencerUiLane {
+interface SequencerUiLaneBase {
   id: string;
   name: string;
-  kind: 'melodic' | 'drum';
   preset: string;
   variationTarget: 'off' | 'accent' | 'octave' | 'articulation' | 'ratchet';
   steps: number;
@@ -30,6 +29,23 @@ export interface SequencerUiLane {
   activeStep: number;
   sequence: SequencerUiStep[];
 }
+
+export type SequencerUiLane = SequencerUiLaneBase &
+  (
+    | {
+        kind: 'melodic';
+        soundVoice: 'bass' | 'pluck' | 'soft-lead';
+        oscillator: 'sine' | 'triangle' | 'sawtooth' | 'square';
+        brightness: number;
+        resonance: number;
+        subOscillator: number;
+        attack: number;
+        decay: number;
+        sustain: number;
+        release: number;
+      }
+    | { kind: 'drum'; soundVoice: string }
+  );
 
 export interface SequencerUiState {
   mode: WorkspaceMode;

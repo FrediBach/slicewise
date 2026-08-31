@@ -22,6 +22,15 @@ const state: SequencerUiState = {
       id: 'melody-1',
       name: 'Contour pluck',
       kind: 'melodic',
+      soundVoice: 'pluck',
+      oscillator: 'triangle',
+      brightness: 62,
+      resonance: 5,
+      subOscillator: 0,
+      attack: 0.004,
+      decay: 0.16,
+      sustain: 18,
+      release: 0.12,
       preset: 'contour-pluck',
       variationTarget: 'off',
       steps: 4,
@@ -87,7 +96,7 @@ describe('sequencer workspace', () => {
       screen.getByRole('button', { name: 'Contour pluck step 2: rest, MIDI 62' }),
     ).toHaveAttribute('aria-current', 'step');
     expect(screen.getByRole('tab', { name: 'Pattern' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByText(/Choose each lane’s voice/)).toBeInTheDocument();
+    expect(screen.getByText(/Choose each lane’s role/)).toBeInTheDocument();
   });
 
   it('organizes lane controls into accessible pattern and shape-mapping tabs', async () => {
@@ -119,12 +128,69 @@ describe('sequencer workspace', () => {
     patternTab.focus();
     fireEvent.keyDown(patternTab, { key: 'ArrowRight' });
 
-    expect(screen.getByRole('tab', { name: 'Shape mapping' })).toHaveFocus();
-    expect(screen.getByRole('tab', { name: 'Shape mapping' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    );
+    expect(screen.getByRole('tab', { name: 'Sound' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Sound' })).toHaveAttribute('aria-selected', 'true');
     expect(onCommand).not.toHaveBeenCalled();
+    document.removeEventListener('sequencercommand', onCommand);
+  });
+
+  it('publishes melodic timbre and envelope edits from the sound tab', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+
+    await user.click(screen.getByRole('tab', { name: 'Sound' }));
+    await user.selectOptions(screen.getByLabelText('Contour pluck oscillator waveform'), 'square');
+    fireEvent.change(screen.getByLabelText('Contour pluck envelope attack'), {
+      target: { value: '0.25' },
+    });
+    fireEvent.change(screen.getByLabelText('Contour pluck brightness'), {
+      target: { value: '80' },
+    });
+
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'lane-oscillator', laneId: 'melody-1', oscillator: 'square' },
+      { type: 'lane-attack', laneId: 'melody-1', value: 0.25 },
+      { type: 'lane-brightness', laneId: 'melody-1', value: 80 },
+    ]);
+    document.removeEventListener('sequencercommand', onCommand);
+  });
+
+  it('offers the complete synthesized drum set', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    const drumState: SequencerUiState = {
+      ...state,
+      lanes: [
+        {
+          ...state.lanes[0],
+          kind: 'drum',
+          name: 'Rhythm',
+          soundVoice: 'kick',
+        },
+      ],
+    };
+    act(() =>
+      document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: drumState })),
+    );
+
+    await user.click(screen.getByRole('tab', { name: 'Sound' }));
+    const instrument = screen.getByLabelText('Rhythm drum instrument');
+    expect(instrument).toContainHTML('value="rimshot"');
+    expect(instrument).toContainHTML('value="high-conga"');
+    expect(instrument).toContainHTML('value="crash"');
+    expect(instrument).toContainHTML('value="ride"');
+    await user.selectOptions(instrument, 'cowbell');
+
+    expect((onCommand.mock.calls.at(-1)?.[0] as CustomEvent).detail).toEqual({
+      type: 'lane-drum-voice',
+      laneId: 'melody-1',
+      voice: 'cowbell',
+    });
     document.removeEventListener('sequencercommand', onCommand);
   });
 

@@ -274,25 +274,41 @@ export class WebAudioEngine {
       3,
     );
     const oscillator = context.createOscillator();
+    const subOscillator = context.createOscillator();
+    const subGain = context.createGain();
     const filter = context.createBiquadFilter();
     const gain = context.createGain();
-    oscillator.type =
-      lane.melody.voice === 'bass'
-        ? 'sawtooth'
-        : lane.melody.voice === 'soft-lead'
-          ? 'sine'
-          : 'triangle';
-    oscillator.frequency.setValueAtTime(midiFrequency(eventMidiNote(event)), when);
+    const frequency = midiFrequency(eventMidiNote(event));
+    oscillator.type = lane.melody.oscillator;
+    oscillator.frequency.setValueAtTime(frequency, when);
+    subOscillator.type = 'sine';
+    subOscillator.frequency.setValueAtTime(frequency / 2, when);
+    subGain.gain.value = lane.melody.subOscillator * 0.55;
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(700 + step.velocity * 4200, when);
-    filter.Q.value = lane.melody.voice === 'pluck' ? 5 : 1.2;
+    filter.frequency.setValueAtTime(
+      clamp(180 + lane.melody.brightness ** 2 * 12_000 * (0.65 + step.velocity * 0.35), 80, 18_000),
+      when,
+    );
+    filter.Q.value = lane.melody.resonance;
+    const peak = eventVelocity(event) * 0.25;
+    const attack = Math.min(lane.melody.attack, duration * 0.8);
+    const gateEnd = when + duration;
+    const attackEnd = when + attack;
+    const decayEnd = Math.min(gateEnd, attackEnd + lane.melody.decay);
+    const sustainGain = Math.max(0.0001, peak * lane.melody.sustain);
     gain.gain.setValueAtTime(0.0001, when);
-    gain.gain.linearRampToValueAtTime(eventVelocity(event) * 0.28, when + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
-    oscillator.connect(filter).connect(gain).connect(this.master!);
+    gain.gain.linearRampToValueAtTime(peak, attackEnd);
+    gain.gain.exponentialRampToValueAtTime(sustainGain, decayEnd);
+    gain.gain.setValueAtTime(sustainGain, gateEnd);
+    gain.gain.exponentialRampToValueAtTime(0.0001, gateEnd + lane.melody.release);
+    oscillator.connect(filter);
+    subOscillator.connect(subGain).connect(filter);
+    filter.connect(gain).connect(this.master!);
     oscillator.start(when);
-    oscillator.stop(when + duration + 0.02);
-    this.registerVoice([oscillator]);
+    subOscillator.start(when);
+    oscillator.stop(gateEnd + lane.melody.release + 0.02);
+    subOscillator.stop(gateEnd + lane.melody.release + 0.02);
+    this.registerVoice([oscillator, subOscillator]);
   }
 
   private renderDrum(event: PlayableSequencerEvent, step: DrumSequenceStep, when: number): void {
@@ -307,7 +323,12 @@ export class WebAudioEngine {
     };
     if (step.voice === 'kick') this.renderKick(expressiveStep, when, chokeGroup);
     else if (step.voice === 'snare') this.renderSnare(expressiveStep, when, chokeGroup);
-    else if (step.voice === 'tom') this.renderTom(expressiveStep, when, chokeGroup);
+    else if (step.voice.endsWith('-tom') || step.voice.endsWith('-conga'))
+      this.renderPitchedDrum(expressiveStep, when, chokeGroup);
+    else if (step.voice === 'rimshot') this.renderRimshot(expressiveStep, when, chokeGroup);
+    else if (step.voice === 'cowbell') this.renderCowbell(expressiveStep, when, chokeGroup);
+    else if (step.voice === 'crash' || step.voice === 'ride')
+      this.renderCymbal(expressiveStep, when, chokeGroup);
     else this.renderNoiseDrum(expressiveStep, when, chokeGroup);
   }
 
@@ -326,12 +347,17 @@ export class WebAudioEngine {
     this.registerVoice([oscillator], chokeGroup);
   }
 
-  private renderTom(step: DrumSequenceStep, when: number, chokeGroup: string | null): void {
+  private renderPitchedDrum(step: DrumSequenceStep, when: number, chokeGroup: string | null): void {
     const context = this.context!;
     const oscillator = context.createOscillator();
     const gain = context.createGain();
-    oscillator.type = 'sine';
-    const frequency = 80 + step.tone * 150;
+    oscillator.type = step.voice.endsWith('-conga') ? 'triangle' : 'sine';
+    const voiceBase = step.voice.startsWith('low-')
+      ? 82
+      : step.voice.startsWith('high-')
+        ? 165
+        : 118;
+    const frequency = voiceBase * (0.8 + step.tone * 0.5);
     oscillator.frequency.setValueAtTime(frequency * 1.35, when);
     oscillator.frequency.exponentialRampToValueAtTime(frequency, when + 0.06);
     gain.gain.setValueAtTime(step.velocity * 0.55, when);
@@ -340,6 +366,75 @@ export class WebAudioEngine {
     oscillator.start(when);
     oscillator.stop(when + clamp(step.decay, 0.08, 1) + 0.02);
     this.registerVoice([oscillator], chokeGroup);
+  }
+
+  private renderRimshot(step: DrumSequenceStep, when: number, chokeGroup: string | null): void {
+    const context = this.context!;
+    const high = context.createOscillator();
+    const low = context.createOscillator();
+    const gain = context.createGain();
+    high.type = 'square';
+    low.type = 'sine';
+    high.frequency.value = 1350 + step.tone * 650;
+    low.frequency.value = 420 + step.tone * 180;
+    gain.gain.setValueAtTime(step.velocity * 0.22, when);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + clamp(step.decay, 0.025, 0.12));
+    high.connect(gain);
+    low.connect(gain).connect(this.outputForPan(step.pan));
+    high.start(when);
+    low.start(when);
+    high.stop(when + 0.13);
+    low.stop(when + 0.13);
+    this.registerVoice([high, low], chokeGroup);
+  }
+
+  private renderCowbell(step: DrumSequenceStep, when: number, chokeGroup: string | null): void {
+    const context = this.context!;
+    const first = context.createOscillator();
+    const second = context.createOscillator();
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    first.type = second.type = 'square';
+    first.frequency.value = 540 + step.tone * 80;
+    second.frequency.value = 800 + step.tone * 120;
+    filter.type = 'bandpass';
+    filter.frequency.value = 1100;
+    filter.Q.value = 3;
+    const duration = clamp(step.decay, 0.08, 0.7);
+    gain.gain.setValueAtTime(step.velocity * 0.18, when);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+    first.connect(filter);
+    second.connect(filter);
+    filter.connect(gain).connect(this.outputForPan(step.pan));
+    first.start(when);
+    second.start(when);
+    first.stop(when + duration + 0.02);
+    second.stop(when + duration + 0.02);
+    this.registerVoice([first, second], chokeGroup);
+  }
+
+  private renderCymbal(step: DrumSequenceStep, when: number, chokeGroup: string | null): void {
+    const context = this.context!;
+    const filter = context.createBiquadFilter();
+    const gain = context.createGain();
+    const sources: OscillatorNode[] = [];
+    const duration =
+      step.voice === 'crash' ? clamp(step.decay, 0.35, 2.4) : clamp(step.decay, 0.2, 1.5);
+    filter.type = 'highpass';
+    filter.frequency.value = step.voice === 'crash' ? 2800 : 4200;
+    gain.gain.setValueAtTime(step.velocity * 0.12, when);
+    gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
+    for (const ratio of [1, 1.34, 1.79, 2.31, 2.93, 3.61]) {
+      const oscillator = context.createOscillator();
+      oscillator.type = 'square';
+      oscillator.frequency.value = (310 + step.tone * 170) * ratio;
+      oscillator.connect(filter);
+      oscillator.start(when);
+      oscillator.stop(when + duration + 0.02);
+      sources.push(oscillator);
+    }
+    filter.connect(gain).connect(this.outputForPan(step.pan));
+    this.registerVoice(sources, chokeGroup);
   }
 
   private renderSnare(step: DrumSequenceStep, when: number, chokeGroup: string | null): void {

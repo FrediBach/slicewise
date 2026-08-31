@@ -1,4 +1,5 @@
 import {
+  DRUM_VOICE_OPTIONS,
   SEQUENCER_PROJECT_VERSION,
   type SequencerLane,
   type SequencerProject,
@@ -40,6 +41,7 @@ const scales = [
   'dorian',
   'chromatic',
 ];
+const melodicOscillators = ['sine', 'triangle', 'sawtooth', 'square'];
 
 function within(value: unknown, minimum: number, maximum: number): value is number {
   return finite(value) && value >= minimum && value <= maximum;
@@ -94,6 +96,14 @@ function validMelody(value: Record<string, unknown>): boolean {
     within(value.maximumLeap, 0, 127) &&
     Number.isInteger(value.maximumLeap) &&
     ['bass', 'pluck', 'soft-lead'].includes(String(value.voice)) &&
+    melodicOscillators.includes(String(value.oscillator)) &&
+    within(value.brightness, 0, 1) &&
+    within(value.resonance, 0, 20) &&
+    within(value.subOscillator, 0, 1) &&
+    within(value.attack, 0.001, 2) &&
+    within(value.decay, 0.01, 3) &&
+    within(value.sustain, 0, 1) &&
+    within(value.release, 0.01, 5) &&
     within(value.gateMinimum, 0, 1) &&
     within(value.gateMaximum, 0, 1) &&
     within(value.velocityMinimum, 0, 1) &&
@@ -104,7 +114,7 @@ function validMelody(value: Record<string, unknown>): boolean {
 
 function validDrum(value: Record<string, unknown>): boolean {
   return (
-    ['kick', 'snare', 'closed-hat', 'open-hat', 'clap', 'tom'].includes(String(value.voice)) &&
+    DRUM_VOICE_OPTIONS.some(({ value: voice }) => voice === value.voice) &&
     within(value.midiNote, 0, 127) &&
     Number.isInteger(value.midiNote) &&
     featureKeys.includes(String(value.velocitySource)) &&
@@ -215,7 +225,7 @@ function migrateProject(candidate: Record<string, unknown>): Record<string, unkn
   if (migrated.version === 3)
     migrated = {
       ...migrated,
-      version: SEQUENCER_PROJECT_VERSION,
+      version: 4,
       lanes: (migrated.lanes as unknown[]).map((lane, index) => {
         if (!isRecord(lane) || !isRecord(lane.traversal)) return lane;
         return {
@@ -225,6 +235,54 @@ function migrateProject(candidate: Record<string, unknown>): Record<string, unkn
             trackPosition: index % 2 === 0 ? 25 : 75,
           },
         };
+      }),
+    };
+  if (migrated.version === 4)
+    migrated = {
+      ...migrated,
+      version: SEQUENCER_PROJECT_VERSION,
+      lanes: (migrated.lanes as unknown[]).map((lane) => {
+        if (!isRecord(lane)) return lane;
+        if (lane.kind === 'melodic' && isRecord(lane.melody)) {
+          const voice = String(lane.melody.voice);
+          const sound =
+            voice === 'bass'
+              ? {
+                  oscillator: 'sawtooth',
+                  brightness: 0.38,
+                  resonance: 1.2,
+                  subOscillator: 0.45,
+                  attack: 0.01,
+                  decay: 0.22,
+                  sustain: 0.55,
+                  release: 0.18,
+                }
+              : voice === 'soft-lead'
+                ? {
+                    oscillator: 'sine',
+                    brightness: 0.55,
+                    resonance: 1.2,
+                    subOscillator: 0,
+                    attack: 0.04,
+                    decay: 0.3,
+                    sustain: 0.7,
+                    release: 0.4,
+                  }
+                : {
+                    oscillator: 'triangle',
+                    brightness: 0.62,
+                    resonance: 5,
+                    subOscillator: 0,
+                    attack: 0.004,
+                    decay: 0.16,
+                    sustain: 0.18,
+                    release: 0.12,
+                  };
+          return { ...lane, melody: { ...lane.melody, ...sound } };
+        }
+        if (lane.kind === 'drum' && isRecord(lane.drum) && lane.drum.voice === 'tom')
+          return { ...lane, drum: { ...lane.drum, voice: 'mid-tom', midiNote: 47 } };
+        return lane;
       }),
     };
   return migrated;

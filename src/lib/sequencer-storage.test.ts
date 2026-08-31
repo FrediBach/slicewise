@@ -57,7 +57,7 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(4);
+    expect(restored?.version).toBe(5);
     expect(restored?.lanes.map((lane) => [lane.preset, lane.variation])).toEqual([
       ['contour-pluck', { target: 'off' }],
       ['contour-kick', { target: 'off' }],
@@ -72,7 +72,7 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(4);
+    expect(restored?.version).toBe(5);
     expect(restored?.lanes.map(({ traversal }) => traversal)).toEqual([
       {
         start: 0,
@@ -101,8 +101,41 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(4);
+    expect(restored?.version).toBe(5);
     expect(restored?.lanes.map((lane) => lane.traversal.trackPosition)).toEqual([25, 75]);
+  });
+
+  it('migrates version-four melodic envelopes and the legacy generic tom', () => {
+    const legacy = structuredClone(createSequencerProject()) as unknown as Record<string, unknown>;
+    legacy.version = 4;
+    const lanes = legacy.lanes as Array<Record<string, unknown>>;
+    const melody = lanes[0].melody as Record<string, unknown>;
+    for (const key of [
+      'oscillator',
+      'brightness',
+      'resonance',
+      'subOscillator',
+      'attack',
+      'decay',
+      'sustain',
+      'release',
+    ])
+      delete melody[key];
+    const drum = lanes[1].drum as Record<string, unknown>;
+    drum.voice = 'tom';
+    drum.midiNote = 45;
+
+    const restored = restoreStoredSequencerProject(legacy);
+
+    expect(restored?.version).toBe(5);
+    expect(restored?.lanes[0]).toMatchObject({
+      kind: 'melodic',
+      melody: { oscillator: 'triangle', brightness: 0.62, attack: 0.004 },
+    });
+    expect(restored?.lanes[1]).toMatchObject({
+      kind: 'drum',
+      drum: { voice: 'mid-tom', midiNote: 47 },
+    });
   });
 
   it('returns null for unavailable or malformed local storage', () => {

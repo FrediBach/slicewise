@@ -125,6 +125,7 @@ import {
   createDrumLane,
   createMelodicLane,
   createSequencerProject,
+  DRUM_VOICE_OPTIONS,
   setLaneVariationTarget,
   type LanePreset,
   type SequencerLane,
@@ -3768,6 +3769,19 @@ if (typeof document !== 'undefined') {
               modulationSource: lane.traversal.modulationSource,
               modulationAmount: lane.traversal.modulationAmount,
               contourInfluence: lane.contourInfluence,
+              soundVoice: lane.kind === 'melodic' ? lane.melody.voice : lane.drum.voice,
+              ...(lane.kind === 'melodic'
+                ? {
+                    oscillator: lane.melody.oscillator,
+                    brightness: Math.round(lane.melody.brightness * 100),
+                    resonance: lane.melody.resonance,
+                    subOscillator: Math.round(lane.melody.subOscillator * 100),
+                    attack: lane.melody.attack,
+                    decay: lane.melody.decay,
+                    sustain: Math.round(lane.melody.sustain * 100),
+                    release: lane.melody.release,
+                  }
+                : {}),
               muted: lane.muted,
               solo: lane.solo,
               activeStep,
@@ -4684,6 +4698,79 @@ if (typeof document !== 'undefined') {
           return applyLanePreset(lane as never, preset as never) as SequencerLane;
         return lane;
       });
+    } else if (type === 'lane-drum-voice') {
+      const voice = String(detail.voice);
+      const option = DRUM_VOICE_OPTIONS.find((candidate) => candidate.value === voice);
+      if (!option) return;
+      replaceSequencerLane(laneId, (lane) =>
+        lane.kind === 'drum'
+          ? {
+              ...lane,
+              drum: {
+                ...lane.drum,
+                voice: option.value,
+                midiNote: option.midiNote,
+                chokeGroup: option.chokeGroup,
+              },
+            }
+          : lane,
+      );
+    } else if (type === 'lane-melodic-voice') {
+      const voice = String(detail.voice);
+      if (!['bass', 'pluck', 'soft-lead'].includes(voice)) return;
+      replaceSequencerLane(laneId, (lane) =>
+        lane.kind === 'melodic'
+          ? { ...lane, melody: { ...lane.melody, voice: voice as typeof lane.melody.voice } }
+          : lane,
+      );
+    } else if (type === 'lane-oscillator') {
+      const oscillator = String(detail.oscillator);
+      if (!['sine', 'triangle', 'sawtooth', 'square'].includes(oscillator)) return;
+      replaceSequencerLane(laneId, (lane) =>
+        lane.kind === 'melodic'
+          ? {
+              ...lane,
+              melody: {
+                ...lane.melody,
+                oscillator: oscillator as typeof lane.melody.oscillator,
+              },
+            }
+          : lane,
+      );
+    } else if (
+      [
+        'lane-brightness',
+        'lane-resonance',
+        'lane-sub-oscillator',
+        'lane-attack',
+        'lane-decay',
+        'lane-sustain',
+        'lane-release',
+      ].includes(type)
+    ) {
+      type SoundNumberKey =
+        'brightness' | 'resonance' | 'subOscillator' | 'attack' | 'decay' | 'sustain' | 'release';
+      const ranges: Record<string, [SoundNumberKey, number, number, number]> = {
+        'lane-brightness': ['brightness', 0, 100, 0.01],
+        'lane-resonance': ['resonance', 0, 20, 1],
+        'lane-sub-oscillator': ['subOscillator', 0, 100, 0.01],
+        'lane-attack': ['attack', 0.001, 2, 1],
+        'lane-decay': ['decay', 0.01, 3, 1],
+        'lane-sustain': ['sustain', 0, 100, 0.01],
+        'lane-release': ['release', 0.01, 5, 1],
+      };
+      const [key, minimum, maximum, scale] = ranges[type];
+      replaceSequencerLane(laneId, (lane) =>
+        lane.kind === 'melodic'
+          ? {
+              ...lane,
+              melody: {
+                ...lane.melody,
+                [key]: clamp(Number(detail.value), minimum, maximum) * scale,
+              },
+            }
+          : lane,
+      );
     } else if (type === 'lane-variation') {
       const target = String(detail.target);
       if (!['off', 'accent', 'octave', 'articulation', 'ratchet'].includes(target)) return;

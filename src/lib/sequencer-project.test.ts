@@ -4,6 +4,7 @@ import {
   createDrumLane,
   createMelodicLane,
   createSequencerProject,
+  drumVoiceDefaults,
   setLaneVariationTarget,
 } from './sequencer-project';
 
@@ -11,7 +12,7 @@ describe('sequencer project defaults', () => {
   it('creates a versioned project with deterministic melodic and drum lanes', () => {
     const project = createSequencerProject();
 
-    expect(project.version).toBe(4);
+    expect(project.version).toBe(5);
     expect(project.lanes).toEqual([createMelodicLane(), createDrumLane()]);
     expect(project.lanes[0]).toMatchObject({
       kind: 'melodic',
@@ -27,7 +28,21 @@ describe('sequencer project defaults', () => {
       },
       contourInfluence: 100,
       probability: { mode: 'off' },
+      melody: {
+        oscillator: 'triangle',
+        brightness: 0.62,
+        attack: 0.004,
+        decay: 0.16,
+        sustain: 0.18,
+        release: 0.12,
+      },
     });
+  });
+
+  it('provides General MIDI and choke defaults for the expanded drum kit', () => {
+    expect(drumVoiceDefaults('open-hat')).toMatchObject({ midiNote: 46, chokeGroup: 'hats' });
+    expect(drumVoiceDefaults('cowbell')).toMatchObject({ midiNote: 56, chokeGroup: null });
+    expect(drumVoiceDefaults('crash')).toMatchObject({ midiNote: 49 });
   });
 
   it('uses an explicit drum-only settings branch', () => {

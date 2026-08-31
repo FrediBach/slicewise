@@ -1,8 +1,9 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { Download, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { DRUM_VOICE_OPTIONS } from '../../lib/sequencer-project';
 import type { SequencerUiLane, SequencerUiState } from './sequencer-ui';
 
-type SequencerTab = 'pattern' | 'mapping';
+type SequencerTab = 'pattern' | 'sound' | 'mapping';
 
 const initialSequencerUiState: SequencerUiState = {
   mode: 'config',
@@ -57,6 +58,91 @@ const contourFeatures = [
   ['centroidY', 'Centroid Y'],
   ['level', 'Slice level'],
 ] as const;
+
+const melodicSoundControls = [
+  ['brightness', 'Brightness %', 'brightness', 0, 100, 1],
+  ['resonance', 'Resonance', 'filter resonance', 0, 20, 0.1],
+  ['subOscillator', 'Sub oscillator %', 'sub oscillator', 0, 100, 1],
+  ['attack', 'Attack (s)', 'envelope attack', 0.001, 2, 0.001],
+  ['decay', 'Decay (s)', 'envelope decay', 0.01, 3, 0.01],
+  ['sustain', 'Sustain %', 'envelope sustain', 0, 100, 1],
+  ['release', 'Release (s)', 'envelope release', 0.01, 5, 0.01],
+] as const;
+
+function SoundControls({ lane }: { lane: SequencerUiLane }) {
+  if (lane.kind === 'drum')
+    return (
+      <label>
+        <span>Drum instrument</span>
+        <select
+          aria-label={`${lane.name} drum instrument`}
+          value={lane.soundVoice}
+          onChange={(event) =>
+            command('lane-drum-voice', { laneId: lane.id, voice: event.target.value })
+          }
+        >
+          {DRUM_VOICE_OPTIONS.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  return (
+    <>
+      <label>
+        <span>Synth character</span>
+        <select
+          aria-label={`${lane.name} synth character`}
+          value={lane.soundVoice}
+          onChange={(event) =>
+            command('lane-melodic-voice', { laneId: lane.id, voice: event.target.value })
+          }
+        >
+          <option value="pluck">Pluck</option>
+          <option value="bass">Bass</option>
+          <option value="soft-lead">Soft lead</option>
+        </select>
+      </label>
+      <label>
+        <span>Waveform</span>
+        <select
+          aria-label={`${lane.name} oscillator waveform`}
+          value={lane.oscillator}
+          onChange={(event) =>
+            command('lane-oscillator', { laneId: lane.id, oscillator: event.target.value })
+          }
+        >
+          <option value="sine">Sine</option>
+          <option value="triangle">Triangle</option>
+          <option value="sawtooth">Sawtooth</option>
+          <option value="square">Square / pulse</option>
+        </select>
+      </label>
+      {melodicSoundControls.map(([key, label, aria, minimum, maximum, step]) => (
+        <label key={key}>
+          <span>{label}</span>
+          <input
+            aria-label={`${lane.name} ${aria}`}
+            type="number"
+            min={minimum}
+            max={maximum}
+            step={step}
+            value={lane[key]}
+            onChange={(event) =>
+              numericCommand(
+                `lane-${key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`,
+                event.target.value,
+                { laneId: lane.id },
+              )
+            }
+          />
+        </label>
+      ))}
+    </>
+  );
+}
 
 function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: SequencerTab }) {
   const presets =
@@ -208,6 +294,9 @@ function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: Sequen
                 />
               </label>
             </div>
+          </div>
+          <div className="sequencer-tab-panel" hidden={activeTab !== 'sound'}>
+            <SoundControls lane={lane} />
           </div>
           <div className="sequencer-tab-panel" hidden={activeTab !== 'mapping'}>
             <label>
@@ -472,10 +561,12 @@ export function SequencerWorkspace() {
           onKeyDown={(event) => {
             if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
             event.preventDefault();
-            const nextTab = activeTab === 'pattern' ? 'mapping' : 'pattern';
+            const tabsInOrder: SequencerTab[] = ['pattern', 'sound', 'mapping'];
+            const offset = event.key === 'ArrowRight' ? 1 : -1;
+            const nextTab = tabsInOrder[(tabsInOrder.indexOf(activeTab) + offset + 3) % 3];
             setActiveTab(nextTab);
             const tabs = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
-            tabs[nextTab === 'pattern' ? 0 : 1]?.focus();
+            tabs[tabsInOrder.indexOf(nextTab)]?.focus();
           }}
         >
           <button
@@ -490,6 +581,15 @@ export function SequencerWorkspace() {
           <button
             type="button"
             role="tab"
+            aria-selected={activeTab === 'sound'}
+            tabIndex={activeTab === 'sound' ? 0 : -1}
+            onClick={() => setActiveTab('sound')}
+          >
+            Sound
+          </button>
+          <button
+            type="button"
+            role="tab"
             aria-selected={activeTab === 'mapping'}
             tabIndex={activeTab === 'mapping' ? 0 : -1}
             onClick={() => setActiveTab('mapping')}
@@ -499,8 +599,10 @@ export function SequencerWorkspace() {
         </div>
         <p id={`sequencer-${activeTab}-description`}>
           {activeTab === 'pattern'
-            ? 'Choose each lane’s voice, rhythmic cycle, and the musical detail shaped by the contours.'
-            : 'Choose a distinct point around the contour, then control how the lane travels through the slice stack.'}
+            ? 'Choose each lane’s role, rhythmic cycle, and the musical detail shaped by the contours.'
+            : activeTab === 'sound'
+              ? 'Shape each melodic envelope and timbre, or choose an 808/909-inspired percussion instrument.'
+              : 'Choose a distinct point around the contour, then control how the lane travels through the slice stack.'}
         </p>
         <div className="sequencer-add-lanes">
           <button type="button" onClick={() => command('lane-add', { kind: 'melodic' })}>

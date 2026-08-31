@@ -1,6 +1,6 @@
 import type { ContourFeatureKey } from './contour-features';
 
-export const SEQUENCER_PROJECT_VERSION = 4 as const;
+export const SEQUENCER_PROJECT_VERSION = 5 as const;
 
 export type ScaleName =
   'minor-pentatonic' | 'major-pentatonic' | 'major' | 'natural-minor' | 'dorian' | 'chromatic';
@@ -11,6 +11,50 @@ export type MelodicLanePreset = 'contour-pluck' | 'body-bass' | 'fragmentation-p
 export type DrumLanePreset = 'contour-kick' | 'fragmented-snare' | 'roughness-percussion';
 export type LanePreset = MelodicLanePreset | DrumLanePreset;
 export type VariationTarget = 'accent' | 'octave' | 'articulation' | 'ratchet';
+export type MelodicOscillator = 'sine' | 'triangle' | 'sawtooth' | 'square';
+export type DrumVoice =
+  | 'kick'
+  | 'snare'
+  | 'closed-hat'
+  | 'open-hat'
+  | 'clap'
+  | 'rimshot'
+  | 'low-tom'
+  | 'mid-tom'
+  | 'high-tom'
+  | 'low-conga'
+  | 'mid-conga'
+  | 'high-conga'
+  | 'cowbell'
+  | 'crash'
+  | 'ride';
+
+export const DRUM_VOICE_OPTIONS: ReadonlyArray<{
+  value: DrumVoice;
+  label: string;
+  midiNote: number;
+  chokeGroup: string | null;
+}> = [
+  { value: 'kick', label: 'Kick', midiNote: 36, chokeGroup: null },
+  { value: 'snare', label: 'Snare', midiNote: 38, chokeGroup: null },
+  { value: 'clap', label: 'Hand clap', midiNote: 39, chokeGroup: null },
+  { value: 'rimshot', label: 'Rimshot', midiNote: 37, chokeGroup: null },
+  { value: 'closed-hat', label: 'Closed hi-hat', midiNote: 42, chokeGroup: 'hats' },
+  { value: 'open-hat', label: 'Open hi-hat', midiNote: 46, chokeGroup: 'hats' },
+  { value: 'low-tom', label: 'Low tom', midiNote: 45, chokeGroup: null },
+  { value: 'mid-tom', label: 'Mid tom', midiNote: 47, chokeGroup: null },
+  { value: 'high-tom', label: 'High tom', midiNote: 50, chokeGroup: null },
+  { value: 'low-conga', label: 'Low conga', midiNote: 64, chokeGroup: null },
+  { value: 'mid-conga', label: 'Mid conga', midiNote: 62, chokeGroup: null },
+  { value: 'high-conga', label: 'High conga', midiNote: 63, chokeGroup: null },
+  { value: 'cowbell', label: 'Cowbell', midiNote: 56, chokeGroup: null },
+  { value: 'crash', label: 'Crash cymbal', midiNote: 49, chokeGroup: null },
+  { value: 'ride', label: 'Ride cymbal', midiNote: 51, chokeGroup: null },
+];
+
+export function drumVoiceDefaults(voice: DrumVoice) {
+  return DRUM_VOICE_OPTIONS.find((option) => option.value === voice) ?? DRUM_VOICE_OPTIONS[0];
+}
 
 export interface LaneTraversal {
   start: number;
@@ -83,6 +127,14 @@ export interface MelodicLaneSettings {
   voiceLeading: number;
   maximumLeap: number;
   voice: 'bass' | 'pluck' | 'soft-lead';
+  oscillator: MelodicOscillator;
+  brightness: number;
+  resonance: number;
+  subOscillator: number;
+  attack: number;
+  decay: number;
+  sustain: number;
+  release: number;
   gateMinimum: number;
   gateMaximum: number;
   velocityMinimum: number;
@@ -91,7 +143,7 @@ export interface MelodicLaneSettings {
 }
 
 export interface DrumLaneSettings {
-  voice: 'kick' | 'snare' | 'closed-hat' | 'open-hat' | 'clap' | 'tom';
+  voice: DrumVoice;
   midiNote: number;
   velocitySource: ContourFeatureKey;
   decaySource: ContourFeatureKey;
@@ -171,6 +223,14 @@ export function createMelodicLane(
       voiceLeading: 0.75,
       maximumLeap: 7,
       voice: 'pluck',
+      oscillator: 'triangle',
+      brightness: 0.62,
+      resonance: 5,
+      subOscillator: 0,
+      attack: 0.004,
+      decay: 0.16,
+      sustain: 0.18,
+      release: 0.12,
       gateMinimum: 0.25,
       gateMaximum: 0.9,
       velocityMinimum: 0.35,
@@ -247,6 +307,14 @@ export function applyLanePreset(lane: SequencerLane, preset: LanePreset): Sequen
         melody: {
           ...lane.melody,
           voice: 'bass',
+          oscillator: 'sawtooth',
+          brightness: 0.38,
+          resonance: 1.2,
+          subOscillator: 0.45,
+          attack: 0.01,
+          decay: 0.22,
+          sustain: 0.55,
+          release: 0.18,
           pitchSource: 'area',
           velocitySource: 'length',
           gateSource: 'closedness',
@@ -271,6 +339,14 @@ export function applyLanePreset(lane: SequencerLane, preset: LanePreset): Sequen
         melody: {
           ...lane.melody,
           voice: 'pluck',
+          oscillator: 'square',
+          brightness: 0.72,
+          resonance: 6.5,
+          subOscillator: 0,
+          attack: 0.002,
+          decay: 0.1,
+          sustain: 0.08,
+          release: 0.08,
           pitchSource: 'centroidY',
           velocitySource: 'pathCount',
           gateSource: 'closedness',
