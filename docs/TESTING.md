@@ -72,6 +72,7 @@ Coverage currently measures the focused core under active test:
 - `colorPair.ts`
 - `contour-engine.ts`
 - `contour-features.ts`
+- `contour-sequence.ts`
 - `demo-meshes/index.ts`
 - `euclidean-rhythm.ts`
 - `gcode.ts`
@@ -91,6 +92,7 @@ Coverage currently measures the focused core under active test:
 - `mesh-geodesics.ts`
 - `mesh-topology.ts`
 - `misregistration.ts`
+- `music-quantization.ts`
 - `parameter-history.ts`
 - `parameter-migrations.ts`
 - `paper-orientation.ts`

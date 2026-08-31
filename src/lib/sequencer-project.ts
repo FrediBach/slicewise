@@ -53,6 +53,8 @@ export interface MelodicLaneSettings {
   lowestOctave: number;
   octaveRange: 1 | 2 | 3;
   pitchSource: ContourFeatureKey;
+  velocitySource: ContourFeatureKey;
+  gateSource: ContourFeatureKey;
   invertPitch: boolean;
   voiceLeading: number;
   maximumLeap: number;
@@ -67,6 +69,10 @@ export interface MelodicLaneSettings {
 export interface DrumLaneSettings {
   voice: 'kick' | 'snare' | 'closed-hat' | 'open-hat' | 'clap' | 'tom';
   midiNote: number;
+  velocitySource: ContourFeatureKey;
+  decaySource: ContourFeatureKey;
+  toneSource: ContourFeatureKey;
+  panSource: ContourFeatureKey;
   velocityMinimum: number;
   velocityMaximum: number;
   decayMinimum: number;
@@ -110,7 +116,7 @@ const laneBase = (id: string, name: string): SequencerLaneBase => ({
   muted: false,
   solo: false,
   direction: 'forward',
-  contourInfluence: 1,
+  contourInfluence: 100,
 });
 
 export function createMelodicLane(id = 'melody-1', name = 'Contour pluck'): MelodicLane {
@@ -123,6 +129,8 @@ export function createMelodicLane(id = 'melody-1', name = 'Contour pluck'): Melo
       lowestOctave: 3,
       octaveRange: 2,
       pitchSource: 'area',
+      velocitySource: 'length',
+      gateSource: 'closedness',
       invertPitch: false,
       voiceLeading: 0.75,
       maximumLeap: 7,
@@ -144,6 +152,10 @@ export function createDrumLane(id = 'drum-1', name = 'Contour kick'): DrumLane {
     drum: {
       voice: 'kick',
       midiNote: 36,
+      velocitySource: 'area',
+      decaySource: 'closedness',
+      toneSource: 'roughness',
+      panSource: 'centroidX',
       velocityMinimum: 0.45,
       velocityMaximum: 1,
       decayMinimum: 0.12,

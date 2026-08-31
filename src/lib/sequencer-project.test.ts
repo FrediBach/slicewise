@@ -12,6 +12,7 @@ describe('sequencer project defaults', () => {
       steps: 16,
       pulses: 5,
       rotation: 'auto',
+      contourInfluence: 100,
       probability: { mode: 'off' },
     });
   });
