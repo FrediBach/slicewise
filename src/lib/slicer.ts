@@ -3757,6 +3757,10 @@ if (typeof document !== 'undefined') {
               variationTarget: lane.variation.target,
               steps: lane.steps,
               pulses: lane.pulses,
+              clockDivision:
+                lane.timing.mode === 'grid'
+                  ? lane.timing.subdivision
+                  : (`fit-${lane.timing.cycleBars}` as const),
               direction: lane.direction,
               traversalStart: lane.traversal.start,
               traversalEnd: lane.traversal.end,
@@ -4571,6 +4575,28 @@ if (typeof document !== 'undefined') {
         ...lane,
         pulses: clamp(Math.round(Number(detail.value)), 0, lane.steps),
       }));
+    } else if (type === 'lane-clock-division') {
+      const division = String(detail.division);
+      if (['1/4', '1/8', '1/16', '1/32'].includes(division)) {
+        replaceSequencerLane(laneId, (lane) => ({
+          ...lane,
+          timing: {
+            mode: 'grid',
+            subdivision: division as Extract<
+              SequencerLane['timing'],
+              { mode: 'grid' }
+            >['subdivision'],
+          },
+        }));
+      } else if (['fit-1', 'fit-2', 'fit-4'].includes(division)) {
+        replaceSequencerLane(laneId, (lane) => ({
+          ...lane,
+          timing: {
+            mode: 'fit',
+            cycleBars: Number(division.slice(4)) as 1 | 2 | 4,
+          },
+        }));
+      }
     } else if (type === 'lane-direction') {
       const direction = String(detail.direction);
       if (!['forward', 'reverse', 'ping-pong'].includes(direction)) return;

@@ -26,6 +26,7 @@ const state: SequencerUiState = {
       variationTarget: 'off',
       steps: 4,
       pulses: 2,
+      clockDivision: '1/16',
       direction: 'forward',
       traversalStart: 0,
       traversalEnd: 100,
@@ -140,6 +141,7 @@ describe('sequencer workspace', () => {
     await user.selectOptions(screen.getByLabelText('Contour pluck lane type'), 'drum');
     await user.selectOptions(screen.getByLabelText('Contour pluck preset'), 'body-bass');
     await user.selectOptions(screen.getByLabelText('Contour pluck variation'), 'accent');
+    await user.selectOptions(screen.getByLabelText('Contour pluck clock divider'), '1/8');
     await user.selectOptions(screen.getByLabelText('MIDI export bars'), '8');
     await user.click(screen.getByRole('button', { name: 'MIDI' }));
 
@@ -150,6 +152,7 @@ describe('sequencer workspace', () => {
       { type: 'lane-kind', laneId: 'melody-1', kind: 'drum' },
       { type: 'lane-preset', laneId: 'melody-1', preset: 'body-bass' },
       { type: 'lane-variation', laneId: 'melody-1', target: 'accent' },
+      { type: 'lane-clock-division', laneId: 'melody-1', division: '1/8' },
       { type: 'export-bars', value: 8 },
       { type: 'export-midi' },
     ]);

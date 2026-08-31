@@ -155,6 +155,31 @@ function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: Sequen
                 <option value="ratchet">Ratchet</option>
               </select>
             </label>
+            <label>
+              <span>Clock divider</span>
+              <select
+                aria-label={`${lane.name} clock divider`}
+                value={lane.clockDivision}
+                onChange={(event) =>
+                  command('lane-clock-division', {
+                    laneId: lane.id,
+                    division: event.target.value,
+                  })
+                }
+              >
+                <optgroup label="Grid clock">
+                  <option value="1/4">1/4 note</option>
+                  <option value="1/8">1/8 note</option>
+                  <option value="1/16">1/16 note</option>
+                  <option value="1/32">1/32 note</option>
+                </optgroup>
+                <optgroup label="Fit full cycle">
+                  <option value="fit-1">Fit to 1 bar</option>
+                  <option value="fit-2">Fit to 2 bars</option>
+                  <option value="fit-4">Fit to 4 bars</option>
+                </optgroup>
+              </select>
+            </label>
             <div className="sequencer-field-pair">
               <label>
                 <span>Cycle steps</span>

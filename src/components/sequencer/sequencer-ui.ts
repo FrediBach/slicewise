@@ -17,6 +17,7 @@ export interface SequencerUiLane {
   variationTarget: 'off' | 'accent' | 'octave' | 'articulation' | 'ratchet';
   steps: number;
   pulses: number;
+  clockDivision: '1/4' | '1/8' | '1/16' | '1/32' | 'fit-1' | 'fit-2' | 'fit-4';
   direction: 'forward' | 'reverse' | 'ping-pong';
   traversalStart: number;
   traversalEnd: number;
