@@ -12,6 +12,8 @@ The Sequencer transport provides play/pause, return to start, a bar/beat readout
 
 Each lane exposes its melodic/drum type, **1–64** steps, **0–Steps** Euclidean pulses, mute, solo, deletion, and an accessible step grid. The initial project contains one contour-mapped pluck lane and one synthesized kick lane. Add Melody and Add Drum create independent rows. Changing lane type uses that type's explicit defaults while retaining shared rhythm, timing, probability, mute, solo, direction, and contour-influence settings.
 
+Sequencer edits autosave the versioned musical project to browser-local storage; source meshes, artwork, and contour descriptors are not stored. MIDI export requires the current exact shape and an explicit duration of **1, 2, 4, 8, 16, or 32 bars** (default **4**). The format-1 file contains a tempo/time-signature conductor track, one track per lane, melodic program assignments, and General MIDI channel-10 percussion. Muting, soloing, rational lane timing, swing, and seeded probability use the same event compiler as live playback.
+
 ## Source model
 
 | Parameter (ID)                          | Type and default                   | What it does                                                                                                                                                                                                                                                |

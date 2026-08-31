@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import { Download, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import type { SequencerUiLane, SequencerUiState } from './sequencer-ui';
 
 const initialSequencerUiState: SequencerUiState = {
@@ -11,6 +11,8 @@ const initialSequencerUiState: SequencerUiState = {
   tempo: 110,
   pendingShape: false,
   hasExactSource: false,
+  canExport: false,
+  exportBars: 4,
   lanes: [],
 };
 
@@ -196,6 +198,28 @@ export function SequencerWorkspace() {
             <Plus size={13} /> Drum
           </button>
         </div>
+        <label>
+          Export
+          <select
+            aria-label="MIDI export bars"
+            value={state.exportBars}
+            onChange={(event) => numericCommand('export-bars', event.target.value)}
+          >
+            {[1, 2, 4, 8, 16, 32].map((bars) => (
+              <option key={bars} value={bars}>
+                {bars} bars
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          type="button"
+          className="sequencer-midi-export"
+          disabled={!state.canExport}
+          onClick={() => command('export-midi')}
+        >
+          <Download size={13} /> MIDI
+        </button>
         <span className={state.pendingShape ? 'sequencer-pending is-pending' : 'sequencer-pending'}>
           {state.pendingShape
             ? 'Pending shape · next bar'

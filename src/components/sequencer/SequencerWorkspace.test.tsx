@@ -15,6 +15,8 @@ const state: SequencerUiState = {
   tempo: 110,
   pendingShape: true,
   hasExactSource: true,
+  canExport: true,
+  exportBars: 4,
   lanes: [
     {
       id: 'melody-1',
@@ -59,12 +61,16 @@ describe('sequencer workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Contour pluck step 1: hit, MIDI 60' }));
     await user.click(screen.getByRole('button', { name: 'Mute' }));
     await user.selectOptions(screen.getByLabelText('Contour pluck lane type'), 'drum');
+    await user.selectOptions(screen.getByLabelText('MIDI export bars'), '8');
+    await user.click(screen.getByRole('button', { name: 'MIDI' }));
 
     expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
       { type: 'play-toggle' },
       { type: 'seek-step', laneId: 'melody-1', stepIndex: 0 },
       { type: 'lane-mute', laneId: 'melody-1' },
       { type: 'lane-kind', laneId: 'melody-1', kind: 'drum' },
+      { type: 'export-bars', value: 8 },
+      { type: 'export-midi' },
     ]);
     document.removeEventListener('sequencercommand', onCommand);
   });

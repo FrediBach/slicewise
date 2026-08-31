@@ -135,6 +135,8 @@ import {
   TRANSPORT_PPQ,
 } from './sequencer-playback';
 import { WebAudioEngine } from './web-audio-engine';
+import { exportSequencerMidi, sequencerMidiFilename } from './midi-sequence-export';
+import { loadSequencerProject, saveSequencerProject } from './sequencer-storage';
 
 type RawMesh = {
   verts: Float32Array | Float64Array;
@@ -3564,6 +3566,10 @@ if (typeof document !== 'undefined') {
   let sequencerAwaitingExact = false;
   let sequencerSwapTick: number | null = null;
   let sequencerPlayheadFrame = 0;
+  let sequencerExportBars = 4;
+  let sequencerStorageLoaded = false;
+  let sequencerSaveTimer = 0;
+  let sequencerSaveFailed = false;
   let nextSequencerLaneId = 2;
   const sequencerEngine = new WebAudioEngine({
     onSequenceSwap: (tick) => {
@@ -3649,6 +3655,11 @@ if (typeof document !== 'undefined') {
           tempo: sequencerProject.tempo,
           pendingShape: sequencerAwaitingExact || sequencerSwapTick !== null,
           hasExactSource: sequencerSource !== null,
+          canExport:
+            sequencerSource !== null &&
+            !sequencerAwaitingExact &&
+            sequencerProject.lanes.length > 0,
+          exportBars: sequencerExportBars,
           lanes: sequencerProject.lanes.map((lane) => {
             const duration = tickValue(laneStepDuration(sequencerProject, lane));
             const absoluteStep = Math.floor(playheadTick / duration);
@@ -3705,6 +3716,11 @@ if (typeof document !== 'undefined') {
   function enterSequencerMode(): void {
     if (sequencerMode || animationExporting) return;
     if (animationMode) leaveAnimationMode();
+    if (!sequencerStorageLoaded) {
+      const stored = loadSequencerProject();
+      if (stored) sequencerProject = stored;
+      sequencerStorageLoaded = true;
+    }
     sequencerMode = true;
     sequencerSource = state.sequenceSource;
     sequencerAwaitingExact = sequencerSource === null;
@@ -3726,6 +3742,31 @@ if (typeof document !== 'undefined') {
   function updateSequencerProject(project: SequencerProject): void {
     sequencerProject = project;
     rebuildSequencerPhrase();
+    clearTimeout(sequencerSaveTimer);
+    sequencerSaveTimer = setTimeout(() => {
+      try {
+        saveSequencerProject(sequencerProject);
+        sequencerSaveFailed = false;
+      } catch {
+        if (!sequencerSaveFailed) toast('Sequencer autosave is unavailable');
+        sequencerSaveFailed = true;
+      }
+    }, 250);
+  }
+
+  function downloadSequencerMidi(): void {
+    if (!sequencerSource || sequencerAwaitingExact || !sequencerProject.lanes.length) {
+      toast('Wait for the current exact shape before exporting MIDI');
+      return;
+    }
+    const bytes = exportSequencerMidi(sequencerProject, sequencerSequences, sequencerExportBars);
+    const blob = new Blob([new Uint8Array(bytes).buffer], { type: 'audio/midi' });
+    const anchor = document.createElement('a');
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = sequencerMidiFilename(sequencerProject.name);
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(anchor.href), 1000);
+    toast(`Saved ${anchor.download}`);
   }
 
   function replaceSequencerLane(
@@ -4392,6 +4433,12 @@ if (typeof document !== 'undefined') {
         ...sequencerProject,
         tempo: clamp(Math.round(Number(detail.value)), 40, 240),
       });
+    } else if (type === 'export-bars') {
+      const requested = Math.round(Number(detail.value));
+      if ([1, 2, 4, 8, 16, 32].includes(requested)) sequencerExportBars = requested;
+      publishSequencerState();
+    } else if (type === 'export-midi') {
+      downloadSequencerMidi();
     } else if (type === 'lane-steps') {
       replaceSequencerLane(laneId, (lane) => {
         const steps = clamp(Math.round(Number(detail.value)), 1, 64);
@@ -4415,7 +4462,14 @@ if (typeof document !== 'undefined') {
         lanes: sequencerProject.lanes.filter((lane) => lane.id !== laneId),
       });
     } else if (type === 'lane-add') {
-      const id = `${detail.kind === 'drum' ? 'drum' : 'melody'}-${nextSequencerLaneId++}`;
+      if (sequencerProject.lanes.length >= 64) {
+        toast('Sequencer supports up to 64 lanes');
+        return;
+      }
+      const prefix = detail.kind === 'drum' ? 'drum' : 'melody';
+      let id = '';
+      do id = `${prefix}-${nextSequencerLaneId++}`;
+      while (sequencerProject.lanes.some((lane) => lane.id === id));
       const lane =
         detail.kind === 'drum'
           ? createDrumLane(id, `Contour drum ${nextSequencerLaneId - 1}`)

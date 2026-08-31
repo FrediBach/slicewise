@@ -29,5 +29,7 @@ export interface SequencerUiState {
   tempo: number;
   pendingShape: boolean;
   hasExactSource: boolean;
+  canExport: boolean;
+  exportBars: number;
   lanes: SequencerUiLane[];
 }
