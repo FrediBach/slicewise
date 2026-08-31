@@ -1,5 +1,15 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { Download, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Dices,
+  Download,
+  Pause,
+  Play,
+  Plus,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react';
 import { DRUM_VOICE_OPTIONS } from '../../lib/sequencer-project';
 import type { SequencerUiLane, SequencerUiState } from './sequencer-ui';
 
@@ -145,6 +155,7 @@ function SoundControls({ lane }: { lane: SequencerUiLane }) {
 }
 
 function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: SequencerTab }) {
+  const [collapsed, setCollapsed] = useState(false);
   const presets =
     lane.kind === 'melodic'
       ? [
@@ -158,7 +169,12 @@ function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: Sequen
           ['roughness-percussion', 'Rough percussion'],
         ];
   return (
-    <div className="sequencer-lane" data-kind={lane.kind}>
+    <div
+      className="sequencer-lane"
+      data-kind={lane.kind}
+      data-collapsed={collapsed ? '' : undefined}
+      style={{ '--lane-color': lane.color } as CSSProperties}
+    >
       <header className="sequencer-lane-header">
         <div className="sequencer-lane-title">
           <span className="sequencer-lane-kind" aria-hidden="true" />
@@ -168,6 +184,22 @@ function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: Sequen
           </div>
         </div>
         <div className="sequencer-lane-actions">
+          <button
+            type="button"
+            aria-label={`Randomize ${lane.name} ${activeTab} settings`}
+            title={`Randomize visible ${activeTab} settings`}
+            onClick={() => command('lane-randomize', { laneId: lane.id, section: activeTab })}
+          >
+            <Dices size={12} /> Randomize
+          </button>
+          <button
+            type="button"
+            aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${lane.name}`}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((value) => !value)}
+          >
+            {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          </button>
           <button
             type="button"
             className={lane.muted ? 'is-active' : ''}
@@ -193,7 +225,7 @@ function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: Sequen
           </button>
         </div>
       </header>
-      <div className="sequencer-lane-body">
+      <div className="sequencer-lane-body" hidden={collapsed}>
         <div className="sequencer-lane-settings">
           <div className="sequencer-tab-panel" hidden={activeTab !== 'pattern'}>
             <label>

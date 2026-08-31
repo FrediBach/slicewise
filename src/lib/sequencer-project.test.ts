@@ -5,6 +5,8 @@ import {
   createMelodicLane,
   createSequencerProject,
   drumVoiceDefaults,
+  randomizeLaneSection,
+  sequencerLaneColor,
   setLaneVariationTarget,
 } from './sequencer-project';
 
@@ -12,10 +14,11 @@ describe('sequencer project defaults', () => {
   it('creates a versioned project with deterministic melodic and drum lanes', () => {
     const project = createSequencerProject();
 
-    expect(project.version).toBe(5);
+    expect(project.version).toBe(6);
     expect(project.lanes).toEqual([createMelodicLane(), createDrumLane()]);
     expect(project.lanes[0]).toMatchObject({
       kind: 'melodic',
+      color: '#3267c7',
       steps: 16,
       pulses: 5,
       rotation: 'auto',
@@ -37,6 +40,23 @@ describe('sequencer project defaults', () => {
         release: 0.12,
       },
     });
+  });
+
+  it('assigns stable palette colors and randomizes only the selected lane section', () => {
+    expect(sequencerLaneColor(0)).not.toBe(sequencerLaneColor(1));
+    expect(sequencerLaneColor(8)).toBe(sequencerLaneColor(0));
+
+    const lane = createMelodicLane();
+    const pattern = randomizeLaneSection(lane, 'pattern', () => 0.5);
+    const sound = randomizeLaneSection(lane, 'sound', () => 0.5);
+    const mapping = randomizeLaneSection(lane, 'mapping', () => 0.5);
+
+    expect(pattern).toMatchObject({ steps: 16, pulses: 8, color: lane.color });
+    expect(pattern.kind === 'melodic' && pattern.melody).toEqual(lane.melody);
+    expect(sound.traversal).toEqual(lane.traversal);
+    expect(sound.kind === 'melodic' && sound.melody.brightness).toBeCloseTo(0.55);
+    expect(mapping.steps).toBe(lane.steps);
+    expect(mapping.traversal).not.toEqual(lane.traversal);
   });
 
   it('provides General MIDI and choke defaults for the expanded drum kit', () => {

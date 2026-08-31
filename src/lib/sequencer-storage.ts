@@ -1,6 +1,7 @@
 import {
   DRUM_VOICE_OPTIONS,
   SEQUENCER_PROJECT_VERSION,
+  sequencerLaneColor,
   type SequencerLane,
   type SequencerProject,
 } from './sequencer-project';
@@ -139,6 +140,8 @@ function validLane(lane: unknown): lane is SequencerLane {
     typeof lane.id !== 'string' ||
     !lane.id.trim() ||
     typeof lane.name !== 'string' ||
+    typeof lane.color !== 'string' ||
+    !/^#[0-9a-f]{6}$/i.test(lane.color) ||
     !finite(lane.steps) ||
     lane.steps < 1 ||
     lane.steps > 64 ||
@@ -240,7 +243,7 @@ function migrateProject(candidate: Record<string, unknown>): Record<string, unkn
   if (migrated.version === 4)
     migrated = {
       ...migrated,
-      version: SEQUENCER_PROJECT_VERSION,
+      version: 5,
       lanes: (migrated.lanes as unknown[]).map((lane) => {
         if (!isRecord(lane)) return lane;
         if (lane.kind === 'melodic' && isRecord(lane.melody)) {
@@ -284,6 +287,14 @@ function migrateProject(candidate: Record<string, unknown>): Record<string, unkn
           return { ...lane, drum: { ...lane.drum, voice: 'mid-tom', midiNote: 47 } };
         return lane;
       }),
+    };
+  if (migrated.version === 5)
+    migrated = {
+      ...migrated,
+      version: SEQUENCER_PROJECT_VERSION,
+      lanes: (migrated.lanes as unknown[]).map((lane, index) =>
+        isRecord(lane) ? { ...lane, color: sequencerLaneColor(index) } : lane,
+      ),
     };
   return migrated;
 }

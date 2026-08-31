@@ -126,6 +126,8 @@ import {
   createMelodicLane,
   createSequencerProject,
   DRUM_VOICE_OPTIONS,
+  randomizeLaneSection,
+  sequencerLaneColor,
   setLaneVariationTarget,
   type LanePreset,
   type SequencerLane,
@@ -3695,6 +3697,7 @@ if (typeof document !== 'undefined') {
         'class',
         `sequencer-source-highlight is-${lane.kind}${inspected ? ' is-inspected' : ''}`,
       );
+      group.style.color = lane.color;
       const title = document.createElementNS(namespace, 'title');
       const indexes = slices.map(({ index }) => index + 1);
       title.textContent = `${lane.name}, step ${stepIndex + 1}: source slices ${Math.min(...indexes)}–${Math.max(...indexes)}, contour point ${lane.traversal.trackPosition}%`;
@@ -3712,10 +3715,22 @@ if (typeof document !== 'undefined') {
       const stride = Math.max(1, Math.ceil(slices.length / 24));
       for (let index = 0; index < slices.length; index += stride) {
         const [x, y] = routePoints[index];
-        const marker = document.createElementNS(namespace, 'circle');
-        marker.setAttribute('cx', String(x));
-        marker.setAttribute('cy', String(y));
-        marker.setAttribute('r', inspected ? '2.4' : '1.7');
+        const marker = document.createElementNS(
+          namespace,
+          lane.kind === 'drum' ? 'rect' : 'circle',
+        );
+        if (lane.kind === 'drum') {
+          const size = inspected ? 4.2 : 3;
+          marker.setAttribute('x', String(x - size / 2));
+          marker.setAttribute('y', String(y - size / 2));
+          marker.setAttribute('width', String(size));
+          marker.setAttribute('height', String(size));
+          marker.setAttribute('transform', `rotate(45 ${x} ${y})`);
+        } else {
+          marker.setAttribute('cx', String(x));
+          marker.setAttribute('cy', String(y));
+          marker.setAttribute('r', inspected ? '2.4' : '1.7');
+        }
         marker.setAttribute('class', 'sequencer-source-marker');
         group.appendChild(marker);
       }
@@ -3753,6 +3768,7 @@ if (typeof document !== 'undefined') {
             return {
               id: lane.id,
               name: lane.name,
+              color: lane.color,
               kind: lane.kind,
               preset: lane.preset,
               variationTarget: lane.variation.target,
@@ -3929,6 +3945,7 @@ if (typeof document !== 'undefined') {
       direction: lane.direction,
       traversal: lane.traversal,
       contourInfluence: lane.contourInfluence,
+      color: lane.color,
       variation: lane.variation,
     };
   }
@@ -4777,6 +4794,12 @@ if (typeof document !== 'undefined') {
       replaceSequencerLane(laneId, (lane) =>
         setLaneVariationTarget(lane, target as Parameters<typeof setLaneVariationTarget>[1]),
       );
+    } else if (type === 'lane-randomize') {
+      const section = String(detail.section);
+      if (!['pattern', 'sound', 'mapping'].includes(section)) return;
+      replaceSequencerLane(laneId, (lane) =>
+        randomizeLaneSection(lane, section as Parameters<typeof randomizeLaneSection>[1]),
+      );
     } else if (type === 'lane-delete') {
       updateSequencerProject({
         ...sequencerProject,
@@ -4795,8 +4818,13 @@ if (typeof document !== 'undefined') {
         detail.kind === 'drum'
           ? createDrumLane(id, `Contour drum ${nextSequencerLaneId - 1}`)
           : createMelodicLane(id, `Contour melody ${nextSequencerLaneId - 1}`);
+      const usedColors = new Set(sequencerProject.lanes.map(({ color }) => color.toLowerCase()));
+      const availableColor = Array.from({ length: 8 }, (_, index) =>
+        sequencerLaneColor(index),
+      ).find((color) => !usedColors.has(color.toLowerCase()));
       const lane: SequencerLane = {
         ...createdLane,
+        color: availableColor ?? sequencerLaneColor(nextSequencerLaneId - 1),
         traversal: {
           ...createdLane.traversal,
           trackPosition: (25 + sequencerProject.lanes.length * 37) % 101,

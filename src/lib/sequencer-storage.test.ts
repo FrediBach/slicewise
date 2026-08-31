@@ -57,7 +57,7 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(5);
+    expect(restored?.version).toBe(6);
     expect(restored?.lanes.map((lane) => [lane.preset, lane.variation])).toEqual([
       ['contour-pluck', { target: 'off' }],
       ['contour-kick', { target: 'off' }],
@@ -72,7 +72,7 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(5);
+    expect(restored?.version).toBe(6);
     expect(restored?.lanes.map(({ traversal }) => traversal)).toEqual([
       {
         start: 0,
@@ -101,7 +101,7 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(5);
+    expect(restored?.version).toBe(6);
     expect(restored?.lanes.map((lane) => lane.traversal.trackPosition)).toEqual([25, 75]);
   });
 
@@ -127,7 +127,7 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(5);
+    expect(restored?.version).toBe(6);
     expect(restored?.lanes[0]).toMatchObject({
       kind: 'melodic',
       melody: { oscillator: 'triangle', brightness: 0.62, attack: 0.004 },
@@ -136,6 +136,17 @@ describe('sequencer storage', () => {
       kind: 'drum',
       drum: { voice: 'mid-tom', midiNote: 47 },
     });
+  });
+
+  it('migrates version-five projects to stable per-lane colors', () => {
+    const legacy = structuredClone(createSequencerProject()) as unknown as Record<string, unknown>;
+    legacy.version = 5;
+    for (const lane of legacy.lanes as Array<Record<string, unknown>>) delete lane.color;
+
+    const restored = restoreStoredSequencerProject(legacy);
+
+    expect(restored?.version).toBe(6);
+    expect(restored?.lanes.map(({ color }) => color)).toEqual(['#3267c7', '#d0643f']);
   });
 
   it('returns null for unavailable or malformed local storage', () => {

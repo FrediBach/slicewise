@@ -12,6 +12,7 @@ export interface SequencerUiStep {
 interface SequencerUiLaneBase {
   id: string;
   name: string;
+  color: string;
   preset: string;
   variationTarget: 'off' | 'accent' | 'octave' | 'articulation' | 'ratchet';
   steps: number;

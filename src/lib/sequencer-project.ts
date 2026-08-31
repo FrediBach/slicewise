@@ -1,6 +1,6 @@
 import type { ContourFeatureKey } from './contour-features';
 
-export const SEQUENCER_PROJECT_VERSION = 5 as const;
+export const SEQUENCER_PROJECT_VERSION = 6 as const;
 
 export type ScaleName =
   'minor-pentatonic' | 'major-pentatonic' | 'major' | 'natural-minor' | 'dorian' | 'chromatic';
@@ -11,6 +11,7 @@ export type MelodicLanePreset = 'contour-pluck' | 'body-bass' | 'fragmentation-p
 export type DrumLanePreset = 'contour-kick' | 'fragmented-snare' | 'roughness-percussion';
 export type LanePreset = MelodicLanePreset | DrumLanePreset;
 export type VariationTarget = 'accent' | 'octave' | 'articulation' | 'ratchet';
+export type LaneRandomizeSection = 'pattern' | 'sound' | 'mapping';
 export type MelodicOscillator = 'sine' | 'triangle' | 'sawtooth' | 'square';
 export type DrumVoice =
   | 'kick'
@@ -51,6 +52,24 @@ export const DRUM_VOICE_OPTIONS: ReadonlyArray<{
   { value: 'crash', label: 'Crash cymbal', midiNote: 49, chokeGroup: null },
   { value: 'ride', label: 'Ride cymbal', midiNote: 51, chokeGroup: null },
 ];
+
+export const SEQUENCER_LANE_COLORS = [
+  '#3267c7',
+  '#d0643f',
+  '#6f55b5',
+  '#268b7d',
+  '#bc4f82',
+  '#9a7624',
+  '#467d3c',
+  '#9b5548',
+] as const;
+
+export function sequencerLaneColor(index: number): string {
+  return SEQUENCER_LANE_COLORS[
+    ((Math.round(index) % SEQUENCER_LANE_COLORS.length) + SEQUENCER_LANE_COLORS.length) %
+      SEQUENCER_LANE_COLORS.length
+  ];
+}
 
 export function drumVoiceDefaults(voice: DrumVoice) {
   return DRUM_VOICE_OPTIONS.find((option) => option.value === voice) ?? DRUM_VOICE_OPTIONS[0];
@@ -100,6 +119,7 @@ export type LaneVariation =
 export interface SequencerLaneBase {
   id: string;
   name: string;
+  color: string;
   steps: number;
   pulses: number;
   rotation: number | 'auto';
@@ -184,9 +204,15 @@ export interface SequencerProject {
   lanes: SequencerLane[];
 }
 
-const laneBase = (id: string, name: string, trackPosition: number): SequencerLaneBase => ({
+const laneBase = (
+  id: string,
+  name: string,
+  trackPosition: number,
+  color: string,
+): SequencerLaneBase => ({
   id,
   name,
+  color,
   steps: 16,
   pulses: 5,
   rotation: 'auto',
@@ -208,7 +234,7 @@ export function createMelodicLane(
   preset: MelodicLanePreset = 'contour-pluck',
 ): MelodicLane {
   const lane: MelodicLane = {
-    ...laneBase(id, name, 25),
+    ...laneBase(id, name, 25, sequencerLaneColor(0)),
     kind: 'melodic',
     preset: 'contour-pluck',
     melody: {
@@ -247,7 +273,7 @@ export function createDrumLane(
   preset: DrumLanePreset = 'contour-kick',
 ): DrumLane {
   const lane: DrumLane = {
-    ...laneBase(id, name, 75),
+    ...laneBase(id, name, 75, sequencerLaneColor(1)),
     pulses: 4,
     kind: 'drum',
     preset: 'contour-kick',
@@ -371,6 +397,7 @@ export function applyLanePreset(lane: SequencerLane, preset: LanePreset): Sequen
       direction: lane.direction,
       traversal: lane.traversal,
       contourInfluence: lane.contourInfluence,
+      color: lane.color,
     };
   }
   if (preset === 'fragmented-snare')
@@ -433,6 +460,7 @@ export function applyLanePreset(lane: SequencerLane, preset: LanePreset): Sequen
     direction: lane.direction,
     traversal: lane.traversal,
     contourInfluence: lane.contourInfluence,
+    color: lane.color,
   };
 }
 
@@ -459,6 +487,99 @@ export function setLaneVariationTarget(
       probability: contourCondition(source, 15, 70),
       amount:
         target === 'octave' ? 12 : target === 'ratchet' ? 2 : target === 'accent' ? 0.25 : 0.5,
+    },
+  };
+}
+
+const pick = <T>(values: readonly T[], random: () => number): T =>
+  values[Math.min(values.length - 1, Math.floor(random() * values.length))];
+const randomInteger = (minimum: number, maximum: number, random: () => number): number =>
+  minimum + Math.floor(random() * (maximum - minimum + 1));
+const randomRange = (minimum: number, maximum: number, random: () => number): number =>
+  minimum + random() * (maximum - minimum);
+
+/** Randomizes only the settings visible in one sequencer tab. */
+export function randomizeLaneSection(
+  lane: SequencerLane,
+  section: LaneRandomizeSection,
+  random: () => number = Math.random,
+): SequencerLane {
+  if (section === 'pattern') {
+    const steps = pick([8, 12, 16, 24, 32], random);
+    const variation = pick(
+      lane.kind === 'melodic'
+        ? (['off', 'accent', 'octave', 'articulation', 'ratchet'] as const)
+        : (['off', 'accent', 'articulation', 'ratchet'] as const),
+      random,
+    );
+    return setLaneVariationTarget(
+      {
+        ...lane,
+        steps,
+        pulses: randomInteger(1, Math.max(1, steps - 1), random),
+        timing: {
+          mode: 'grid',
+          subdivision: pick(['1/8', '1/16', '1/32'] as const, random),
+        },
+      },
+      variation,
+    );
+  }
+  if (section === 'mapping') {
+    const start = randomInteger(0, 35, random);
+    const end = randomInteger(Math.max(start + 20, 60), 100, random);
+    const modulationSource = pick(
+      [
+        'off',
+        'area',
+        'length',
+        'pathCount',
+        'closedness',
+        'roughness',
+        'centroidX',
+        'centroidY',
+        'level',
+      ] as const,
+      random,
+    );
+    return {
+      ...lane,
+      direction: pick(['forward', 'reverse', 'ping-pong'] as const, random),
+      traversal: {
+        start,
+        end,
+        trackPosition: randomInteger(0, 100, random),
+        modulationSource,
+        modulationAmount: modulationSource === 'off' ? 0 : randomInteger(-100, 100, random),
+      },
+      contourInfluence: randomInteger(35, 100, random),
+    };
+  }
+  if (lane.kind === 'drum') {
+    const voice = pick(DRUM_VOICE_OPTIONS, random);
+    return {
+      ...lane,
+      drum: {
+        ...lane.drum,
+        voice: voice.value,
+        midiNote: voice.midiNote,
+        chokeGroup: voice.chokeGroup,
+      },
+    };
+  }
+  return {
+    ...lane,
+    melody: {
+      ...lane.melody,
+      voice: pick(['bass', 'pluck', 'soft-lead'] as const, random),
+      oscillator: pick(['sine', 'triangle', 'sawtooth', 'square'] as const, random),
+      brightness: randomRange(0.15, 0.95, random),
+      resonance: randomRange(0, 12, random),
+      subOscillator: randomRange(0, 0.65, random),
+      attack: randomRange(0.001, 0.35, random),
+      decay: randomRange(0.05, 0.8, random),
+      sustain: randomRange(0.05, 0.9, random),
+      release: randomRange(0.04, 1.2, random),
     },
   };
 }

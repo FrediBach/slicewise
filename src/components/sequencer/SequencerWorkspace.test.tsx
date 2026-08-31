@@ -21,6 +21,7 @@ const state: SequencerUiState = {
     {
       id: 'melody-1',
       name: 'Contour pluck',
+      color: '#3267c7',
       kind: 'melodic',
       soundVoice: 'pluck',
       oscillator: 'triangle',
@@ -190,6 +191,35 @@ describe('sequencer workspace', () => {
       type: 'lane-drum-voice',
       laneId: 'melody-1',
       voice: 'cowbell',
+    });
+    document.removeEventListener('sequencercommand', onCommand);
+  });
+
+  it('uses the lane color and supports focused randomizing and collapsing', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+
+    const lane = screen
+      .getByText('Contour pluck', { selector: 'strong' })
+      .closest('.sequencer-lane');
+    expect(lane).toHaveStyle({ '--lane-color': '#3267c7' });
+    await user.click(
+      screen.getByRole('button', { name: 'Randomize Contour pluck pattern settings' }),
+    );
+    await user.click(screen.getByRole('button', { name: 'Collapse Contour pluck' }));
+
+    expect(screen.getByLabelText('Contour pluck lane type')).not.toBeVisible();
+    expect(screen.getByRole('button', { name: 'Expand Contour pluck' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect((onCommand.mock.calls[0][0] as CustomEvent).detail).toEqual({
+      type: 'lane-randomize',
+      laneId: 'melody-1',
+      section: 'pattern',
     });
     document.removeEventListener('sequencercommand', onCommand);
   });
