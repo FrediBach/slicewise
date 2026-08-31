@@ -20,6 +20,7 @@ export interface SequencerUiLane {
   direction: 'forward' | 'reverse' | 'ping-pong';
   traversalStart: number;
   traversalEnd: number;
+  trackPosition: number;
   modulationSource: string;
   modulationAmount: number;
   contourInfluence: number;

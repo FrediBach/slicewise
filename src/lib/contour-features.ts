@@ -18,6 +18,8 @@ export interface ContourSliceFeature {
   centroidY: number;
   closedness: number;
   roughness: number;
+  /** Evenly spaced projected points along the slice's combined contour length. */
+  trackPoints?: number[];
 }
 
 export interface ContourSequenceSource {
@@ -44,6 +46,61 @@ function pathLength(path: NumericPath): number {
   for (let point = 1; point < Math.floor(path.length / 2); point++)
     length += distance(path, point - 1, point);
   return length;
+}
+
+function sampleTrackPoints(paths: readonly NumericPath[], sampleCount = 33): number[] {
+  const segments: Array<{ ax: number; ay: number; bx: number; by: number; length: number }> = [];
+  let totalLength = 0;
+  for (const path of paths) {
+    for (let point = 1; point < Math.floor(path.length / 2); point++) {
+      const ax = path[(point - 1) * 2];
+      const ay = path[(point - 1) * 2 + 1];
+      const bx = path[point * 2];
+      const by = path[point * 2 + 1];
+      const length = Math.hypot(bx - ax, by - ay);
+      if (!Number.isFinite(length) || length <= 1e-12) continue;
+      segments.push({ ax, ay, bx, by, length });
+      totalLength += length;
+    }
+  }
+  if (!segments.length || totalLength <= 1e-12) return [];
+
+  const points: number[] = [];
+  let segmentIndex = 0;
+  let segmentStart = 0;
+  for (let sample = 0; sample < sampleCount; sample++) {
+    const target = (sample / Math.max(1, sampleCount - 1)) * totalLength;
+    while (
+      segmentIndex < segments.length - 1 &&
+      segmentStart + segments[segmentIndex].length < target
+    ) {
+      segmentStart += segments[segmentIndex].length;
+      segmentIndex++;
+    }
+    const segment = segments[segmentIndex];
+    const amount = Math.min(1, Math.max(0, (target - segmentStart) / segment.length));
+    points.push(
+      segment.ax + (segment.bx - segment.ax) * amount,
+      segment.ay + (segment.by - segment.ay) * amount,
+    );
+  }
+  return points;
+}
+
+/** Resolves a stable point along the projected contour, falling back to its centroid. */
+export function contourTrackPoint(slice: ContourSliceFeature, position: number): [number, number] {
+  const points = slice.trackPoints;
+  const count = Math.floor((points?.length ?? 0) / 2);
+  if (!points || count === 0) return [slice.centroidX, slice.centroidY];
+  if (count === 1) return [points[0], points[1]];
+  const exact = Math.min(1, Math.max(0, position / 100)) * (count - 1);
+  const before = Math.floor(exact);
+  const after = Math.min(count - 1, before + 1);
+  const amount = exact - before;
+  return [
+    points[before * 2] + (points[after * 2] - points[before * 2]) * amount,
+    points[before * 2 + 1] + (points[after * 2 + 1] - points[before * 2 + 1]) * amount,
+  ];
 }
 
 function pathArea(path: NumericPath): number {
@@ -127,6 +184,7 @@ export function measureContourSlice(
     centroidY: length ? centroidY / length : 0,
     closedness: length ? closedLength / length : 0,
     roughness: turnCount ? turns / turnCount : 0,
+    trackPoints: sampleTrackPoints(paths),
   };
 }
 
@@ -142,7 +200,7 @@ export function averageContourSequenceSources(
       const matching = available.flatMap((source) =>
         source.slices.filter((slice) => slice.index === index),
       );
-      const average = (key: keyof ContourSliceFeature): number =>
+      const average = (key: Exclude<keyof ContourSliceFeature, 'trackPoints'>): number =>
         matching.reduce((sum, slice) => sum + slice[key], 0) / matching.length;
       return {
         index,
@@ -154,6 +212,14 @@ export function averageContourSequenceSources(
         centroidY: average('centroidY'),
         closedness: average('closedness'),
         roughness: average('roughness'),
+        trackPoints: Array.from({ length: 66 }, (_, point) => {
+          const axis = point % 2;
+          const position = (Math.floor(point / 2) / 32) * 100;
+          return (
+            matching.reduce((sum, slice) => sum + contourTrackPoint(slice, position)[axis], 0) /
+            matching.length
+          );
+        }),
       };
     });
   return { version: 1, slices };

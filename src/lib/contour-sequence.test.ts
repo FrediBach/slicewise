@@ -123,6 +123,7 @@ describe('contourSlicesForStep', () => {
       traversal: {
         start: 25,
         end: 75,
+        trackPosition: 25,
         modulationSource: 'off' as const,
         modulationAmount: 0,
       },
@@ -141,6 +142,7 @@ describe('contourSlicesForStep', () => {
       traversal: {
         start: 0,
         end: 100,
+        trackPosition: 25,
         modulationSource: 'area' as const,
         modulationAmount: 100,
       },

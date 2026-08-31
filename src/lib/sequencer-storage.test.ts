@@ -57,7 +57,7 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(3);
+    expect(restored?.version).toBe(4);
     expect(restored?.lanes.map((lane) => [lane.preset, lane.variation])).toEqual([
       ['contour-pluck', { target: 'off' }],
       ['contour-kick', { target: 'off' }],
@@ -72,11 +72,37 @@ describe('sequencer storage', () => {
 
     const restored = restoreStoredSequencerProject(legacy);
 
-    expect(restored?.version).toBe(3);
+    expect(restored?.version).toBe(4);
     expect(restored?.lanes.map(({ traversal }) => traversal)).toEqual([
-      { start: 0, end: 100, modulationSource: 'off', modulationAmount: 0 },
-      { start: 0, end: 100, modulationSource: 'off', modulationAmount: 0 },
+      {
+        start: 0,
+        end: 100,
+        trackPosition: 25,
+        modulationSource: 'off',
+        modulationAmount: 0,
+      },
+      {
+        start: 0,
+        end: 100,
+        trackPosition: 75,
+        modulationSource: 'off',
+        modulationAmount: 0,
+      },
     ]);
+  });
+
+  it('migrates version-three lanes to distinct contour routes', () => {
+    const legacy = structuredClone(createSequencerProject()) as unknown as Record<string, unknown>;
+    legacy.version = 3;
+    for (const lane of legacy.lanes as Array<Record<string, unknown>>) {
+      const traversal = lane.traversal as Record<string, unknown>;
+      delete traversal.trackPosition;
+    }
+
+    const restored = restoreStoredSequencerProject(legacy);
+
+    expect(restored?.version).toBe(4);
+    expect(restored?.lanes.map((lane) => lane.traversal.trackPosition)).toEqual([25, 75]);
   });
 
   it('returns null for unavailable or malformed local storage', () => {

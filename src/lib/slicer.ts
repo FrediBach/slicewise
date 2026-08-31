@@ -1,6 +1,6 @@
 'use strict';
 import { createColorGradient, createColorPair } from './colorPair';
-import type { ContourSequenceSource } from './contour-features';
+import { contourTrackPoint, type ContourSequenceSource } from './contour-features';
 import {
   type ContourMesh,
   type ContourResult,
@@ -3686,6 +3686,9 @@ if (typeof document !== 'undefined') {
     for (const { lane, stepIndex, inspected } of targets) {
       const slices = sequencerStepSlices(lane, stepIndex);
       if (!slices.length) continue;
+      const routePoints = slices.map((slice) =>
+        contourTrackPoint(slice, lane.traversal.trackPosition),
+      );
       const group = document.createElementNS(namespace, 'g');
       group.setAttribute(
         'class',
@@ -3693,28 +3696,24 @@ if (typeof document !== 'undefined') {
       );
       const title = document.createElementNS(namespace, 'title');
       const indexes = slices.map(({ index }) => index + 1);
-      title.textContent = `${lane.name}, step ${stepIndex + 1}: source slices ${Math.min(...indexes)}–${Math.max(...indexes)}`;
+      title.textContent = `${lane.name}, step ${stepIndex + 1}: source slices ${Math.min(...indexes)}–${Math.max(...indexes)}, contour point ${lane.traversal.trackPosition}%`;
       group.appendChild(title);
 
       if (slices.length > 1) {
         const trail = document.createElementNS(namespace, 'path');
         trail.setAttribute(
           'd',
-          slices
-            .map(
-              ({ centroidX, centroidY }, index) => `${index ? 'L' : 'M'}${centroidX} ${centroidY}`,
-            )
-            .join(' '),
+          routePoints.map(([x, y], index) => `${index ? 'L' : 'M'}${x} ${y}`).join(' '),
         );
         trail.setAttribute('class', 'sequencer-source-trail');
         group.appendChild(trail);
       }
       const stride = Math.max(1, Math.ceil(slices.length / 24));
       for (let index = 0; index < slices.length; index += stride) {
-        const slice = slices[index];
+        const [x, y] = routePoints[index];
         const marker = document.createElementNS(namespace, 'circle');
-        marker.setAttribute('cx', String(slice.centroidX));
-        marker.setAttribute('cy', String(slice.centroidY));
+        marker.setAttribute('cx', String(x));
+        marker.setAttribute('cy', String(y));
         marker.setAttribute('r', inspected ? '2.4' : '1.7');
         marker.setAttribute('class', 'sequencer-source-marker');
         group.appendChild(marker);
@@ -3761,6 +3760,7 @@ if (typeof document !== 'undefined') {
               direction: lane.direction,
               traversalStart: lane.traversal.start,
               traversalEnd: lane.traversal.end,
+              trackPosition: lane.traversal.trackPosition,
               modulationSource: lane.traversal.modulationSource,
               modulationAmount: lane.traversal.modulationAmount,
               contourInfluence: lane.contourInfluence,
@@ -4594,6 +4594,14 @@ if (typeof document !== 'undefined') {
           end: clamp(Math.round(Number(detail.value)), lane.traversal.start, 100),
         },
       }));
+    } else if (type === 'lane-track-position') {
+      replaceSequencerLane(laneId, (lane) => ({
+        ...lane,
+        traversal: {
+          ...lane.traversal,
+          trackPosition: clamp(Math.round(Number(detail.value)), 0, 100),
+        },
+      }));
     } else if (type === 'lane-traversal-source') {
       const source = String(detail.source);
       if (
@@ -4670,10 +4678,17 @@ if (typeof document !== 'undefined') {
       let id = '';
       do id = `${prefix}-${nextSequencerLaneId++}`;
       while (sequencerProject.lanes.some((lane) => lane.id === id));
-      const lane =
+      const createdLane =
         detail.kind === 'drum'
           ? createDrumLane(id, `Contour drum ${nextSequencerLaneId - 1}`)
           : createMelodicLane(id, `Contour melody ${nextSequencerLaneId - 1}`);
+      const lane: SequencerLane = {
+        ...createdLane,
+        traversal: {
+          ...createdLane.traversal,
+          trackPosition: (25 + sequencerProject.lanes.length * 37) % 101,
+        },
+      };
       updateSequencerProject({
         ...sequencerProject,
         lanes: [...sequencerProject.lanes, lane],

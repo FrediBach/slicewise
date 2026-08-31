@@ -11,14 +11,20 @@ describe('sequencer project defaults', () => {
   it('creates a versioned project with deterministic melodic and drum lanes', () => {
     const project = createSequencerProject();
 
-    expect(project.version).toBe(3);
+    expect(project.version).toBe(4);
     expect(project.lanes).toEqual([createMelodicLane(), createDrumLane()]);
     expect(project.lanes[0]).toMatchObject({
       kind: 'melodic',
       steps: 16,
       pulses: 5,
       rotation: 'auto',
-      traversal: { start: 0, end: 100, modulationSource: 'off', modulationAmount: 0 },
+      traversal: {
+        start: 0,
+        end: 100,
+        trackPosition: 25,
+        modulationSource: 'off',
+        modulationAmount: 0,
+      },
       contourInfluence: 100,
       probability: { mode: 'off' },
     });

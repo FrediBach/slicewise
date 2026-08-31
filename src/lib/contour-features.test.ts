@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { averageContourSequenceSources, measureContourSlice } from './contour-features';
+import {
+  averageContourSequenceSources,
+  contourTrackPoint,
+  measureContourSlice,
+} from './contour-features';
 
 describe('measureContourSlice', () => {
   it('measures closed projected paths deterministically', () => {
     const feature = measureContourSlice(3, 0.75, [[0, 0, 4, 0, 4, 3, 0, 3, 0, 0]]);
 
-    expect(feature).toEqual({
+    expect(feature).toMatchObject({
       index: 3,
       level: 0.75,
       pathCount: 1,
@@ -16,6 +20,10 @@ describe('measureContourSlice', () => {
       closedness: 1,
       roughness: 0.5,
     });
+    expect(feature.trackPoints).toHaveLength(66);
+    expect(contourTrackPoint(feature, 0)).toEqual([0, 0]);
+    expect(contourTrackPoint(feature, 50)).toEqual([4, 3]);
+    expect(contourTrackPoint(feature, 100)).toEqual([0, 0]);
   });
 
   it('uses visible path length for centroid and closedness', () => {
@@ -30,6 +38,13 @@ describe('measureContourSlice', () => {
     expect(feature.centroidX).toBe(5.625);
     expect(feature.closedness).toBe(0.5);
     expect(feature.level).toBe(1);
+  });
+
+  it('selects different stable positions along a contour route', () => {
+    const feature = measureContourSlice(0, 0.5, [[0, 0, 10, 0, 10, 10]]);
+
+    expect(contourTrackPoint(feature, 25)).toEqual([5, 0]);
+    expect(contourTrackPoint(feature, 75)).toEqual([10, 5]);
   });
 });
 
@@ -53,5 +68,6 @@ describe('averageContourSequenceSources', () => {
       { index: 0, level: 0.30000000000000004, length: 3 },
       { index: 2, level: 1, length: 1 },
     ]);
+    expect(contourTrackPoint(result!.slices[0], 100)).toEqual([3, 0]);
   });
 });

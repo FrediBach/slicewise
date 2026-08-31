@@ -1602,37 +1602,36 @@ body.animation-mode .section-randomize {
   background: #eef0ec;
 }
 .sequencer-workspace {
-  flex: 0 0 246px;
+  flex: 0 0 clamp(286px, 34vh, 360px);
   min-width: 0;
-  padding: 10px 18px 12px;
   border-top: 1px solid #c3c7c1;
-  background: #eef0ec;
+  background: #e9ece7;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .sequencer-transport,
 .sequencer-playback,
 .sequencer-add-lanes,
-.sequencer-lane-primary,
-.sequencer-traversal-settings {
+.sequencer-lane-actions,
+.sequencer-export-group {
   display: flex;
   align-items: center;
-  gap: 5px;
-}
-.sequencer-lane-settings {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 3px;
+  gap: 6px;
 }
 .sequencer-transport {
+  flex: 0 0 auto;
   min-width: 0;
   overflow-x: auto;
-  padding-bottom: 7px;
+  min-height: 52px;
+  padding: 7px 18px;
+  border-bottom: 1px solid #d1d5cf;
+  background: #f4f6f2;
 }
 .sequencer-workspace button,
 .sequencer-workspace select,
 .sequencer-workspace input {
-  height: 27px;
+  height: 30px;
   border: 1px solid #bcc1ba;
   background: #f8f9f6;
   color: #454945;
@@ -1643,7 +1642,7 @@ body.animation-mode .section-randomize {
   align-items: center;
   justify-content: center;
   gap: 5px;
-  padding: 0 8px;
+  padding: 0 10px;
   cursor: pointer;
   text-transform: uppercase;
 }
@@ -1657,107 +1656,260 @@ body.animation-mode .section-randomize {
   color: white;
 }
 .sequencer-position {
-  min-width: 108px;
-  color: #454945;
-  font-size: 9px;
+  min-width: 116px;
+  color: #292d29;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 .sequencer-transport label,
 .sequencer-lane-settings label {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  display: flex;
   color: #777c76;
-  white-space: nowrap;
   text-transform: uppercase;
 }
 .sequencer-transport label {
-  margin-left: 5px;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
 }
-.sequencer-transport input {
+.sequencer-transport label > span:first-child,
+.sequencer-lane-settings label > span:first-child,
+.sequencer-sequence-heading span {
+  color: #797e78;
+  font-size: 8px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.sequencer-tempo > span:last-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.sequencer-tempo input {
   width: 54px;
   padding: 0 5px;
+}
+.sequencer-transport-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 0 5px;
+  background: #d4d8d2;
+}
+.sequencer-transport-spacer {
+  flex: 1 0 18px;
+}
+.sequencer-export-group {
+  padding-left: 12px;
+  border-left: 1px solid #d4d8d2;
 }
 .sequencer-add-lanes {
   margin-left: auto;
 }
 .sequencer-pending {
-  min-width: 116px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 142px;
+  margin-left: 8px;
   color: #687069;
+  font-size: 8px;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+  text-transform: uppercase;
+}
+.sequencer-pending i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #9ba09a;
+}
+.sequencer-pending.is-ready i {
+  background: #5b8a63;
 }
 .sequencer-pending.is-pending {
   color: #a05b21;
 }
-.sequencer-ruler,
-.sequencer-lane {
-  display: grid;
-  grid-template-columns: 610px minmax(520px, 1fr);
-  gap: 9px;
-  min-width: 1140px;
+.sequencer-pending.is-pending i {
+  background: #bf712f;
 }
-.sequencer-ruler {
-  padding: 0 4px 4px;
-  color: #969b95;
-  text-transform: uppercase;
+.sequencer-workspace-nav {
+  flex: 0 0 auto;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 7px 18px;
+  border-bottom: 1px solid #d1d5cf;
 }
-.sequencer-ruler > div {
-  display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  font-size: 7px;
-  text-align: center;
+.sequencer-tabs {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid #c7cbc5;
+  background: #dfe2dd;
 }
-.sequencer-ruler i {
-  font-style: normal;
+.sequencer-tabs button {
+  height: 28px;
+  border: 0;
+  background: transparent;
+  color: #6c716b;
+}
+.sequencer-tabs button[aria-selected='true'] {
+  background: #fbfcfa;
+  color: #252925;
+  box-shadow: 0 1px 3px rgba(25, 29, 25, 0.12);
+}
+.sequencer-workspace-nav p {
+  max-width: 580px;
+  margin: 0;
+  color: #666c66;
+  font-family: Manrope, sans-serif;
+  font-size: 10px;
+  line-height: 1.45;
 }
 .sequencer-lanes {
-  max-height: 172px;
+  flex: 1 1 auto;
+  min-height: 0;
   min-width: 0;
   overflow: auto;
+  padding: 8px 18px 12px;
 }
 .sequencer-lane {
-  min-height: 74px;
-  padding: 5px 4px;
-  border-top: 1px solid #d2d5d0;
+  min-width: 720px;
+  margin-bottom: 8px;
+  border: 1px solid #cdd1cb;
+  background: #f7f8f5;
+  box-shadow: 0 1px 2px rgba(31, 35, 31, 0.04);
 }
-.sequencer-lane-settings strong {
-  width: 86px;
+.sequencer-lane-header {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 11px 6px 13px;
+  border-bottom: 1px solid #dde0db;
+}
+.sequencer-lane-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sequencer-lane-kind {
+  width: 5px;
+  height: 27px;
+  flex: 0 0 auto;
+  background: var(--blue);
+}
+.sequencer-lane[data-kind='drum'] .sequencer-lane-kind {
+  background: #cd7145;
+}
+.sequencer-lane-title div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sequencer-lane-title strong {
   overflow: hidden;
   color: #333733;
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
   text-transform: uppercase;
 }
-.sequencer-lane-settings select {
-  width: 92px;
-}
-.sequencer-traversal-settings {
-  padding-left: 91px;
-}
-.sequencer-traversal-settings select {
-  width: 82px;
-}
-.sequencer-lane-settings input {
-  width: 38px;
-  padding: 0 3px;
-}
-.sequencer-lane-settings button {
-  height: 24px;
-  padding: 0 5px;
+.sequencer-lane-title small {
+  color: #969b95;
   font-size: 7px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.sequencer-lane-actions button {
+  height: 25px;
+  padding: 0 7px;
+  font-size: 7px;
+}
+.sequencer-lane-body {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(440px, 1fr);
+  gap: 0;
+  min-height: 104px;
+}
+.sequencer-lane-settings {
+  padding: 9px 14px;
+  border-right: 1px solid #dde0db;
+}
+.sequencer-tab-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 12px;
+}
+.sequencer-tab-panel[hidden] {
+  display: none;
+}
+.sequencer-tab-panel > label {
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+}
+.sequencer-tab-panel > label:nth-child(2),
+.sequencer-tab-panel > label:nth-child(3) {
+  grid-column: span 1;
+}
+.sequencer-tab-panel select,
+.sequencer-tab-panel input {
+  width: 100%;
+  min-width: 0;
+  padding: 0 7px;
+}
+.sequencer-field-pair {
+  display: contents;
+}
+.sequencer-field-pair label {
+  min-width: 0;
+  flex-direction: column;
+  gap: 5px;
+}
+.sequencer-sequence-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 9px 14px;
+}
+.sequencer-sequence-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 7px;
+}
+.sequencer-sequence-heading small {
+  overflow: hidden;
+  color: #929791;
+  font-family: Manrope, sans-serif;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sequencer-steps-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px;
 }
 .sequencer-steps {
   display: grid;
-  grid-template-columns: repeat(var(--lane-steps), minmax(12px, 1fr));
-  gap: 3px;
+  grid-template-columns: repeat(var(--lane-steps), minmax(16px, 1fr));
+  gap: 4px;
   align-items: end;
+  min-width: calc(var(--lane-steps) * 20px);
 }
 .sequencer-steps > button {
   position: relative;
-  height: 34px;
-  min-width: 12px;
+  height: 42px;
+  min-width: 16px;
   padding: 0;
   overflow: hidden;
   border-color: #cfd3cd;
@@ -1765,8 +1917,8 @@ body.animation-mode .section-randomize {
 }
 .sequencer-steps > button span {
   position: absolute;
-  inset: auto 2px 2px;
-  height: calc(max(0.08, var(--step-value)) * 25px);
+  inset: auto 3px 3px;
+  height: calc(max(0.08, var(--step-value)) * 31px);
   background: #a9afa8;
 }
 .sequencer-lane[data-kind='melodic'] .sequencer-steps > button.is-hit span {
@@ -2200,8 +2352,10 @@ button:focus-visible,
     overflow: hidden;
   }
   .sequencer-workspace {
-    flex-basis: 268px;
-    padding-inline: 12px;
+    flex-basis: 310px;
+  }
+  body.sequencer-mode .workspace {
+    height: 100dvh;
   }
   .animation-track {
     min-width: 680px;

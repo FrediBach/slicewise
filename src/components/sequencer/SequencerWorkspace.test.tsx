@@ -29,6 +29,7 @@ const state: SequencerUiState = {
       direction: 'forward',
       traversalStart: 0,
       traversalEnd: 100,
+      trackPosition: 25,
       modulationSource: 'off',
       modulationAmount: 0,
       contourInfluence: 100,
@@ -84,6 +85,46 @@ describe('sequencer workspace', () => {
     expect(
       screen.getByRole('button', { name: 'Contour pluck step 2: rest, MIDI 62' }),
     ).toHaveAttribute('aria-current', 'step');
+    expect(screen.getByRole('tab', { name: 'Pattern' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText(/Choose each lane’s voice/)).toBeInTheDocument();
+  });
+
+  it('organizes lane controls into accessible pattern and shape-mapping tabs', async () => {
+    const user = userEvent.setup();
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+
+    expect(screen.getByLabelText('Contour pluck lane type')).toBeVisible();
+    expect(screen.getByLabelText('Contour pluck slice travel direction')).not.toBeVisible();
+
+    await user.click(screen.getByRole('tab', { name: 'Shape mapping' }));
+
+    expect(screen.getByRole('tab', { name: 'Shape mapping' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.getByLabelText('Contour pluck lane type')).not.toBeVisible();
+    expect(screen.getByLabelText('Contour pluck slice travel direction')).toBeVisible();
+    expect(screen.getByText(/Choose a distinct point around the contour/)).toBeInTheDocument();
+  });
+
+  it('supports arrow-key tab navigation without moving the transport', () => {
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+
+    const patternTab = screen.getByRole('tab', { name: 'Pattern' });
+    patternTab.focus();
+    fireEvent.keyDown(patternTab, { key: 'ArrowRight' });
+
+    expect(screen.getByRole('tab', { name: 'Shape mapping' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Shape mapping' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(onCommand).not.toHaveBeenCalled();
+    document.removeEventListener('sequencercommand', onCommand);
   });
 
   it('publishes transport and lane editing commands', async () => {
@@ -156,6 +197,8 @@ describe('sequencer workspace', () => {
     render(<SequencerWorkspace />);
     act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
 
+    await user.click(screen.getByRole('tab', { name: 'Shape mapping' }));
+
     await user.selectOptions(
       screen.getByLabelText('Contour pluck slice travel direction'),
       'reverse',
@@ -165,6 +208,9 @@ describe('sequencer workspace', () => {
     });
     fireEvent.change(screen.getByLabelText('Contour pluck slice range end'), {
       target: { value: '80' },
+    });
+    fireEvent.change(screen.getByLabelText('Contour pluck position around contour'), {
+      target: { value: '72' },
     });
     await user.selectOptions(
       screen.getByLabelText('Contour pluck traversal geometry modulation'),
@@ -181,6 +227,7 @@ describe('sequencer workspace', () => {
       { type: 'lane-direction', laneId: 'melody-1', direction: 'reverse' },
       { type: 'lane-traversal-start', laneId: 'melody-1', value: 20 },
       { type: 'lane-traversal-end', laneId: 'melody-1', value: 80 },
+      { type: 'lane-track-position', laneId: 'melody-1', value: 72 },
       { type: 'lane-traversal-source', laneId: 'melody-1', source: 'roughness' },
       { type: 'lane-traversal-amount', laneId: 'melody-1', value: -65 },
       { type: 'lane-contour-influence', laneId: 'melody-1', value: 75 },

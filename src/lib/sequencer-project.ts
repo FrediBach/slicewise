@@ -1,6 +1,6 @@
 import type { ContourFeatureKey } from './contour-features';
 
-export const SEQUENCER_PROJECT_VERSION = 3 as const;
+export const SEQUENCER_PROJECT_VERSION = 4 as const;
 
 export type ScaleName =
   'minor-pentatonic' | 'major-pentatonic' | 'major' | 'natural-minor' | 'dorian' | 'chromatic';
@@ -15,6 +15,8 @@ export type VariationTarget = 'accent' | 'octave' | 'articulation' | 'ratchet';
 export interface LaneTraversal {
   start: number;
   end: number;
+  /** Position around each projected contour used by the preview route. */
+  trackPosition: number;
   modulationSource: ContourFeatureKey | 'off';
   /** Negative values dwell on low feature values; positive values dwell on high values. */
   modulationAmount: number;
@@ -130,7 +132,7 @@ export interface SequencerProject {
   lanes: SequencerLane[];
 }
 
-const laneBase = (id: string, name: string): SequencerLaneBase => ({
+const laneBase = (id: string, name: string, trackPosition: number): SequencerLaneBase => ({
   id,
   name,
   steps: 16,
@@ -143,7 +145,7 @@ const laneBase = (id: string, name: string): SequencerLaneBase => ({
   muted: false,
   solo: false,
   direction: 'forward',
-  traversal: { start: 0, end: 100, modulationSource: 'off', modulationAmount: 0 },
+  traversal: { start: 0, end: 100, trackPosition, modulationSource: 'off', modulationAmount: 0 },
   contourInfluence: 100,
   variation: { target: 'off' },
 });
@@ -154,7 +156,7 @@ export function createMelodicLane(
   preset: MelodicLanePreset = 'contour-pluck',
 ): MelodicLane {
   const lane: MelodicLane = {
-    ...laneBase(id, name),
+    ...laneBase(id, name, 25),
     kind: 'melodic',
     preset: 'contour-pluck',
     melody: {
@@ -185,7 +187,7 @@ export function createDrumLane(
   preset: DrumLanePreset = 'contour-kick',
 ): DrumLane {
   const lane: DrumLane = {
-    ...laneBase(id, name),
+    ...laneBase(id, name, 75),
     pulses: 4,
     kind: 'drum',
     preset: 'contour-kick',

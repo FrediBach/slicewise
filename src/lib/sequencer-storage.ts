@@ -150,6 +150,7 @@ function validLane(lane: unknown): lane is SequencerLane {
     !within(lane.traversal.start, 0, 100) ||
     !within(lane.traversal.end, 0, 100) ||
     lane.traversal.start > lane.traversal.end ||
+    !within(lane.traversal.trackPosition, 0, 100) ||
     !['off', ...featureKeys].includes(String(lane.traversal.modulationSource)) ||
     !within(lane.traversal.modulationAmount, -100, 100) ||
     !within(lane.contourInfluence, 0, 100) ||
@@ -196,7 +197,7 @@ function migrateProject(candidate: Record<string, unknown>): Record<string, unkn
   if (migrated.version === 2)
     migrated = {
       ...migrated,
-      version: SEQUENCER_PROJECT_VERSION,
+      version: 3,
       lanes: (migrated.lanes as unknown[]).map((lane) =>
         isRecord(lane)
           ? {
@@ -210,6 +211,21 @@ function migrateProject(candidate: Record<string, unknown>): Record<string, unkn
             }
           : lane,
       ),
+    };
+  if (migrated.version === 3)
+    migrated = {
+      ...migrated,
+      version: SEQUENCER_PROJECT_VERSION,
+      lanes: (migrated.lanes as unknown[]).map((lane, index) => {
+        if (!isRecord(lane) || !isRecord(lane.traversal)) return lane;
+        return {
+          ...lane,
+          traversal: {
+            ...lane.traversal,
+            trackPosition: index % 2 === 0 ? 25 : 75,
+          },
+        };
+      }),
     };
   return migrated;
 }

@@ -2,6 +2,8 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import { Download, Pause, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import type { SequencerUiLane, SequencerUiState } from './sequencer-ui';
 
+type SequencerTab = 'pattern' | 'mapping';
+
 const initialSequencerUiState: SequencerUiState = {
   mode: 'config',
   playing: false,
@@ -56,7 +58,7 @@ const contourFeatures = [
   ['level', 'Slice level'],
 ] as const;
 
-function LaneRow({ lane }: { lane: SequencerUiLane }) {
+function LaneRow({ lane, activeTab }: { lane: SequencerUiLane; activeTab: SequencerTab }) {
   const presets =
     lane.kind === 'melodic'
       ? [
@@ -71,71 +73,15 @@ function LaneRow({ lane }: { lane: SequencerUiLane }) {
         ];
   return (
     <div className="sequencer-lane" data-kind={lane.kind}>
-      <div className="sequencer-lane-settings">
-        <div className="sequencer-lane-primary">
-          <strong>{lane.name}</strong>
-          <select
-            aria-label={`${lane.name} lane type`}
-            value={lane.kind}
-            onChange={(event) =>
-              command('lane-kind', { laneId: lane.id, kind: event.target.value })
-            }
-          >
-            <option value="melodic">Melodic</option>
-            <option value="drum">Drum</option>
-          </select>
-          <select
-            aria-label={`${lane.name} preset`}
-            value={lane.preset}
-            onChange={(event) =>
-              command('lane-preset', { laneId: lane.id, preset: event.target.value })
-            }
-          >
-            {presets.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label={`${lane.name} variation`}
-            value={lane.variationTarget}
-            onChange={(event) =>
-              command('lane-variation', { laneId: lane.id, target: event.target.value })
-            }
-          >
-            <option value="off">No variation</option>
-            <option value="accent">Accent</option>
-            {lane.kind === 'melodic' && <option value="octave">Octave</option>}
-            <option value="articulation">Articulation</option>
-            <option value="ratchet">Ratchet</option>
-          </select>
-          <label>
-            Steps
-            <input
-              aria-label={`${lane.name} steps`}
-              type="number"
-              min="1"
-              max="64"
-              value={lane.steps}
-              onChange={(event) =>
-                numericCommand('lane-steps', event.target.value, { laneId: lane.id })
-              }
-            />
-          </label>
-          <label>
-            Pulses
-            <input
-              aria-label={`${lane.name} pulses`}
-              type="number"
-              min="0"
-              max={lane.steps}
-              value={lane.pulses}
-              onChange={(event) =>
-                numericCommand('lane-pulses', event.target.value, { laneId: lane.id })
-              }
-            />
-          </label>
+      <header className="sequencer-lane-header">
+        <div className="sequencer-lane-title">
+          <span className="sequencer-lane-kind" aria-hidden="true" />
+          <div>
+            <strong>{lane.name}</strong>
+            <small>{lane.kind === 'melodic' ? 'Melodic voice' : 'Drum voice'}</small>
+          </div>
+        </div>
+        <div className="sequencer-lane-actions">
           <button
             type="button"
             className={lane.muted ? 'is-active' : ''}
@@ -160,124 +106,232 @@ function LaneRow({ lane }: { lane: SequencerUiLane }) {
             <Trash2 size={12} />
           </button>
         </div>
-        <div className="sequencer-traversal-settings">
-          <label>
-            Travel
-            <select
-              aria-label={`${lane.name} slice travel direction`}
-              value={lane.direction}
-              onChange={(event) =>
-                command('lane-direction', { laneId: lane.id, direction: event.target.value })
-              }
-            >
-              <option value="forward">Forward</option>
-              <option value="reverse">Reverse</option>
-              <option value="ping-pong">Ping-pong</option>
-            </select>
-          </label>
-          <label>
-            From
-            <input
-              aria-label={`${lane.name} slice range start`}
-              type="number"
-              min="0"
-              max={lane.traversalEnd}
-              value={lane.traversalStart}
-              onChange={(event) =>
-                numericCommand('lane-traversal-start', event.target.value, { laneId: lane.id })
-              }
-            />
-          </label>
-          <label>
-            To
-            <input
-              aria-label={`${lane.name} slice range end`}
-              type="number"
-              min={lane.traversalStart}
-              max="100"
-              value={lane.traversalEnd}
-              onChange={(event) =>
-                numericCommand('lane-traversal-end', event.target.value, { laneId: lane.id })
-              }
-            />
-          </label>
-          <label>
-            Warp
-            <select
-              aria-label={`${lane.name} traversal geometry modulation`}
-              value={lane.modulationSource}
-              onChange={(event) =>
-                command('lane-traversal-source', { laneId: lane.id, source: event.target.value })
-              }
-            >
-              <option value="off">Uniform</option>
-              {contourFeatures.map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Amount
-            <input
-              aria-label={`${lane.name} traversal modulation amount`}
-              type="number"
-              min="-100"
-              max="100"
-              value={lane.modulationAmount}
-              disabled={lane.modulationSource === 'off'}
-              onChange={(event) =>
-                numericCommand('lane-traversal-amount', event.target.value, { laneId: lane.id })
-              }
-            />
-          </label>
-          <label>
-            Shape
-            <input
-              aria-label={`${lane.name} contour influence`}
-              type="number"
-              min="0"
-              max="100"
-              value={lane.contourInfluence}
-              onChange={(event) =>
-                numericCommand('lane-contour-influence', event.target.value, { laneId: lane.id })
-              }
-            />
-          </label>
+      </header>
+      <div className="sequencer-lane-body">
+        <div className="sequencer-lane-settings">
+          <div className="sequencer-tab-panel" hidden={activeTab !== 'pattern'}>
+            <label>
+              <span>Voice type</span>
+              <select
+                aria-label={`${lane.name} lane type`}
+                value={lane.kind}
+                onChange={(event) =>
+                  command('lane-kind', { laneId: lane.id, kind: event.target.value })
+                }
+              >
+                <option value="melodic">Melodic</option>
+                <option value="drum">Drum</option>
+              </select>
+            </label>
+            <label>
+              <span>Starting sound</span>
+              <select
+                aria-label={`${lane.name} preset`}
+                value={lane.preset}
+                onChange={(event) =>
+                  command('lane-preset', { laneId: lane.id, preset: event.target.value })
+                }
+              >
+                {presets.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Contour variation</span>
+              <select
+                aria-label={`${lane.name} variation`}
+                value={lane.variationTarget}
+                onChange={(event) =>
+                  command('lane-variation', { laneId: lane.id, target: event.target.value })
+                }
+              >
+                <option value="off">No variation</option>
+                <option value="accent">Accent</option>
+                {lane.kind === 'melodic' && <option value="octave">Octave</option>}
+                <option value="articulation">Articulation</option>
+                <option value="ratchet">Ratchet</option>
+              </select>
+            </label>
+            <div className="sequencer-field-pair">
+              <label>
+                <span>Cycle steps</span>
+                <input
+                  aria-label={`${lane.name} steps`}
+                  type="number"
+                  min="1"
+                  max="64"
+                  value={lane.steps}
+                  onChange={(event) =>
+                    numericCommand('lane-steps', event.target.value, { laneId: lane.id })
+                  }
+                />
+              </label>
+              <label>
+                <span>Active pulses</span>
+                <input
+                  aria-label={`${lane.name} pulses`}
+                  type="number"
+                  min="0"
+                  max={lane.steps}
+                  value={lane.pulses}
+                  onChange={(event) =>
+                    numericCommand('lane-pulses', event.target.value, { laneId: lane.id })
+                  }
+                />
+              </label>
+            </div>
+          </div>
+          <div className="sequencer-tab-panel" hidden={activeTab !== 'mapping'}>
+            <label>
+              <span>Slice travel</span>
+              <select
+                aria-label={`${lane.name} slice travel direction`}
+                value={lane.direction}
+                onChange={(event) =>
+                  command('lane-direction', { laneId: lane.id, direction: event.target.value })
+                }
+              >
+                <option value="forward">Forward</option>
+                <option value="reverse">Reverse</option>
+                <option value="ping-pong">Ping-pong</option>
+              </select>
+            </label>
+            <label>
+              <span>Contour point</span>
+              <input
+                aria-label={`${lane.name} position around contour`}
+                type="number"
+                min="0"
+                max="100"
+                value={lane.trackPosition}
+                onChange={(event) =>
+                  numericCommand('lane-track-position', event.target.value, { laneId: lane.id })
+                }
+              />
+            </label>
+            <div className="sequencer-field-pair">
+              <label>
+                <span>Range from</span>
+                <input
+                  aria-label={`${lane.name} slice range start`}
+                  type="number"
+                  min="0"
+                  max={lane.traversalEnd}
+                  value={lane.traversalStart}
+                  onChange={(event) =>
+                    numericCommand('lane-traversal-start', event.target.value, { laneId: lane.id })
+                  }
+                />
+              </label>
+              <label>
+                <span>Range to</span>
+                <input
+                  aria-label={`${lane.name} slice range end`}
+                  type="number"
+                  min={lane.traversalStart}
+                  max="100"
+                  value={lane.traversalEnd}
+                  onChange={(event) =>
+                    numericCommand('lane-traversal-end', event.target.value, { laneId: lane.id })
+                  }
+                />
+              </label>
+            </div>
+            <label>
+              <span>Geometry warp</span>
+              <select
+                aria-label={`${lane.name} traversal geometry modulation`}
+                value={lane.modulationSource}
+                onChange={(event) =>
+                  command('lane-traversal-source', { laneId: lane.id, source: event.target.value })
+                }
+              >
+                <option value="off">Uniform</option>
+                {contourFeatures.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="sequencer-field-pair">
+              <label>
+                <span>Warp amount</span>
+                <input
+                  aria-label={`${lane.name} traversal modulation amount`}
+                  type="number"
+                  min="-100"
+                  max="100"
+                  value={lane.modulationAmount}
+                  disabled={lane.modulationSource === 'off'}
+                  onChange={(event) =>
+                    numericCommand('lane-traversal-amount', event.target.value, { laneId: lane.id })
+                  }
+                />
+              </label>
+              <label>
+                <span>Shape influence</span>
+                <input
+                  aria-label={`${lane.name} contour influence`}
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={lane.contourInfluence}
+                  onChange={(event) =>
+                    numericCommand('lane-contour-influence', event.target.value, {
+                      laneId: lane.id,
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </div>
         </div>
-      </div>
-      <div
-        className="sequencer-steps"
-        aria-label={`${lane.name} sequence`}
-        style={{ '--lane-steps': lane.steps } as CSSProperties}
-      >
-        {lane.sequence.map((step) => (
-          <button
-            type="button"
-            key={step.index}
-            className={[
-              step.candidateHit ? 'is-hit' : '',
-              step.candidateHit && !step.willFire ? 'is-skipped' : '',
-              step.expressive ? 'is-expressive' : '',
-              lane.activeStep === step.index ? 'is-current' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-            style={{ '--step-value': step.value } as CSSProperties}
-            aria-label={`${lane.name} step ${step.index + 1}: ${step.label}`}
-            aria-current={lane.activeStep === step.index ? 'step' : undefined}
-            onPointerEnter={() =>
-              previewSource({ laneId: lane.id, stepIndex: step.index, active: true })
-            }
-            onPointerLeave={() => previewSource({ active: false })}
-            onFocus={() => previewSource({ laneId: lane.id, stepIndex: step.index, active: true })}
-            onBlur={() => previewSource({ active: false })}
-            onClick={() => command('seek-step', { laneId: lane.id, stepIndex: step.index })}
-          >
-            <span />
-          </button>
-        ))}
+        <div className="sequencer-sequence-panel">
+          <div className="sequencer-sequence-heading">
+            <span>Cycle preview</span>
+            <small>Click a step to seek · hover to locate its contour</small>
+          </div>
+          <div className="sequencer-steps-scroll">
+            <div
+              className="sequencer-steps"
+              aria-label={`${lane.name} sequence`}
+              style={{ '--lane-steps': lane.steps } as CSSProperties}
+            >
+              {lane.sequence.map((step) => (
+                <button
+                  type="button"
+                  key={step.index}
+                  className={[
+                    step.candidateHit ? 'is-hit' : '',
+                    step.candidateHit && !step.willFire ? 'is-skipped' : '',
+                    step.expressive ? 'is-expressive' : '',
+                    lane.activeStep === step.index ? 'is-current' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ')}
+                  style={{ '--step-value': step.value } as CSSProperties}
+                  aria-label={`${lane.name} step ${step.index + 1}: ${step.label}`}
+                  aria-current={lane.activeStep === step.index ? 'step' : undefined}
+                  onPointerEnter={() =>
+                    previewSource({ laneId: lane.id, stepIndex: step.index, active: true })
+                  }
+                  onPointerLeave={() => previewSource({ active: false })}
+                  onFocus={() =>
+                    previewSource({ laneId: lane.id, stepIndex: step.index, active: true })
+                  }
+                  onBlur={() => previewSource({ active: false })}
+                  onClick={() => command('seek-step', { laneId: lane.id, stepIndex: step.index })}
+                >
+                  <span />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -285,11 +339,12 @@ function LaneRow({ lane }: { lane: SequencerUiLane }) {
 
 export function SequencerWorkspace() {
   const state = useSequencerUiState();
+  const [activeTab, setActiveTab] = useState<SequencerTab>('pattern');
 
   useEffect(() => {
     if (state.mode !== 'sequencer') return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
+      if (event.defaultPrevented || isTypingTarget(event.target)) return;
       let handled = true;
       if (event.code === 'Space') command('play-toggle');
       else if (event.key === 'Home') command('seek', { tick: 0 });
@@ -306,7 +361,7 @@ export function SequencerWorkspace() {
 
   return (
     <section className="sequencer-workspace" aria-label="Contour sequencer">
-      <div className="sequencer-transport">
+      <header className="sequencer-transport">
         <div className="sequencer-playback" aria-label="Sequencer playback controls">
           <button
             type="button"
@@ -327,18 +382,101 @@ export function SequencerWorkspace() {
         <output className="sequencer-position" aria-label="Sequencer position">
           Bar {state.bar} · Beat {state.beat.toFixed(2)}
         </output>
-        <label>
-          Tempo
-          <input
-            aria-label="Sequencer tempo"
-            type="number"
-            min="40"
-            max="240"
-            value={state.tempo}
-            onChange={(event) => numericCommand('tempo', event.target.value)}
-          />
-          BPM
+        <div className="sequencer-transport-divider" />
+        <label className="sequencer-tempo">
+          <span>Tempo</span>
+          <span>
+            <input
+              aria-label="Sequencer tempo"
+              type="number"
+              min="40"
+              max="240"
+              value={state.tempo}
+              onChange={(event) => numericCommand('tempo', event.target.value)}
+            />
+            BPM
+          </span>
         </label>
+        <span
+          className={[
+            'sequencer-pending',
+            state.pendingShape ? 'is-pending' : '',
+            !state.pendingShape && state.hasExactSource ? 'is-ready' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          <i />
+          {state.pendingShape
+            ? 'Pending shape · next bar'
+            : state.hasExactSource
+              ? 'Exact shape ready'
+              : 'Waiting for exact shape'}
+        </span>
+        <div className="sequencer-transport-spacer" />
+        <div className="sequencer-export-group">
+          <label>
+            <span>Export length</span>
+            <select
+              aria-label="MIDI export bars"
+              value={state.exportBars}
+              onChange={(event) => numericCommand('export-bars', event.target.value)}
+            >
+              {[1, 2, 4, 8, 16, 32].map((bars) => (
+                <option key={bars} value={bars}>
+                  {bars} bars
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="sequencer-midi-export"
+            disabled={!state.canExport}
+            onClick={() => command('export-midi')}
+          >
+            <Download size={13} /> MIDI
+          </button>
+        </div>
+      </header>
+      <div className="sequencer-workspace-nav">
+        <div
+          className="sequencer-tabs"
+          role="tablist"
+          aria-label="Sequencer lane settings"
+          onKeyDown={(event) => {
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+            event.preventDefault();
+            const nextTab = activeTab === 'pattern' ? 'mapping' : 'pattern';
+            setActiveTab(nextTab);
+            const tabs = event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+            tabs[nextTab === 'pattern' ? 0 : 1]?.focus();
+          }}
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'pattern'}
+            tabIndex={activeTab === 'pattern' ? 0 : -1}
+            onClick={() => setActiveTab('pattern')}
+          >
+            Pattern
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'mapping'}
+            tabIndex={activeTab === 'mapping' ? 0 : -1}
+            onClick={() => setActiveTab('mapping')}
+          >
+            Shape mapping
+          </button>
+        </div>
+        <p id={`sequencer-${activeTab}-description`}>
+          {activeTab === 'pattern'
+            ? 'Choose each lane’s voice, rhythmic cycle, and the musical detail shaped by the contours.'
+            : 'Choose a distinct point around the contour, then control how the lane travels through the slice stack.'}
+        </p>
         <div className="sequencer-add-lanes">
           <button type="button" onClick={() => command('lane-add', { kind: 'melodic' })}>
             <Plus size={13} /> Melody
@@ -347,47 +485,10 @@ export function SequencerWorkspace() {
             <Plus size={13} /> Drum
           </button>
         </div>
-        <label>
-          Export
-          <select
-            aria-label="MIDI export bars"
-            value={state.exportBars}
-            onChange={(event) => numericCommand('export-bars', event.target.value)}
-          >
-            {[1, 2, 4, 8, 16, 32].map((bars) => (
-              <option key={bars} value={bars}>
-                {bars} bars
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="button"
-          className="sequencer-midi-export"
-          disabled={!state.canExport}
-          onClick={() => command('export-midi')}
-        >
-          <Download size={13} /> MIDI
-        </button>
-        <span className={state.pendingShape ? 'sequencer-pending is-pending' : 'sequencer-pending'}>
-          {state.pendingShape
-            ? 'Pending shape · next bar'
-            : state.hasExactSource
-              ? 'Exact shape ready'
-              : 'Waiting for exact shape'}
-        </span>
-      </div>
-      <div className="sequencer-ruler" aria-hidden="true">
-        <span>Lanes</span>
-        <div>
-          {Array.from({ length: 16 }, (_, index) => (
-            <i key={index}>{index + 1}</i>
-          ))}
-        </div>
       </div>
       <div className="sequencer-lanes">
         {state.lanes.map((lane) => (
-          <LaneRow key={lane.id} lane={lane} />
+          <LaneRow key={lane.id} lane={lane} activeTab={activeTab} />
         ))}
       </div>
     </section>
