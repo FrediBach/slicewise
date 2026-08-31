@@ -104,8 +104,10 @@ Coverage currently measures the focused core under active test:
 - `scalar-fields.ts`
 - `scan-band-glitch.ts`
 - `sequencer-project.ts`
+- `sequencer-events.ts`
 - `sequencer-playback.ts`
 - `sequencer-probability.ts`
+- `web-audio-engine.ts`
 - `slicer-export.ts`
 - `svg-mesh.ts`
 - `staggered-slices.ts`
