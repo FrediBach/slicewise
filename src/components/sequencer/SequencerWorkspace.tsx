@@ -30,6 +30,9 @@ function useSequencerUiState(): SequencerUiState {
 const command = (type: string, detail: Record<string, unknown> = {}) =>
   document.dispatchEvent(new CustomEvent('sequencercommand', { detail: { type, ...detail } }));
 
+const previewSource = (detail: Record<string, unknown>) =>
+  document.dispatchEvent(new CustomEvent('sequencerpreviewchange', { detail }));
+
 function numericCommand(type: string, value: string, detail: Record<string, unknown> = {}): void {
   const numeric = Number(value);
   if (Number.isFinite(numeric)) command(type, { ...detail, value: numeric });
@@ -163,6 +166,12 @@ function LaneRow({ lane }: { lane: SequencerUiLane }) {
             style={{ '--step-value': step.value } as CSSProperties}
             aria-label={`${lane.name} step ${step.index + 1}: ${step.label}`}
             aria-current={lane.activeStep === step.index ? 'step' : undefined}
+            onPointerEnter={() =>
+              previewSource({ laneId: lane.id, stepIndex: step.index, active: true })
+            }
+            onPointerLeave={() => previewSource({ active: false })}
+            onFocus={() => previewSource({ laneId: lane.id, stepIndex: step.index, active: true })}
+            onBlur={() => previewSource({ active: false })}
             onClick={() => command('seek-step', { laneId: lane.id, stepIndex: step.index })}
           >
             <span />

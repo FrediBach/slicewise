@@ -49,6 +49,21 @@ function orderedSlices(
   return slices;
 }
 
+/** Resolves a musical grid step back to the original contour slices it samples. */
+export function contourSlicesForStep(
+  lane: SequencerLane,
+  source: ContourSequenceSource | undefined,
+  stepIndex: number,
+): ContourSliceFeature[] {
+  const slices = orderedSlices(source, lane.direction);
+  if (!slices.length) return [];
+  const index = ((Math.round(stepIndex) % lane.steps) + lane.steps) % lane.steps;
+  const start = (index * slices.length) / lane.steps;
+  const end = ((index + 1) * slices.length) / lane.steps;
+  const sampled = slices.slice(Math.floor(start), Math.max(Math.floor(start) + 1, Math.ceil(end)));
+  return [...new Map(sampled.map((slice) => [slice.index, slice])).values()];
+}
+
 /** Area-averages a descriptor signal onto a stable musical grid. */
 export function resampleFeatureValues(values: readonly number[], steps: number): number[] {
   const count = clamp(Math.round(Number.isFinite(steps) ? steps : 1), 1, 64);

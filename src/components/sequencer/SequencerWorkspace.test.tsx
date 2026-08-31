@@ -125,4 +125,21 @@ describe('sequencer workspace', () => {
     ]);
     document.removeEventListener('sequencercommand', onCommand);
   });
+
+  it('publishes source-preview interaction for a sequence step', () => {
+    const onPreview = vi.fn();
+    document.addEventListener('sequencerpreviewchange', onPreview);
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+
+    const step = screen.getByRole('button', { name: 'Contour pluck step 1: hit, MIDI 60' });
+    fireEvent.pointerEnter(step);
+    fireEvent.pointerLeave(step);
+
+    expect(onPreview.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { laneId: 'melody-1', stepIndex: 0, active: true },
+      { active: false },
+    ]);
+    document.removeEventListener('sequencerpreviewchange', onPreview);
+  });
 });

@@ -118,7 +118,11 @@ import {
   type AnimationParameterDescriptor,
   type AnimationProject,
 } from './animation-project';
-import { createContourSequence, type ContourSequenceStep } from './contour-sequence';
+import {
+  contourSlicesForStep,
+  createContourSequence,
+  type ContourSequenceStep,
+} from './contour-sequence';
 import { resolveStepTrigger, resolveStepVariation } from './sequencer-probability';
 import {
   applyLanePreset,
@@ -636,6 +640,7 @@ if (typeof document !== 'undefined') {
       panY: request.settings.panY,
     };
     applyViewTransform(request.purpose === 'config' ? state : request.settings);
+    renderSequencerSourceOverlay();
     $('rPaths').textContent = result.paths.toLocaleString();
     $('rPts').textContent = Math.round(result.nodes).toLocaleString();
     updateExportSize();
@@ -3574,6 +3579,7 @@ if (typeof document !== 'undefined') {
   let sequencerSaveTimer = 0;
   let sequencerSaveFailed = false;
   let nextSequencerLaneId = 2;
+  let sequencerInspection: { laneId: string; stepIndex: number } | null = null;
   const sequencerEngine = new WebAudioEngine({
     onSequenceSwap: (tick) => {
       if (sequencerSwapTick === tick) sequencerSwapTick = null;
@@ -3643,10 +3649,85 @@ if (typeof document !== 'undefined') {
     return ((value % modulus) + modulus) % modulus;
   }
 
+  function sequencerStepSlices(lane: SequencerLane, stepIndex: number) {
+    return contourSlicesForStep(lane, sequencerSource ?? undefined, stepIndex).filter(
+      (slice) =>
+        slice.pathCount > 0 && Number.isFinite(slice.centroidX) && Number.isFinite(slice.centroidY),
+    );
+  }
+
+  function renderSequencerSourceOverlay(): void {
+    const root = $('bed').querySelector<SVGGElement>('[data-preview-root]');
+    root?.querySelector('[data-sequencer-source-overlay]')?.remove();
+    if (!root || !sequencerMode || !sequencerSource || sequencerAwaitingExact) return;
+
+    const activeForLane = (lane: SequencerLane): number => {
+      const duration = tickValue(laneStepDuration(sequencerProject, lane));
+      const absoluteStep = Math.floor(sequencerEngine.playheadTick / duration);
+      return positiveModulo(absoluteStep + Math.round(lane.phase), lane.steps);
+    };
+    const inspectedLane = sequencerInspection
+      ? sequencerProject.lanes.find(({ id }) => id === sequencerInspection?.laneId)
+      : undefined;
+    const targets = inspectedLane
+      ? [{ lane: inspectedLane, stepIndex: sequencerInspection!.stepIndex, inspected: true }]
+      : sequencerProject.lanes.slice(0, 3).map((lane) => ({
+          lane,
+          stepIndex: activeForLane(lane),
+          inspected: false,
+        }));
+    if (!targets.length) return;
+
+    const namespace = 'http://www.w3.org/2000/svg';
+    const overlay = document.createElementNS(namespace, 'g');
+    overlay.dataset.sequencerSourceOverlay = '';
+    overlay.setAttribute('pointer-events', 'none');
+    for (const { lane, stepIndex, inspected } of targets) {
+      const slices = sequencerStepSlices(lane, stepIndex);
+      if (!slices.length) continue;
+      const group = document.createElementNS(namespace, 'g');
+      group.setAttribute(
+        'class',
+        `sequencer-source-highlight is-${lane.kind}${inspected ? ' is-inspected' : ''}`,
+      );
+      const title = document.createElementNS(namespace, 'title');
+      const indexes = slices.map(({ index }) => index + 1);
+      title.textContent = `${lane.name}, step ${stepIndex + 1}: source slices ${Math.min(...indexes)}–${Math.max(...indexes)}`;
+      group.appendChild(title);
+
+      if (slices.length > 1) {
+        const trail = document.createElementNS(namespace, 'path');
+        trail.setAttribute(
+          'd',
+          slices
+            .map(
+              ({ centroidX, centroidY }, index) => `${index ? 'L' : 'M'}${centroidX} ${centroidY}`,
+            )
+            .join(' '),
+        );
+        trail.setAttribute('class', 'sequencer-source-trail');
+        group.appendChild(trail);
+      }
+      const stride = Math.max(1, Math.ceil(slices.length / 24));
+      for (let index = 0; index < slices.length; index += stride) {
+        const slice = slices[index];
+        const marker = document.createElementNS(namespace, 'circle');
+        marker.setAttribute('cx', String(slice.centroidX));
+        marker.setAttribute('cy', String(slice.centroidY));
+        marker.setAttribute('r', inspected ? '2.4' : '1.7');
+        marker.setAttribute('class', 'sequencer-source-marker');
+        group.appendChild(marker);
+      }
+      overlay.appendChild(group);
+    }
+    if (overlay.childNodes.length) root.appendChild(overlay);
+  }
+
   function publishSequencerState(): void {
     const playheadTick = sequencerEngine.playheadTick;
     const barTicks = ticksPerBar(sequencerProject.timeSignature);
     const beatTicks = TRANSPORT_PPQ * (4 / sequencerProject.timeSignature.denominator);
+    renderSequencerSourceOverlay();
     document.dispatchEvent(
       new CustomEvent('sequencerstatechange', {
         detail: {
@@ -3747,6 +3828,7 @@ if (typeof document !== 'undefined') {
   function leaveSequencerMode(): void {
     if (!sequencerMode) return;
     sequencerMode = false;
+    sequencerInspection = null;
     document.body.classList.remove('sequencer-mode');
     cancelAnimationFrame(sequencerPlayheadFrame);
     void sequencerEngine.stop().then(() => publishSequencerState());
@@ -4422,6 +4504,14 @@ if (typeof document !== 'undefined') {
   });
   document.addEventListener('animationstaterequest', publishAnimationState);
   document.addEventListener('sequencerstaterequest', publishSequencerState);
+  document.addEventListener('sequencerpreviewchange', (event) => {
+    if (!sequencerMode) return;
+    const detail = (event as CustomEvent<Record<string, unknown>>).detail ?? {};
+    sequencerInspection = detail.active
+      ? { laneId: String(detail.laneId ?? ''), stepIndex: Math.round(Number(detail.stepIndex)) }
+      : null;
+    renderSequencerSourceOverlay();
+  });
   document.addEventListener('sequencercommand', (event) => {
     if (!sequencerMode) return;
     const detail = (event as CustomEvent<Record<string, unknown>>).detail ?? {};

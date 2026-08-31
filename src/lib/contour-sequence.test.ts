@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { ContourSequenceSource } from './contour-features';
-import { createContourSequence, resampleFeatureValues } from './contour-sequence';
+import {
+  contourSlicesForStep,
+  createContourSequence,
+  resampleFeatureValues,
+} from './contour-sequence';
 import { scaleRegister } from './music-quantization';
 import { createDrumLane, createMelodicLane } from './sequencer-project';
 
@@ -88,5 +92,23 @@ describe('createContourSequence', () => {
   it('keeps missing geometry deterministic and contour influence neutral', () => {
     const lane = { ...createMelodicLane(), steps: 4, contourInfluence: 0 };
     expect(createContourSequence(lane)).toEqual(createContourSequence(lane, source));
+  });
+});
+
+describe('contourSlicesForStep', () => {
+  it('maps reduced grids to contiguous source slices in lane direction', () => {
+    const lane = { ...createMelodicLane(), steps: 4 };
+
+    expect(contourSlicesForStep(lane, source, 1).map(({ index }) => index)).toEqual([2, 3]);
+    expect(
+      contourSlicesForStep({ ...lane, direction: 'reverse' }, source, 1).map(({ index }) => index),
+    ).toEqual([5, 4]);
+  });
+
+  it('keeps expanded-grid steps attached to a source slice', () => {
+    const lane = { ...createMelodicLane(), steps: 16 };
+
+    expect(contourSlicesForStep(lane, source, 15).map(({ index }) => index)).toEqual([7]);
+    expect(contourSlicesForStep(lane, source, -1).map(({ index }) => index)).toEqual([7]);
   });
 });
