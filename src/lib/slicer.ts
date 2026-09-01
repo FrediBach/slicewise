@@ -3579,6 +3579,7 @@ if (typeof document !== 'undefined') {
   let sequencerSaveFailed = false;
   let nextSequencerLaneId = 2;
   let sequencerInspection: { laneId: string; stepIndex: number } | null = null;
+  let sequencerMappingGuideOpen = false;
   const sequencerEngine = new WebAudioEngine({
     onSequenceSwap: (tick) => {
       if (sequencerSwapTick === tick) sequencerSwapTick = null;
@@ -3660,6 +3661,37 @@ if (typeof document !== 'undefined') {
     );
   }
 
+  function sequencerLaneRouteSlices(lane: SequencerLane) {
+    const slicesByIndex = new Map(
+      (sequencerSource?.slices ?? []).map((slice) => [slice.index, slice]),
+    );
+    const route: ContourSequenceSource['slices'] = [];
+    let previousIndex: number | undefined;
+    for (const step of sequencerSequences.get(lane.id) ?? []) {
+      for (const index of step.sourceSliceIndexes) {
+        if (index === previousIndex) continue;
+        previousIndex = index;
+        const slice = slicesByIndex.get(index);
+        if (
+          slice &&
+          slice.pathCount > 0 &&
+          Number.isFinite(slice.centroidX) &&
+          Number.isFinite(slice.centroidY)
+        )
+          route.push(slice);
+      }
+    }
+    return route;
+  }
+
+  function sampledRoutePoints(points: readonly [number, number][], maximum = 180) {
+    if (points.length <= maximum) return points;
+    return Array.from(
+      { length: maximum },
+      (_, index) => points[Math.round((index / (maximum - 1)) * (points.length - 1))],
+    );
+  }
+
   function renderSequencerSourceOverlay(): void {
     const root = $('bed').querySelector<SVGGElement>('[data-preview-root]');
     root?.querySelector('[data-sequencer-source-overlay]')?.remove();
@@ -3674,33 +3706,58 @@ if (typeof document !== 'undefined') {
       ? sequencerProject.lanes.find(({ id }) => id === sequencerInspection?.laneId)
       : undefined;
     const targets = inspectedLane
-      ? [{ lane: inspectedLane, stepIndex: sequencerInspection!.stepIndex, inspected: true }]
-      : sequencerProject.lanes.slice(0, 3).map((lane) => ({
-          lane,
-          stepIndex: activeForLane(lane),
-          inspected: false,
-        }));
+      ? [
+          {
+            lane: inspectedLane,
+            stepIndex: sequencerInspection!.stepIndex,
+            inspected: true,
+            mapping: false,
+          },
+        ]
+      : sequencerMappingGuideOpen
+        ? sequencerProject.lanes.map((lane) => ({
+            lane,
+            stepIndex: activeForLane(lane),
+            inspected: false,
+            mapping: true,
+          }))
+        : sequencerProject.lanes.slice(0, 3).map((lane) => ({
+            lane,
+            stepIndex: activeForLane(lane),
+            inspected: false,
+            mapping: false,
+          }));
     if (!targets.length) return;
 
     const namespace = 'http://www.w3.org/2000/svg';
     const overlay = document.createElementNS(namespace, 'g');
     overlay.dataset.sequencerSourceOverlay = '';
     overlay.setAttribute('pointer-events', 'none');
-    for (const { lane, stepIndex, inspected } of targets) {
-      const slices = sequencerStepSlices(lane, stepIndex);
+    for (const { lane, stepIndex, inspected, mapping } of targets) {
+      const trackPosition = lane.traversal.trackPosition;
+      const slices = mapping
+        ? sequencerLaneRouteSlices(lane)
+        : sequencerStepSlices(lane, stepIndex);
       if (!slices.length) continue;
-      const routePoints = slices.map((slice) =>
-        contourTrackPoint(slice, lane.traversal.trackPosition),
+      const routePoints = sampledRoutePoints(
+        slices.map((slice) => contourTrackPoint(slice, trackPosition)),
       );
       const group = document.createElementNS(namespace, 'g');
       group.setAttribute(
         'class',
-        `sequencer-source-highlight is-${lane.kind}${inspected ? ' is-inspected' : ''}`,
+        `sequencer-source-highlight is-${lane.kind}${inspected ? ' is-inspected' : ''}${mapping ? ' is-mapping-guide' : ''}`,
       );
       group.style.color = lane.color;
       const title = document.createElementNS(namespace, 'title');
-      const indexes = slices.map(({ index }) => index + 1);
-      title.textContent = `${lane.name}, step ${stepIndex + 1}: source slices ${Math.min(...indexes)}–${Math.max(...indexes)}, contour point ${lane.traversal.trackPosition}%`;
+      let minimumIndex = Number.POSITIVE_INFINITY;
+      let maximumIndex = Number.NEGATIVE_INFINITY;
+      for (const slice of slices) {
+        minimumIndex = Math.min(minimumIndex, slice.index + 1);
+        maximumIndex = Math.max(maximumIndex, slice.index + 1);
+      }
+      title.textContent = mapping
+        ? `${lane.name}: ${lane.direction} mapping through source slices ${minimumIndex}–${maximumIndex} at contour point ${trackPosition}%`
+        : `${lane.name}, step ${stepIndex + 1}: source slices ${minimumIndex}–${maximumIndex}, contour point ${trackPosition}%`;
       group.appendChild(title);
 
       if (slices.length > 1) {
@@ -3712,9 +3769,29 @@ if (typeof document !== 'undefined') {
         trail.setAttribute('class', 'sequencer-source-trail');
         group.appendChild(trail);
       }
-      const stride = Math.max(1, Math.ceil(slices.length / 24));
-      for (let index = 0; index < slices.length; index += stride) {
+      if (mapping && routePoints.length > 1) {
+        const arrowCount = Math.min(5, Math.max(1, Math.floor(routePoints.length / 12)));
+        for (let arrowIndex = 1; arrowIndex <= arrowCount; arrowIndex++) {
+          const index = Math.min(
+            routePoints.length - 1,
+            Math.max(1, Math.round((arrowIndex / (arrowCount + 1)) * routePoints.length)),
+          );
+          const [beforeX, beforeY] = routePoints[index - 1];
+          const [x, y] = routePoints[index];
+          const arrow = document.createElementNS(namespace, 'path');
+          arrow.setAttribute('d', 'M-3 -2.2 L0 0 L-3 2.2');
+          arrow.setAttribute(
+            'transform',
+            `translate(${x} ${y}) rotate(${(Math.atan2(y - beforeY, x - beforeX) * 180) / Math.PI})`,
+          );
+          arrow.setAttribute('class', 'sequencer-mapping-arrow');
+          group.appendChild(arrow);
+        }
+      }
+      const stride = Math.max(1, Math.ceil(routePoints.length / (mapping ? 12 : 24)));
+      for (let index = 0; index < routePoints.length; index += stride) {
         const [x, y] = routePoints[index];
+        if (x === undefined || y === undefined) continue;
         const marker = document.createElementNS(
           namespace,
           lane.kind === 'drum' ? 'rect' : 'circle',
@@ -3733,6 +3810,27 @@ if (typeof document !== 'undefined') {
         }
         marker.setAttribute('class', 'sequencer-source-marker');
         group.appendChild(marker);
+      }
+      if (mapping) {
+        const boundaryPoints = [routePoints[0], routePoints.at(-1)!];
+        boundaryPoints.forEach(([x, y], index) => {
+          const boundary = document.createElementNS(namespace, 'circle');
+          boundary.setAttribute('cx', String(x));
+          boundary.setAttribute('cy', String(y));
+          boundary.setAttribute('r', index === 0 ? '3.2' : '2.3');
+          boundary.setAttribute(
+            'class',
+            `sequencer-mapping-boundary is-${index === 0 ? 'start' : 'end'}`,
+          );
+          group.appendChild(boundary);
+        });
+        const [labelX, labelY] = routePoints[0];
+        const label = document.createElementNS(namespace, 'text');
+        label.setAttribute('x', String(labelX + 4.5));
+        label.setAttribute('y', String(labelY - 3));
+        label.setAttribute('class', 'sequencer-mapping-label');
+        label.textContent = `${lane.name} · ${trackPosition}%`;
+        group.appendChild(label);
       }
       overlay.appendChild(group);
     }
@@ -3878,6 +3976,7 @@ if (typeof document !== 'undefined') {
     if (!sequencerMode) return;
     sequencerMode = false;
     sequencerInspection = null;
+    sequencerMappingGuideOpen = false;
     document.body.classList.remove('sequencer-mode');
     cancelAnimationFrame(sequencerPlayheadFrame);
     void sequencerEngine.stop().then(() => publishSequencerState());
@@ -4561,6 +4660,12 @@ if (typeof document !== 'undefined') {
     sequencerInspection = detail.active
       ? { laneId: String(detail.laneId ?? ''), stepIndex: Math.round(Number(detail.stepIndex)) }
       : null;
+    renderSequencerSourceOverlay();
+  });
+  document.addEventListener('sequencermappingvisibilitychange', (event) => {
+    sequencerMappingGuideOpen = Boolean(
+      (event as CustomEvent<{ active?: boolean }>).detail?.active,
+    );
     renderSequencerSourceOverlay();
   });
   document.addEventListener('sequencercommand', (event) => {

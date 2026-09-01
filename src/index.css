@@ -1954,6 +1954,9 @@ body.animation-mode .section-randomize {
 .sequencer-source-highlight.is-inspected {
   opacity: 1;
 }
+.sequencer-source-highlight.is-mapping-guide {
+  opacity: 0.92;
+}
 .sequencer-source-trail {
   fill: none;
   stroke: currentColor;
@@ -1962,6 +1965,40 @@ body.animation-mode .section-randomize {
   stroke-linejoin: round;
   stroke-dasharray: 2.5 2;
   vector-effect: non-scaling-stroke;
+}
+.sequencer-source-highlight.is-mapping-guide .sequencer-source-trail {
+  stroke-width: 2;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 2px white);
+}
+.sequencer-mapping-arrow {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 1.5px white);
+}
+.sequencer-mapping-boundary {
+  fill: white;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 2px white);
+}
+.sequencer-mapping-boundary.is-end {
+  fill: currentColor;
+}
+.sequencer-mapping-label {
+  fill: currentColor;
+  stroke: white;
+  stroke-width: 1.5;
+  paint-order: stroke fill;
+  font-family: Manrope, sans-serif;
+  font-size: 4px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 .sequencer-source-marker {
   fill: color-mix(in srgb, currentColor 22%, white);

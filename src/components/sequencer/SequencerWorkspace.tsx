@@ -488,6 +488,19 @@ export function SequencerWorkspace() {
   const [activeTab, setActiveTab] = useState<SequencerTab>('pattern');
 
   useEffect(() => {
+    const active = state.mode === 'sequencer' && activeTab === 'mapping';
+    document.dispatchEvent(
+      new CustomEvent('sequencermappingvisibilitychange', { detail: { active } }),
+    );
+    return () => {
+      if (active)
+        document.dispatchEvent(
+          new CustomEvent('sequencermappingvisibilitychange', { detail: { active: false } }),
+        );
+    };
+  }, [activeTab, state.mode]);
+
+  useEffect(() => {
     if (state.mode !== 'sequencer') return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isTypingTarget(event.target)) return;

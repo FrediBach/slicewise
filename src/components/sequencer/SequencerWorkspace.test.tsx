@@ -102,6 +102,8 @@ describe('sequencer workspace', () => {
 
   it('organizes lane controls into accessible pattern and shape-mapping tabs', async () => {
     const user = userEvent.setup();
+    const onMappingVisibility = vi.fn();
+    document.addEventListener('sequencermappingvisibilitychange', onMappingVisibility);
     render(<SequencerWorkspace />);
     act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
 
@@ -117,6 +119,12 @@ describe('sequencer workspace', () => {
     expect(screen.getByLabelText('Contour pluck lane type')).not.toBeVisible();
     expect(screen.getByLabelText('Contour pluck slice travel direction')).toBeVisible();
     expect(screen.getByText(/Choose a distinct point around the contour/)).toBeInTheDocument();
+    expect(
+      onMappingVisibility.mock.calls.some(
+        ([event]) => (event as CustomEvent).detail.active === true,
+      ),
+    ).toBe(true);
+    document.removeEventListener('sequencermappingvisibilitychange', onMappingVisibility);
   });
 
   it('supports arrow-key tab navigation without moving the transport', () => {
