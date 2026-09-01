@@ -1954,6 +1954,9 @@ body.animation-mode .section-randomize {
 .sequencer-source-highlight.is-inspected {
   opacity: 1;
 }
+.sequencer-source-highlight.is-playhead {
+  opacity: 1;
+}
 .sequencer-source-highlight.is-mapping-guide {
   opacity: 0.92;
 }
@@ -1970,6 +1973,11 @@ body.animation-mode .section-randomize {
   stroke-width: 2;
   stroke-dasharray: none;
   filter: drop-shadow(0 0 2px white);
+}
+.sequencer-source-highlight.is-playhead .sequencer-source-trail {
+  stroke-width: 3.2;
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 3px white) drop-shadow(0 0 2px currentColor);
 }
 .sequencer-mapping-arrow {
   fill: none;
@@ -2011,6 +2019,12 @@ body.animation-mode .section-randomize {
   fill: color-mix(in srgb, currentColor 38%, white);
   stroke-width: 2;
   filter: drop-shadow(0 0 3px currentColor) drop-shadow(0 0 2px white);
+}
+.sequencer-source-highlight.is-playhead .sequencer-source-marker {
+  fill: currentColor;
+  stroke: white;
+  stroke-width: 2.4;
+  filter: drop-shadow(0 0 3px currentColor);
 }
 .animation-transport {
   display: flex;

@@ -3705,35 +3705,45 @@ if (typeof document !== 'undefined') {
     const inspectedLane = sequencerInspection
       ? sequencerProject.lanes.find(({ id }) => id === sequencerInspection?.laneId)
       : undefined;
-    const targets = inspectedLane
+    const playheadTargets = sequencerProject.lanes.map((lane) => ({
+      lane,
+      stepIndex: activeForLane(lane),
+      inspected: false,
+      mapping: false,
+      playhead: true,
+    }));
+    const inspectionTargets = inspectedLane
       ? [
           {
             lane: inspectedLane,
             stepIndex: sequencerInspection!.stepIndex,
             inspected: true,
             mapping: false,
+            playhead: false,
           },
         ]
-      : sequencerMappingGuideOpen
-        ? sequencerProject.lanes.map((lane) => ({
+      : [];
+    const targets = sequencerMappingGuideOpen
+      ? [
+          ...sequencerProject.lanes.map((lane) => ({
             lane,
             stepIndex: activeForLane(lane),
             inspected: false,
             mapping: true,
-          }))
-        : sequencerProject.lanes.slice(0, 3).map((lane) => ({
-            lane,
-            stepIndex: activeForLane(lane),
-            inspected: false,
-            mapping: false,
-          }));
+            playhead: false,
+          })),
+          ...(inspectionTargets.length ? inspectionTargets : playheadTargets),
+        ]
+      : inspectionTargets.length
+        ? inspectionTargets
+        : playheadTargets.slice(0, 3);
     if (!targets.length) return;
 
     const namespace = 'http://www.w3.org/2000/svg';
     const overlay = document.createElementNS(namespace, 'g');
     overlay.dataset.sequencerSourceOverlay = '';
     overlay.setAttribute('pointer-events', 'none');
-    for (const { lane, stepIndex, inspected, mapping } of targets) {
+    for (const { lane, stepIndex, inspected, mapping, playhead } of targets) {
       const trackPosition = lane.traversal.trackPosition;
       const slices = mapping
         ? sequencerLaneRouteSlices(lane)
@@ -3745,7 +3755,7 @@ if (typeof document !== 'undefined') {
       const group = document.createElementNS(namespace, 'g');
       group.setAttribute(
         'class',
-        `sequencer-source-highlight is-${lane.kind}${inspected ? ' is-inspected' : ''}${mapping ? ' is-mapping-guide' : ''}`,
+        `sequencer-source-highlight is-${lane.kind}${inspected ? ' is-inspected' : ''}${mapping ? ' is-mapping-guide' : ''}${playhead ? ' is-playhead' : ''}`,
       );
       group.style.color = lane.color;
       const title = document.createElementNS(namespace, 'title');
@@ -3757,7 +3767,7 @@ if (typeof document !== 'undefined') {
       }
       title.textContent = mapping
         ? `${lane.name}: ${lane.direction} mapping through source slices ${minimumIndex}–${maximumIndex} at contour point ${trackPosition}%`
-        : `${lane.name}, step ${stepIndex + 1}: source slices ${minimumIndex}–${maximumIndex}, contour point ${trackPosition}%`;
+        : `${lane.name}, ${playhead ? 'playing' : 'inspecting'} step ${stepIndex + 1}: source slices ${minimumIndex}–${maximumIndex}, contour point ${trackPosition}%`;
       group.appendChild(title);
 
       if (slices.length > 1) {
@@ -3797,7 +3807,7 @@ if (typeof document !== 'undefined') {
           lane.kind === 'drum' ? 'rect' : 'circle',
         );
         if (lane.kind === 'drum') {
-          const size = inspected ? 4.2 : 3;
+          const size = inspected || playhead ? 4.2 : 3;
           marker.setAttribute('x', String(x - size / 2));
           marker.setAttribute('y', String(y - size / 2));
           marker.setAttribute('width', String(size));
@@ -3806,7 +3816,7 @@ if (typeof document !== 'undefined') {
         } else {
           marker.setAttribute('cx', String(x));
           marker.setAttribute('cy', String(y));
-          marker.setAttribute('r', inspected ? '2.4' : '1.7');
+          marker.setAttribute('r', inspected || playhead ? '2.4' : '1.7');
         }
         marker.setAttribute('class', 'sequencer-source-marker');
         group.appendChild(marker);
