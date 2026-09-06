@@ -56,6 +56,12 @@ export const MIN_ANIMATION_DURATION_MS = 100;
 export const MAX_ANIMATION_DURATION_MS = 3_600_000;
 export const MIN_ANIMATION_FPS = 1;
 export const MAX_ANIMATION_FPS = 120;
+export const ANIMATION_EXPORT_LONG_EDGES = [1080, 1920, 2560, 3840] as const;
+export const ANIMATION_EXPORT_BITRATES = [4, 8, 16, 24, 40, 60, 100].map(
+  (mbps) => mbps * 1_000_000,
+);
+export const DEFAULT_ANIMATION_EXPORT_LONG_EDGE = 1920;
+export const DEFAULT_ANIMATION_EXPORT_BITRATE = 24_000_000;
 
 const clone = <T>(value: T): T => globalThis.structuredClone(value);
 
@@ -100,14 +106,17 @@ export function captureAnimationValues(
   return values;
 }
 
-export function animationExportSize(settings: ContourSettings): AnimationExportSettings {
+export function animationExportSize(
+  settings: Pick<ContourSettings, 'pw' | 'ph'>,
+  resolution = DEFAULT_ANIMATION_EXPORT_LONG_EDGE,
+): AnimationExportSettings {
   const longEdge = Math.max(1, settings.pw, settings.ph);
-  const width = Math.max(2, Math.round((1080 * settings.pw) / longEdge));
-  const height = Math.max(2, Math.round((1080 * settings.ph) / longEdge));
+  const width = Math.max(2, Math.round((resolution * settings.pw) / longEdge));
+  const height = Math.max(2, Math.round((resolution * settings.ph) / longEdge));
   return {
     width: width + (width % 2),
     height: height + (height % 2),
-    bitrate: 8_000_000,
+    bitrate: DEFAULT_ANIMATION_EXPORT_BITRATE,
   };
 }
 

@@ -106,6 +106,9 @@ import {
 } from './video-encoder';
 import {
   addAnimationKeyframe,
+  animationExportSize,
+  ANIMATION_EXPORT_LONG_EDGES,
+  ANIMATION_EXPORT_BITRATES,
   createAnimationProject,
   duplicateAnimationKeyframe,
   evaluateAnimationSettings,
@@ -115,6 +118,7 @@ import {
   setAnimationLoopPreview,
   updateAnimationKeyframeValue,
   updateAnimationTiming,
+  updateAnimationExportSettings,
   type AnimationEasing,
   type AnimationParameterDescriptor,
   type AnimationProject,
@@ -3554,6 +3558,8 @@ if (typeof document !== 'undefined') {
     id?: string;
     easing?: AnimationEasing;
     enabled?: boolean;
+    longEdge?: number;
+    bitrate?: number;
   };
   type LockableControl = HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
 
@@ -4227,6 +4233,7 @@ if (typeof document !== 'undefined') {
           videoExportSupportKnown: animationVideoSupportKnown,
           videoExportSupported: animationVideoCodec !== null,
           videoExportCodec: animationVideoCodec,
+          exportSettings: animationProject?.export ?? animationExportSize(state),
           canUndo: animationHistory?.status.canUndo ?? false,
           canRedo: animationHistory?.status.canRedo ?? false,
           keyframes: (animationProject?.keyframes ?? []).map(({ id, timeMs, easingToNext }) => ({
@@ -4730,6 +4737,8 @@ if (typeof document !== 'undefined') {
     commitAnimationHistory();
     const restored = animationHistory.move(offset);
     if (!restored) return;
+    const exportChanged =
+      JSON.stringify(restored.export) !== JSON.stringify(animationProject.export);
     animationProject = restored;
     scheduleAnimationSave();
     animationPlayheadMs = clamp(animationPlayheadMs, 0, restored.durationMs);
@@ -4743,6 +4752,7 @@ if (typeof document !== 'undefined') {
     syncAnimationControlLocks();
     renderAnimationAt(animationPlayheadMs, false);
     publishAnimationState();
+    if (exportChanged) void refreshAnimationVideoSupport();
     toast(offset < 0 ? 'Animation edit undone' : 'Animation edit redone');
   }
 
@@ -5066,6 +5076,8 @@ if (typeof document !== 'undefined') {
         'loop',
         'duration',
         'fps',
+        'export-resolution',
+        'export-bitrate',
         'undo',
         'redo',
       ].includes(detail.type ?? '')
@@ -5209,6 +5221,30 @@ if (typeof document !== 'undefined') {
       animationProject = next;
       commitAnimationHistory();
       publishAnimationState();
+    } else if (detail.type === 'export-resolution' || detail.type === 'export-bitrate') {
+      const resolution = Number(detail.longEdge);
+      const bitrate = Number(detail.bitrate);
+      if (
+        detail.type === 'export-resolution'
+          ? !ANIMATION_EXPORT_LONG_EDGES.some((value) => value === resolution)
+          : !ANIMATION_EXPORT_BITRATES.includes(bitrate)
+      )
+        return;
+      const dimensions =
+        detail.type === 'export-resolution'
+          ? animationExportSize(animationProject.baseSettings, resolution)
+          : animationProject.export;
+      const next = updateAnimationExportSettings(
+        animationProject,
+        detail.type === 'export-resolution'
+          ? { width: dimensions.width, height: dimensions.height }
+          : { bitrate },
+      );
+      if (next === animationProject) return;
+      commitAnimationHistory();
+      animationProject = next;
+      commitAnimationHistory();
+      void refreshAnimationVideoSupport();
     } else if (detail.type === 'undo') moveAnimationHistory(-1);
     else if (detail.type === 'redo') moveAnimationHistory(1);
   });

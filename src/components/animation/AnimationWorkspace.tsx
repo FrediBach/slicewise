@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { CopyPlus, DiamondPlus, Pause, Play, SkipBack, SkipForward, Trash2 } from 'lucide-react';
 import {
-  CopyPlus,
-  DiamondPlus,
-  Download,
-  Pause,
-  Play,
-  SkipBack,
-  SkipForward,
-  Trash2,
-} from 'lucide-react';
-import { type AnimationEasing } from '../../lib/animation-project';
+  animationExportSize,
+  type AnimationEasing,
+  type AnimationExportSettings,
+} from '../../lib/animation-project';
 import { formatAnimationExportElapsed } from '../../lib/animation-video-export';
+import { AnimationExportAction } from './AnimationExportAction';
 
 type AnimationUiKeyframe = {
   id: string;
@@ -29,6 +25,7 @@ type AnimationUiState = {
   videoExportSupportKnown: boolean;
   videoExportSupported: boolean;
   videoExportCodec: 'vp9' | 'vp8' | null;
+  exportSettings: AnimationExportSettings;
   canUndo: boolean;
   canRedo: boolean;
   keyframes: AnimationUiKeyframe[];
@@ -46,6 +43,7 @@ const initialState: AnimationUiState = {
   videoExportSupportKnown: false,
   videoExportSupported: false,
   videoExportCodec: null,
+  exportSettings: animationExportSize({ pw: 210, ph: 297 }),
   canUndo: false,
   canRedo: false,
   keyframes: [],
@@ -147,6 +145,7 @@ export function AnimationTimeline() {
   useEffect(() => {
     if (state.mode !== 'animation') return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (document.querySelector('.animation-export-dialog[open]')) return;
       if (isTypingTarget(event.target)) return;
       let handled = true;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z')
@@ -284,22 +283,20 @@ export function AnimationTimeline() {
             Cancel export
           </button>
         ) : (
-          <button
-            type="button"
-            className="animation-export-button"
-            aria-label="Export video"
-            disabled={!state.videoExportSupported}
-            title={
-              !state.videoExportSupportKnown
-                ? 'Checking video encoder support…'
-                : state.videoExportSupported
-                  ? `Export WebM using ${state.videoExportCodec?.toUpperCase()}`
-                  : 'Video export requires a browser with WebCodecs VP9 or VP8 encoding.'
-            }
-            onClick={() => command('export')}
-          >
-            <Download size={14} /> Export video
-          </button>
+          <AnimationExportAction
+            settings={state.exportSettings}
+            durationMs={state.durationMs}
+            fps={state.fps}
+            disabled={locked}
+            supportKnown={state.videoExportSupportKnown}
+            supported={state.videoExportSupported}
+            onOpen={() => {
+              if (state.playing) command('play-toggle');
+            }}
+            onConfirm={() => command('export')}
+            onResolution={(longEdge) => command('export-resolution', { longEdge })}
+            onBitrate={(bitrate) => command('export-bitrate', { bitrate })}
+          />
         )}
       </div>
       <div className="animation-properties">
@@ -322,8 +319,6 @@ export function AnimationTimeline() {
           <output className="animation-export-progress" aria-live="polite">
             {exportState.message} · {formatAnimationExportElapsed(exportState.elapsedMs)}
           </output>
-        ) : state.videoExportSupportKnown && !state.videoExportSupported ? (
-          <span role="status">Video export unavailable: WebCodecs VP9/VP8 is not supported.</span>
         ) : (
           <span>{state.canUndo ? 'Animation undo available' : 'Animation history at start'}</span>
         )}

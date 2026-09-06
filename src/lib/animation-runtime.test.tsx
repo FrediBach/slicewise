@@ -3,13 +3,15 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import App from '../App';
 import type { ContourSettings } from './contour-engine';
+import { detectAnimationVideoCodec } from './video-encoder';
+import { saveAnimationProject } from './animation-storage';
 
 vi.mock('./animation-storage', () => ({
   localAnimationProjectId: () => 'runtime-test',
   loadAnimationProject: async () => null,
-  saveAnimationProject: async () => undefined,
+  saveAnimationProject: vi.fn(async () => undefined),
 }));
-vi.mock('./video-encoder', () => ({ detectAnimationVideoCodec: async () => null }));
+vi.mock('./video-encoder', () => ({ detectAnimationVideoCodec: vi.fn(async () => null) }));
 
 type Request = {
   type: string;
@@ -118,4 +120,30 @@ it('displays slow playback results, reuses cached frames, and settles exactly on
   expect(worker.renders.at(-1)!.quick).toBe(false);
   worker.complete();
   expect(displayed()).toBe(String(worker.renders.at(-1)!.id));
+
+  // Export controls change encoder settings without requesting preview work.
+  const beforeExportEdits = worker.renders.length;
+  command({ type: 'export-resolution', longEdge: 3840 });
+  command({ type: 'export-bitrate', bitrate: 60_000_000 });
+  await vi.advanceTimersByTimeAsync(300);
+  const configured = vi.mocked(detectAnimationVideoCodec).mock.calls.at(-1)!;
+  expect(Math.max(configured[0], configured[1])).toBe(3840);
+  expect(configured[2]).toBe(60_000_000);
+  expect(worker.renders).toHaveLength(beforeExportEdits);
+  expect(vi.mocked(saveAnimationProject).mock.calls.at(-1)![1].export).toEqual({
+    width: configured[0],
+    height: configured[1],
+    bitrate: 60_000_000,
+  });
+  command({ type: 'export-resolution', longEdge: Number.NaN });
+  command({ type: 'export-bitrate', bitrate: -1 });
+  expect(vi.mocked(detectAnimationVideoCodec).mock.calls.at(-1)).toEqual(configured);
+  command({ type: 'undo' });
+  await vi.advanceTimersByTimeAsync(32);
+  worker.complete();
+  expect(vi.mocked(detectAnimationVideoCodec).mock.calls.at(-1)![2]).toBe(24_000_000);
+  command({ type: 'redo' });
+  await vi.advanceTimersByTimeAsync(32);
+  worker.complete();
+  expect(vi.mocked(detectAnimationVideoCodec).mock.calls.at(-1)).toEqual(configured);
 });

@@ -11,6 +11,15 @@ const parameters = [
 ] as const satisfies readonly AnimationParameterDescriptor[];
 
 describe('animation project migrations', () => {
+  it('preserves saved export choices and uses higher quality when export settings are missing', () => {
+    const saved = { width: 764, height: 1080, bitrate: 8_000_000 };
+    expect(migrateAnimationProject({ export: saved }, contourSettings, parameters).export).toEqual(
+      saved,
+    );
+    const defaults = migrateAnimationProject({}, contourSettings, parameters).export;
+    expect(Math.max(defaults.width, defaults.height)).toBe(1920);
+    expect(defaults.bitrate).toBe(24_000_000);
+  });
   it('normalizes incomplete version-one data and adds the protected keyframe', () => {
     const migrated = migrateAnimationProject(
       {

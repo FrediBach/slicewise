@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { contourSettings } from '../test/fixtures/contours';
 import {
   addAnimationKeyframe,
+  animationExportSize,
   createAnimationProject,
   duplicateAnimationKeyframe,
   evaluateAnimationSettings,
@@ -26,6 +27,8 @@ describe('animation projects', () => {
 
     expect(project.durationMs).toBe(5000);
     expect(project.fps).toBe(30);
+    expect(Math.max(project.export.width, project.export.height)).toBe(1920);
+    expect(project.export.bitrate).toBe(24_000_000);
     expect(project.export.width % 2).toBe(0);
     expect(project.export.height % 2).toBe(0);
     expect(project.keyframes).toEqual([
@@ -177,6 +180,20 @@ describe('animation projects', () => {
 
     expect(updated.export).toEqual({ width: 722, height: 406, bitrate: 2_500_000 });
     expect(project.export).not.toEqual(updated.export);
+  });
+
+  it.each([
+    [210, 297],
+    [297, 210],
+    [100, 100],
+  ])('preserves the %s × %s artboard aspect ratio at each export resolution', (pw, ph) => {
+    for (const resolution of [1080, 1920, 2560, 3840]) {
+      const { width, height } = animationExportSize({ pw, ph }, resolution);
+      expect(Math.max(width, height)).toBe(resolution);
+      expect(width % 2).toBe(0);
+      expect(height % 2).toBe(0);
+      expect(Math.abs(width - (height * pw) / ph)).toBeLessThan(3);
+    }
   });
 
   it('evaluates deterministically without mutating project snapshots', () => {

@@ -2,8 +2,28 @@
 
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AnimationModeSwitch, AnimationTimeline } from './AnimationWorkspace';
+
+// jsdom has no native dialog lifecycle. Emulate opening/closing and initial
+// focus; the browser supplies modal focus containment and Escape cancellation.
+const dialogMethods = Object.getOwnPropertyDescriptors(HTMLDialogElement.prototype);
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+    this.querySelector<HTMLElement>('select, button')?.focus();
+  };
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+  };
+});
+afterAll(() => {
+  for (const method of ['showModal', 'close']) {
+    if (dialogMethods[method])
+      Object.defineProperty(HTMLDialogElement.prototype, method, dialogMethods[method]);
+    else Reflect.deleteProperty(HTMLDialogElement.prototype, method);
+  }
+});
 
 const animationState = {
   mode: 'animation' as const,
@@ -17,6 +37,7 @@ const animationState = {
   videoExportSupportKnown: true,
   videoExportSupported: true,
   videoExportCodec: 'vp9' as const,
+  exportSettings: { width: 1358, height: 1920, bitrate: 24_000_000 },
   canUndo: true,
   canRedo: false,
   keyframes: [
@@ -182,7 +203,7 @@ describe('animation workspace controls', () => {
     document.removeEventListener('animationcommand', onCommand);
   });
 
-  it('starts supported exports and exposes progress cancellation', async () => {
+  it('opens quality settings without exporting, requires confirmation, and exposes cancellation', async () => {
     const user = userEvent.setup();
     const onCommand = vi.fn();
     document.addEventListener('animationcommand', onCommand);
@@ -191,8 +212,14 @@ describe('animation workspace controls', () => {
       document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
     );
 
+    expect(screen.queryByLabelText('Video export resolution')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Export video' }));
+    expect(screen.getByRole('dialog', { name: 'Export video' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Video export resolution')).toHaveFocus();
+    expect(onCommand).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', { name: 'Start export' }));
     expect((onCommand.mock.calls.at(-1)![0] as CustomEvent).detail).toEqual({ type: 'export' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
     act(() => {
       document.dispatchEvent(
@@ -222,7 +249,8 @@ describe('animation workspace controls', () => {
     document.removeEventListener('animationcommand', onCommand);
   });
 
-  it('explains when WebCodecs video export is unavailable', () => {
+  it('allows unsupported settings to be corrected before confirming export', async () => {
+    const user = userEvent.setup();
     render(<AnimationTimeline />);
     act(() =>
       document.dispatchEvent(
@@ -236,7 +264,114 @@ describe('animation workspace controls', () => {
       ),
     );
 
-    expect(screen.getByRole('button', { name: 'Export video' })).toBeDisabled();
-    expect(screen.getByText(/WebCodecs VP9\/VP8 is not supported/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export video' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Export video' }));
+    expect(screen.getByRole('button', { name: 'Start export' })).toBeDisabled();
+    expect(screen.getByText(/Video export unavailable for these settings/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Video export resolution')).toBeEnabled();
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('animationstatechange', {
+          detail: {
+            ...animationState,
+            videoExportSupportKnown: false,
+          },
+        }),
+      ),
+    );
+    expect(screen.getByRole('button', { name: 'Start export' })).toBeDisabled();
+    expect(screen.getByText('Checking video encoder support…')).toBeInTheDocument();
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+    expect(screen.getByRole('button', { name: 'Start export' })).toBeEnabled();
+  });
+
+  it('publishes quality choices inside the dialog and reflects saved settings', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+    await user.click(screen.getByRole('button', { name: 'Export video' }));
+    expect(screen.getByLabelText('Video export resolution')).toHaveValue('1920');
+    expect(screen.getByLabelText('Video export bitrate')).toHaveValue('24000000');
+    expect(screen.getByLabelText('Video export size')).toHaveTextContent(
+      '1358 × 1920 px · ~15.0 MB',
+    );
+    await user.selectOptions(screen.getByLabelText('Video export resolution'), '3840');
+    await user.selectOptions(screen.getByLabelText('Video export bitrate'), '60000000');
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'export-resolution', longEdge: 3840 },
+      { type: 'export-bitrate', bitrate: 60_000_000 },
+    ]);
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('animationstatechange', {
+          detail: {
+            ...animationState,
+            exportSettings: { width: 722, height: 406, bitrate: 2_500_000 },
+          },
+        }),
+      ),
+    );
+    expect(screen.getByLabelText('Video export resolution')).toHaveValue('722');
+    expect(screen.getByLabelText('Video export bitrate')).toHaveValue('2500000');
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('animationstatechange', { detail: { ...animationState, playing: true } }),
+      ),
+    );
+    expect(screen.getByLabelText('Video export resolution')).toBeDisabled();
+    expect(screen.getByLabelText('Video export bitrate')).toBeDisabled();
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('animationstatechange', { detail: { ...animationState, exporting: true } }),
+      ),
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    document.removeEventListener('animationcommand', onCommand);
+  });
+
+  it('dismisses with Cancel or Escape, restores focus, and suppresses timeline shortcuts', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(new CustomEvent('animationstatechange', { detail: animationState })),
+    );
+    const opener = screen.getByRole('button', { name: 'Export video' });
+    for (const dismiss of ['button', 'escape']) {
+      await user.click(opener);
+      fireEvent.keyDown(document, { code: 'Space', key: ' ' });
+      fireEvent.keyDown(document, { key: 'k' });
+      if (dismiss === 'button') await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      else fireEvent(screen.getByRole('dialog'), new Event('cancel', { cancelable: true }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(opener).toHaveFocus();
+    }
+    expect(onCommand).not.toHaveBeenCalled();
+    document.removeEventListener('animationcommand', onCommand);
+  });
+
+  it('pauses playback when opening export settings without starting an export', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('animationcommand', onCommand);
+    render(<AnimationTimeline />);
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('animationstatechange', { detail: { ...animationState, playing: true } }),
+      ),
+    );
+    await user.click(screen.getByRole('button', { name: 'Export video' }));
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'play-toggle' },
+    ]);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    document.removeEventListener('animationcommand', onCommand);
   });
 });

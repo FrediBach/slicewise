@@ -2061,6 +2061,7 @@ body.animation-mode .section-randomize {
 .animation-keyframes button:focus-visible,
 .animation-transport input:focus-visible,
 .animation-transport select:focus-visible,
+.animation-export-settings select:focus-visible,
 .animation-properties select:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent);
   outline-offset: 2px;
@@ -2091,6 +2092,7 @@ body.animation-mode .section-randomize {
 }
 .animation-transport input[type='number'],
 .animation-transport select,
+.animation-export-settings select,
 .animation-properties select {
   width: 58px;
   height: 28px;
@@ -2114,9 +2116,90 @@ body.animation-mode .section-randomize {
 .animation-export-button {
   margin-left: auto;
 }
-.animation-properties {
-  height: 26px;
+.animation-export-dialog {
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid #bcc1ba;
+  border-radius: 8px;
+  background: #f8f9f6;
+  color: #424642;
+  box-shadow: 0 16px 64px #0003;
+}
+.animation-export-dialog::backdrop {
+  background: #18201880;
+}
+.animation-export-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.animation-export-dialog p {
+  margin: 0 0 16px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.animation-export-dialog .animation-export-settings {
+  margin: 20px 0;
+  gap: 16px;
+  font-size: 12px;
+}
+.animation-export-dialog .animation-export-settings label {
+  flex: 1 1 160px;
+  flex-direction: column;
+  align-items: stretch;
+}
+.animation-export-dialog .animation-export-settings select {
+  width: 100%;
+  max-width: none;
+  height: 36px;
+  font-size: 12px;
+}
+.animation-export-dialog .animation-export-settings output {
+  flex-basis: 100%;
+  color: #424642;
+}
+.animation-export-dialog-actions {
   display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+.animation-export-dialog-actions .button {
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 96px;
+  padding: 0 16px;
+}
+.animation-export-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 8px 7px;
+  color: #747974;
+  font-size: 10px;
+}
+.animation-export-settings label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.animation-export-settings select {
+  width: auto;
+  max-width: 190px;
+}
+.animation-export-settings output {
+  font-variant-numeric: tabular-nums;
+}
+.animation-export-hint {
+  flex-basis: 100%;
+}
+.animation-properties {
+  min-height: 26px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   align-items: center;
   justify-content: space-between;
   margin: 6px 7px 0;

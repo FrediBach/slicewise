@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   createVideoEncoderAdapter,
+  detectAnimationVideoCodec,
   rasterizeAnimationSvg,
   selectAnimationVideoCodec,
 } from './video-encoder';
@@ -12,6 +13,7 @@ const mediaMocks = vi.hoisted(() => ({
   outputFinalize: vi.fn(async () => undefined),
   outputCancel: vi.fn(async () => undefined),
   sourceConfig: vi.fn(),
+  canEncodeVideo: vi.fn(async () => true),
 }));
 
 vi.mock('mediabunny', () => {
@@ -49,7 +51,13 @@ vi.mock('mediabunny', () => {
     BufferTarget,
     CanvasSource,
     Output,
-    Quality: class {},
+    Quality: class {
+      bitrate: number;
+      constructor({ bitrate }: { bitrate: number }) {
+        this.bitrate = bitrate;
+      }
+    },
+    canEncodeVideo: mediaMocks.canEncodeVideo,
     WebMOutputFormat: class {},
   };
 });
@@ -60,6 +68,16 @@ afterEach(() => {
 });
 
 describe('animation video codec selection', () => {
+  it('checks the selected resolution and bitrate before enabling export', async () => {
+    vi.stubGlobal('VideoEncoder', class {});
+    vi.stubGlobal('VideoFrame', class {});
+    await expect(detectAnimationVideoCodec(3840, 2160, 60_000_000)).resolves.toBe('vp9');
+    expect(mediaMocks.canEncodeVideo).toHaveBeenCalledWith('vp9', {
+      width: 3840,
+      height: 2160,
+      quality: expect.objectContaining({ bitrate: 60_000_000 }),
+    });
+  });
   it('prefers VP9 and avoids unnecessary fallback checks', async () => {
     const check = vi.fn(async () => true);
     await expect(selectAnimationVideoCodec(check)).resolves.toBe('vp9');
@@ -99,6 +117,7 @@ describe('Mediabunny video encoder adapter', () => {
     expect(mediaMocks.sourceConfig).toHaveBeenCalledWith(
       expect.objectContaining({
         codec: 'vp9',
+        quality: expect.objectContaining({ bitrate: options.bitrate }),
         transform: {
           width: 1080,
           height: 720,
@@ -121,6 +140,22 @@ describe('Mediabunny video encoder adapter', () => {
 
     expect(mediaMocks.sourceClose).toHaveBeenCalledOnce();
     expect(mediaMocks.outputCancel).toHaveBeenCalledOnce();
+  });
+
+  it('passes a user-selected high bitrate and resolution through to the encoder', async () => {
+    const adapter = await createVideoEncoderAdapter({
+      ...options,
+      width: 3840,
+      height: 2160,
+      bitrate: 60_000_000,
+    });
+    expect(mediaMocks.sourceConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quality: expect.objectContaining({ bitrate: 60_000_000 }),
+        transform: expect.objectContaining({ width: 3840, height: 2160 }),
+      }),
+    );
+    await adapter.cancel();
   });
 });
 
