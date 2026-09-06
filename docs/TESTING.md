@@ -151,3 +151,5 @@ The HTML report is generated under `coverage/` and is ignored by Git.
 `contour-refinement.test.ts` covers sparse closed-loop accuracy, slice-plane and endpoint preservation, deterministic output, straight/degenerate fallbacks, S bends, and bounded subdivision. The contour-engine regression checks that the top torus-knot slices remain closed without false sharp corners; scalar-field tests preserve authored faces and quality-one intersections.
 
 `svg-slice-field.test.ts` checks bounded path intersections, divergence, disconnected subpaths, preview/export integration, and complexity errors. `svg-slice-parser.test.ts` checks compound paths, open strokes, transforms, and empty artwork. `svg-slice-runtime.test.tsx` exercises upload, disabled incompatible controls, placement worker snapshots, and undo/redo.
+
+`contour-effects.test.ts` also verifies that the nonconvex twin-balls silhouette retains its complete boundary at low camera elevations while genuinely occluded torus-knot silhouette spans remain hidden. Silhouette visibility accepts uncovered pixels within its existing two-pixel neighbourhood; ordinary contour visibility retains its depth-only test.

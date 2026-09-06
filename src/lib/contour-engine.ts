@@ -1223,7 +1223,12 @@ function buildDepth(
   }
   return { buf, rw, rh, k };
 }
-function makeVisibleTest(D: DepthBuffer, bias: number, rad: number): VisibilityTest {
+function makeVisibleTest(
+  D: DepthBuffer,
+  bias: number,
+  rad: number,
+  backgroundVisible = false,
+): VisibilityTest {
   const { buf, rw, rh, k } = D;
   const R = rad || 1;
   return (x: number, y: number, d: number): boolean => {
@@ -1238,6 +1243,10 @@ function makeVisibleTest(D: DepthBuffer, bias: number, rad: number): VisibilityT
         const xx = px + i;
         if (xx < 0 || xx >= rw) continue;
         const v = buf[yy * rw + xx];
+        // At a silhouette, uncovered neighbouring pixels are evidence of the
+        // exterior, not missing depth samples to discard. Keep ordinary contour
+        // visibility unchanged so hidden surface lines do not leak at the rim.
+        if (backgroundVisible && v === Infinity) return true;
         if (v !== Infinity && v > best) best = v;
       }
     }
@@ -2899,7 +2908,7 @@ function computeContourInstance(
     const depthRange = P.dmax - P.dmin || 1;
     vis = makeVisibleTest(D, depthRange * 0.006 + 1e-6, 1);
     // outlines sit exactly on the depth cliff, so they need a wider, kinder test
-    visOutline = makeVisibleTest(D, depthRange * 0.03 + 1e-6, 2);
+    visOutline = makeVisibleTest(D, depthRange * 0.03 + 1e-6, 2, true);
     step = Math.max(0.25, W / D.rw);
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
 import { computeContours } from './contour-engine';
-import { sphereDemo } from './demo-meshes';
+import { roundedDemo, sphereDemo, torusKnot } from './demo-meshes';
 import { pointInGenerativeMask } from './generative-mask';
 import { vertexNormals, weld } from './mesh';
 
@@ -68,6 +68,51 @@ describe('contour output effects', () => {
         `az ${az}, el ${el}`,
       ).toBeLessThan(1e-5);
     }
+  });
+
+  it('keeps the nonconvex twin-balls outer boundary intact', () => {
+    const base = weld(roundedDemo('twin-balls'));
+    const mesh = { ...base, N: vertexNormals(base.V, base.T) };
+    for (const el of [0, 10, 20]) {
+      const settings = {
+        ...contourSettings,
+        az: 15,
+        el,
+        lines: 6,
+        gradientEnabled: true,
+        gradientColors: 2,
+      };
+      const visible = computeContours(mesh, settings, false).toolpaths.find(
+        (group) => group.label === 'silhouette',
+      )!.runs;
+      const unfiltered = computeContours(mesh, { ...settings, hide: false }, false).toolpaths.find(
+        (group) => group.label === 'silhouette',
+      )!.runs;
+      expect(visible, `elevation ${el}`).toEqual(unfiltered);
+    }
+  });
+
+  it('still removes occluded silhouette spans inside a torus knot', () => {
+    const base = weld(torusKnot());
+    const mesh = { ...base, N: vertexNormals(base.V, base.T) };
+    const settings = {
+      ...contourSettings,
+      az: 15,
+      el: 30,
+      lines: 6,
+      gradientEnabled: true,
+      gradientColors: 2,
+    };
+    const length = (hide: boolean) =>
+      computeContours(mesh, { ...settings, hide }, false)
+        .toolpaths.find((group) => group.label === 'silhouette')!
+        .runs.reduce((total, run) => {
+          for (let i = 2; i < run.length; i += 2)
+            total += Math.hypot(run[i] - run[i - 2], run[i + 1] - run[i - 1]);
+          return total;
+        }, 0);
+    expect(length(true)).toBeGreaterThan(0);
+    expect(length(true)).toBeLessThan(length(false) * 0.8);
   });
 
   it('splits gradients into plotter-ready colour groups and halftone bands', () => {
