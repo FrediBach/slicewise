@@ -1,3 +1,4 @@
+import { WEAVE_CONTROLS } from './contour-weave-settings';
 import { MAP_CONTROLS } from './map-settings';
 import { type ContourSettings } from './contour-engine';
 
@@ -108,6 +109,11 @@ export const renderSettingKeys = [
   'tileShuffleExtent',
   'tileShuffleAffected',
   'tileShuffleSeed',
+  'contourWeave',
+  'weavePattern',
+  'weaveOutput',
+  'weaveColor',
+  ...WEAVE_CONTROLS.map(({ id }) => id),
   'sampleAndHold',
   'sampleAndHoldAxis',
   'sampleAndHoldSpacing',

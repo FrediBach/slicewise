@@ -1,5 +1,11 @@
 'use strict';
 
+import { createSurfaceWeave } from './contour-weave';
+import {
+  WEAVE_CONTROLS,
+  resolveWeaveSettings,
+  type ContourWeaveSettings,
+} from './contour-weave-settings';
 import { createTerrainRoutes } from './terrain-routes';
 import { terrainRouteFeature } from './map-features';
 import { resolveMapSettings, type MapSettings } from './map-settings';
@@ -111,6 +117,7 @@ export interface LineIndexColor {
 export interface ContourSettings
   extends
     Partial<MapSettings>,
+    Partial<ContourWeaveSettings>,
     BlockGlitchSettings,
     ScanBandGlitchSettings,
     StaggeredSliceSettings,
@@ -231,6 +238,8 @@ export interface ContourSettings
 }
 
 export interface ContourToolpathGroup {
+  /** Preserve deliberate weave gaps while still optimizing pen-up travel. */
+  preserveGaps?: boolean;
   color: string;
   label: string;
   runs: Polyline[];
@@ -1627,6 +1636,11 @@ function deterministicDrawingNumber(
       settings.tileShuffleExtent,
       settings.tileShuffleAffected,
       settings.tileShuffleSeed,
+      settings.contourWeave,
+      ...WEAVE_CONTROLS.map(({ id }) => settings[id]),
+      settings.weavePattern,
+      settings.weaveOutput,
+      settings.weaveColor,
       settings.sampleAndHold,
       settings.sampleAndHoldAxis,
       settings.sampleAndHoldSpacing,
@@ -2493,20 +2507,18 @@ function computeLineArtInstance(
     const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
     const shuffledRuns = applyTileShuffle(wrappedRuns, shuffledTiles);
     const heldRuns = applySampleAndHold(shuffledRuns, settings);
-    const clippedRuns = heldRuns.flatMap((run) =>
+    runsByColor[colorIndex].push(...heldRuns);
+  }
+  for (let index = 0; index < runsByColor.length; index++)
+    runsByColor[index] = runsByColor[index].flatMap((run) =>
       kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
         clipArtworkRun(candidate, settings, W, H),
       ),
     );
-    for (const run of clippedRuns) {
-      if (run.length < 4) continue;
-      runsByColor[colorIndex].push(run);
-    }
-  }
   for (let colorIndex = 0; colorIndex < runsByColor.length; colorIndex++) {
     runsByColor[colorIndex] = applyVectorZooms(runsByColor[colorIndex], vectorZooms);
     for (const run of runsByColor[colorIndex]) {
-      const data = serialiseRun(run, quality, sharpVertices(run));
+      const data = serialiseRun(run, settings.contourWeave ? 1 : quality, sharpVertices(run));
       pathData += data;
       pathDataByColor[colorIndex] += data;
       if (!quick || settings.topographicMap) runs.push(run);
@@ -2625,11 +2637,14 @@ ${artwork}
             ? [
                 {
                   color: palette[index],
-                  label: settings.gradientEnabled
-                    ? `gradient colour ${index + 1}`
-                    : lineArtKind === 'hyperbolic-tiling'
-                      ? 'Hyperbolic tiling'
-                      : 'SVG centreline',
+                  label:
+                    settings.contourWeave && index === palette.length - 1
+                      ? 'surface weave · weft'
+                      : settings.gradientEnabled
+                        ? `gradient colour ${index + 1}`
+                        : lineArtKind === 'hyperbolic-tiling'
+                          ? 'Hyperbolic tiling'
+                          : 'SVG centreline',
                   runs: colorRuns,
                 },
               ]
@@ -2782,8 +2797,9 @@ function computeContourInstance(
   const geodesicMode = ['nearest', 'difference', 'voronoi'].includes(String(settings.geodesicMode))
     ? (settings.geodesicMode as 'nearest' | 'difference' | 'voronoi')
     : 'single';
-  const field =
-    settings.axis === 'spherical'
+  const field = settings.contourWeave
+    ? createPlanarScalarField(mesh, { axis: 'up', cutAz: 0, cutEl: 90 })
+    : settings.axis === 'spherical'
       ? createSphericalScalarField(mesh, { center: waveCenter })
       : settings.axis === 'cylindrical'
         ? createCylindricalScalarField(mesh, { center: waveCenter, axis: cylinderAxis })
@@ -2899,7 +2915,63 @@ function computeContourInstance(
   );
   const curveStrength = (quality - 1) / 9;
   let sequenceSource: ContourSequenceSource | undefined;
-  if (
+  if (settings.contourWeave) {
+    const weaveSettings = resolveWeaveSettings(settings);
+    const crossColorIndex = palette.length;
+    palette.push(weaveSettings.weaveColor);
+    out.push(
+      Array.from({ length: toneBandCount }, () =>
+        Array.from({ length: weightBandCount }, (): Polyline[] => []),
+      ),
+    );
+    // Keep material topology and crossing identity stable during orbit/quick previews.
+    const threads = createSurfaceWeave(
+      mesh,
+      settings,
+      settings.lines,
+      Math.max(1, (Math.min(W, H) - 2 * settings.margin) / 2),
+      settings.sw *
+        (weightBandCount <= 1
+          ? 1
+          : 1 + (mapIndex ? 0.9 : clamp((settings.lineWeightAmount || 0) / 100, 0, 3))),
+    );
+    const warpThreads = threads.filter((thread) => thread.family === 'warp');
+    const low = warpThreads[0]?.index ?? 0;
+    const high = warpThreads.at(-1)?.index ?? 1;
+    const featureRuns = new Map<number, Polyline[]>();
+    for (const thread of threads) {
+      const projected: Polyline[] = [];
+      for (const poly of chain(thread.points, thread.segments))
+        emitProjectedPath(poly, thread.points, P, quality, vis, step, projected);
+      const position = clamp((thread.index - low) / Math.max(1, high - low), 0, 1);
+      const color =
+        thread.family === 'weft'
+          ? crossColorIndex
+          : (indexedPalette.get(thread.index - low) ??
+            (settings.gradientEnabled
+              ? clamp(Math.floor(position * gradient.length), 0, gradient.length - 1)
+              : 0));
+      out[color][thread.family === 'warp' && settings.halftone ? toneBand(position) : 0][
+        thread.family === 'warp' ? weightBand(position, thread.index - low) : 0
+      ].push(...projected);
+      if (!quick && thread.family === 'warp') {
+        const runs = featureRuns.get(thread.index);
+        if (runs) runs.push(...projected);
+        else featureRuns.set(thread.index, projected);
+      }
+    }
+    if (!quick)
+      sequenceSource = {
+        version: 1,
+        slices: Array.from(featureRuns, ([index, runs]) =>
+          measureContourSlice(
+            index - low,
+            clamp((index - low) / Math.max(1, high - low), 0, 1),
+            runs,
+          ),
+        ),
+      };
+  } else if (
     fieldFeatures.continuousSpiral &&
     !fieldFeatures.divergence &&
     !fieldFeatures.lfo &&
@@ -3025,29 +3097,35 @@ function computeContourInstance(
     paths = 0;
   let humanizerSalt = 0;
   const primaryRegistrationRuns: Polyline[] = [];
+  const originalSharp = new Map<Polyline, Uint8Array>();
+  const prepareRun = (raw: Polyline): Polyline[] => {
+    const simplified = simplifyPolyline(raw, tolerance);
+    originalSharp.set(simplified.run, simplified.sharp);
+    const run = settings.humanizer
+      ? humanizePolyline(simplified.run, settings.humanizerAmount, humanizerSalt++)
+      : simplified.run;
+    if (run.length < 4) return [];
+    const cutCount = yarnRuns?.get(raw) || 0;
+    const processedRuns = cutCount
+      ? cutYarnPolyline(run, polylineHash(raw), settings.yarnCurlSize, cutCount)
+      : [run];
+    const glitchedRuns = applyBlockGlitch(
+      processedRuns,
+      glitchBlocks,
+      settings.blockGlitchClearDestination,
+    );
+    const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
+    const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
+    const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
+    const shuffledRuns = applyTileShuffle(wrappedRuns, shuffledTiles);
+    const heldRuns = applySampleAndHold(shuffledRuns, settings);
+    return heldRuns;
+  };
   const serialiseGroup = (runs: Polyline[]): SerialisedGroup => {
     let d = '';
     const plotRuns: Polyline[] = [];
     for (const raw of runs) {
-      const simplified = simplifyPolyline(raw, tolerance);
-      const run = settings.humanizer
-        ? humanizePolyline(simplified.run, settings.humanizerAmount, humanizerSalt++)
-        : simplified.run;
-      if (run.length < 4) continue;
-      const cutCount = yarnRuns?.get(raw) || 0;
-      const processedRuns = cutCount
-        ? cutYarnPolyline(run, polylineHash(raw), settings.yarnCurlSize, cutCount)
-        : [run];
-      const glitchedRuns = applyBlockGlitch(
-        processedRuns,
-        glitchBlocks,
-        settings.blockGlitchClearDestination,
-      );
-      const scanGlitchedRuns = applyBlockGlitch(glitchedRuns, scanBands);
-      const staggeredRuns = applyContiguousSliceGlitch(scanGlitchedRuns, staggeredSlices);
-      const wrappedRuns = applyWraparoundTear(staggeredRuns, wraparoundTear);
-      const shuffledRuns = applyTileShuffle(wrappedRuns, shuffledTiles);
-      const heldRuns = applySampleAndHold(shuffledRuns, settings);
+      const heldRuns = prepareRun(raw);
       const clippedRuns = heldRuns.flatMap((run) =>
         kaleidoscopeRun(run, settings, W, H).flatMap((candidate) =>
           clipArtworkRun(candidate, settings, W, H),
@@ -3057,9 +3135,11 @@ function computeContourInstance(
         if (clipped.length < 4) continue;
         const level = contourLevels.get(raw);
         if (level !== undefined) contourLevels.set(clipped, level);
-        const sharp =
-          clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
-        d += serialiseRun(clipped, quality, sharp);
+        d += serialiseRun(
+          clipped,
+          settings.contourWeave ? 1 : quality,
+          (!settings.humanizer && originalSharp.get(clipped)) || sharpVertices(clipped),
+        );
         if (!quick || settings.topographicMap || settings.misregistration) plotRuns.push(clipped);
         nodes += clipped.length / 2;
         paths++;
@@ -3122,7 +3202,12 @@ function computeContourInstance(
     if (!quick && runsForColor.length) {
       toolpaths.push({
         color: palette[index],
-        label: settings.gradientEnabled ? `gradient colour ${index + 1}` : 'contours',
+        label:
+          settings.contourWeave && index === palette.length - 1
+            ? 'surface weave · weft'
+            : settings.gradientEnabled
+              ? `gradient colour ${index + 1}`
+              : 'contours',
         runs: runsForColor,
         runWeights: runWeightsForColor,
       });
@@ -3364,10 +3449,11 @@ export function computeContours(
   settings: ContourSettings,
   quick: boolean,
 ): ContourResult {
+  if (mesh.lineArt && settings.contourWeave) settings = { ...settings, contourWeave: false };
   const hexColor = /^#[0-9a-f]{6}$/i;
   const validTargets = (targets: MorphTargets): Array<[string, MorphValue]> =>
     Object.entries(targets || {}).filter(([key, value]) =>
-      key === 'color'
+      key === 'color' || key === 'weaveColor'
         ? hexColor.test(String(value)) &&
           hexColor.test(String((settings as unknown as Record<string, unknown>)[key]))
         : Number.isFinite(Number(value)) &&
@@ -3378,7 +3464,8 @@ export function computeContours(
     settings.morphEnabled && settings.morphSecondEnabled
       ? validTargets(settings.morphTargets2)
       : [];
-  if (!targetsX.length && !targetsY.length) return computeContourInstance(mesh, settings, quick);
+  if (!targetsX.length && !targetsY.length)
+    return finishWeaveResult(computeContourInstance(mesh, settings, quick), settings);
 
   const started = performance.now();
   const stepsX = targetsX.length
@@ -3412,9 +3499,9 @@ export function computeContours(
       for (const key of targetKeys) {
         const targetX = targetsXByKey.get(key),
           targetY = targetsYByKey.get(key);
-        if (key === 'color') {
-          const startColor = (settings.color.slice(1).match(/../g) ?? []).map((value) =>
-            parseInt(value, 16),
+        if (key === 'color' || key === 'weaveColor') {
+          const startColor = (String(dynamicSettings[key]).slice(1).match(/../g) ?? []).map(
+            (value) => parseInt(value, 16),
           );
           const colorX = targetX
             ? (String(targetX).slice(1).match(/../g) ?? []).map((value) => parseInt(value, 16))
@@ -3422,7 +3509,7 @@ export function computeContours(
           const colorY = targetY
             ? (String(targetY).slice(1).match(/../g) ?? []).map((value) => parseInt(value, 16))
             : startColor;
-          instance.color =
+          dynamicInstance[key] =
             '#' +
             startColor
               .map((value, channel) =>
@@ -3487,16 +3574,47 @@ ${background}${layers}${documentOverlay(settings, blueprint)}
           runWeights: group.runWeights ? [...group.runWeights] : undefined,
         });
     }
-  return {
-    svg,
-    toolpaths: [...groups.values()],
-    paths: results.reduce((sum, result) => sum + result.paths, 0),
-    nodes: results.reduce((sum, result) => sum + result.nodes, 0),
-    bytes: new TextEncoder().encode(svg).byteLength,
-    ms: performance.now() - started,
-    W,
-    H,
-    quick,
-    sequenceSource: averageContourSequenceSources(results.map((result) => result.sequenceSource)),
-  };
+  return finishWeaveResult(
+    {
+      svg,
+      toolpaths: [...groups.values()],
+      paths: results.reduce((sum, result) => sum + result.paths, 0),
+      nodes: results.reduce((sum, result) => sum + result.nodes, 0),
+      bytes: new TextEncoder().encode(svg).byteLength,
+      ms: performance.now() - started,
+      W,
+      H,
+      quick,
+      sequenceSource: averageContourSequenceSources(results.map((result) => result.sequenceSource)),
+    },
+    settings,
+  );
+}
+
+/** Same ink uses one pen; physical cutouts must survive travel optimization. */
+function finishWeaveResult<T extends ContourResult>(result: T, settings: ContourSettings): T {
+  if (!settings.contourWeave) return result;
+  const groups = new Map<string, ContourToolpathGroup>();
+  for (const group of result.toolpaths) {
+    const key = group.label.startsWith('misregistration copy')
+      ? `${group.label}:${group.color}`
+      : group.color.toLowerCase();
+    const existing = groups.get(key);
+    if (existing) {
+      const count = existing.runs.length;
+      existing.runs.push(...group.runs);
+      if (existing.runWeights || group.runWeights) {
+        existing.runWeights ??= Array.from({ length: count }, () => 0);
+        existing.runWeights.push(...(group.runWeights ?? group.runs.map(() => 0)));
+      }
+    } else
+      groups.set(key, {
+        ...group,
+        runs: [...group.runs],
+        runWeights: group.runWeights ? [...group.runWeights] : undefined,
+        preserveGaps: true,
+      });
+  }
+  result.toolpaths = [...groups.values()];
+  return result;
 }

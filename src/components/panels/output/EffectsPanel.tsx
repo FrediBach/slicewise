@@ -1,3 +1,4 @@
+import { ContourWeaveControls } from './ContourWeaveControls';
 import { TopographicMapControls } from './TopographicMapControls';
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../../controls/FormControls';
 import { Section } from '../../ui/section';
@@ -35,6 +36,7 @@ export function EffectsPanel() {
         <WraparoundTearControls />
         <TileShuffleControls />
         <SampleAndHoldControls />
+        <ContourWeaveControls />
         <MisregistrationControls />
         <Checkbox id="kaleidoscope" randomizable>
           Kaleidoscope

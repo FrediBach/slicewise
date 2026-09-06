@@ -204,6 +204,20 @@ describe('generateGCode', () => {
     expect(output).not.toMatch(/X-5|X15/);
   });
 
+  it('preserves deliberate weave gaps even with a large merge tolerance', () => {
+    const runs = [
+      [0, 5, 5, 5],
+      [5.1, 5, 10, 5],
+    ];
+    const output = generateGCode(
+      [{ ...group(runs), preserveGaps: true }],
+      { width: 10, height: 10 },
+      { origin: 'rear-left', mergeTolerance: 10 },
+    );
+    expect(output.match(/; pen down/g)).toHaveLength(2);
+    expect(output).toContain('; Optimized pen-up travel:');
+  });
+
   it('records modulation and stroke-direction setup in expressive metadata', () => {
     const output = generateGCode(
       [group([[0, 0, 8, 0]])],

@@ -1,5 +1,12 @@
 'use strict';
 
+import {
+  WEAVE_CONTROLS,
+  WEAVE_DEFAULTS,
+  WEAVE_PATTERNS,
+  WEAVE_OUTPUTS,
+} from './contour-weave-settings';
+
 import { MAP_CONTROLS, MAP_DEFAULTS } from './map-settings';
 import { createColorGradient, createColorPair } from './colorPair';
 import { contourTrackPoint, type ContourSequenceSource } from './contour-features';
@@ -379,6 +386,7 @@ const state: AppState = {
   tileShuffleExtent: 80,
   tileShuffleAffected: 50,
   tileShuffleSeed: 4,
+  ...WEAVE_DEFAULTS,
   sampleAndHold: false,
   sampleAndHoldAxis: 'y',
   sampleAndHoldSpacing: 2,
@@ -914,6 +922,7 @@ if (typeof document !== 'undefined') {
       m.N = vertexNormals(m.V, m.T);
       state.mesh = m as RenderMesh;
       syncMapControls();
+      syncWeaveControls();
       sendMeshToWorker(state.mesh);
       state.name = name;
       $('mName').textContent = name;
@@ -960,6 +969,7 @@ if (typeof document !== 'undefined') {
       lineArt: { offsets: parsed.offsets },
     };
     rawCache = null;
+    syncWeaveControls();
     sendMeshToWorker(state.mesh);
     state.name = name;
     $('mName').textContent = name;
@@ -1003,6 +1013,7 @@ if (typeof document !== 'undefined') {
         lineArt: { offsets: tiling.offsets, kind: 'hyperbolic-tiling' },
       };
       rawCache = null;
+      syncWeaveControls();
       sendMeshToWorker(state.mesh);
       state.name = `generative · {${state.tilingP},${state.tilingQ}} hyperbolic tiling`;
       $('mName').textContent = state.name;
@@ -1357,6 +1368,7 @@ if (typeof document !== 'undefined') {
   bindPair('tileShuffleExtent', 'tileShuffleExtent');
   bindPair('tileShuffleAffected', 'tileShuffleAffected');
   bindPair('tileShuffleSeed', 'tileShuffleSeed');
+  for (const { id } of WEAVE_CONTROLS) bindPair(id, id);
   bindPair('sampleAndHoldSpacing', 'sampleAndHoldSpacing');
   bindPair('sampleAndHoldLength', 'sampleAndHoldLength');
   bindPair('sampleAndHoldMix', 'sampleAndHoldMix');
@@ -1484,6 +1496,7 @@ if (typeof document !== 'undefined') {
   bindSurfacePair('uunaSurfaceXOffset', 'xOffset');
   bindSurfacePair('uunaSurfaceYOffset', 'yOffset');
   morphKeyById.set('color', 'color');
+  morphKeyById.set('weaveColor', 'weaveColor');
 
   function syncProjectionWarpControls(): void {
     const kleinEnabled = state.projectionWarpMode === 'klein-poincare';
@@ -1600,7 +1613,11 @@ if (typeof document !== 'undefined') {
     const key = morphKeyById.get(id);
     if (!key) return;
     const targets = dimension === 2 ? state.morphTargets2 : state.morphTargets;
-    if (active && key === 'color' && /^#[0-9a-f]{6}$/i.test(String(value)))
+    if (
+      active &&
+      (key === 'color' || key === 'weaveColor') &&
+      /^#[0-9a-f]{6}$/i.test(String(value))
+    )
       targets[key] = String(value);
     else if (active && Number.isFinite(Number(value))) targets[key] = Number(value);
     else delete targets[key];
@@ -1879,16 +1896,25 @@ if (typeof document !== 'undefined') {
   const fixedGeodesicSpacing = (): boolean =>
     state.axis === 'geodesic' &&
     (state.geodesicMode === 'difference' || state.geodesicMode === 'voronoi');
+  function surfaceWeaveActive(): boolean {
+    return state.contourWeave && !state.mesh?.lineArt;
+  }
   function syncSliceFieldControls(): void {
+    const woven = surfaceWeaveActive();
+    setSingleControlDisabled(
+      'axis',
+      woven,
+      'Contour Weave uses Fabric azimuth and Fabric tilt instead of the slice field.',
+    );
     const curved = curvedSliceField();
     const intrinsic = intrinsicSliceField();
-    const nonPlanar = curved || intrinsic;
-    $('customAxis').hidden = state.axis !== 'custom';
-    $('wavefrontControls').hidden = !curved;
-    $('cylinderAxisControls').hidden = state.axis !== 'cylindrical';
-    $('geodesicControls').hidden = state.axis !== 'geodesic';
-    $('curvatureControls').hidden = state.axis !== 'curvature';
-    $('geodesicSecondSeedControls').hidden = !multiSourceGeodesic();
+    const nonPlanar = curved || intrinsic || woven;
+    $('customAxis').hidden = woven || state.axis !== 'custom';
+    $('wavefrontControls').hidden = woven || !curved;
+    $('cylinderAxisControls').hidden = woven || state.axis !== 'cylindrical';
+    $('geodesicControls').hidden = woven || state.axis !== 'geodesic';
+    $('curvatureControls').hidden = woven || state.axis !== 'curvature';
+    $('geodesicSecondSeedControls').hidden = woven || !multiSourceGeodesic();
     for (const id of ['divergence']) {
       setControlPairDisabled(
         id,
@@ -1905,11 +1931,11 @@ if (typeof document !== 'undefined') {
     $('sliceLfo').closest('.checkbox-control')?.classList.toggle('is-disabled', nonPlanar);
     setControlPairDisabled(
       'explodeAmount',
-      intrinsic,
+      intrinsic || woven,
       'Slice explode is unavailable for intrinsic mesh fields because they do not provide a reliable local gradient.',
     );
-    $('explodeAmountControl').classList.toggle('is-disabled', intrinsic);
-    const voronoi = state.axis === 'geodesic' && state.geodesicMode === 'voronoi';
+    $('explodeAmountControl').classList.toggle('is-disabled', intrinsic || woven);
+    const voronoi = !woven && state.axis === 'geodesic' && state.geodesicMode === 'voronoi';
     setControlPairDisabled(
       'lines',
       voronoi,
@@ -1939,8 +1965,10 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   function syncEaseCenter(): void {
-    const spacingDisabled = fixedGeodesicSpacing();
-    const spacingReason = 'Geodesic difference and Voronoi modes define their own level spacing.';
+    const spacingDisabled = fixedGeodesicSpacing() || surfaceWeaveActive();
+    const spacingReason = surfaceWeaveActive()
+      ? 'Contour Weave uses uniform material spacing controlled by Line count and Weft density.'
+      : 'Geodesic difference and Voronoi modes define their own level spacing.';
     setSingleControlDisabled('gapEase', spacingDisabled, spacingReason);
     $('gapEaseControl').classList.toggle('is-disabled', spacingDisabled);
     for (const id of ['easeStrength', 'easeCycles']) {
@@ -1964,6 +1992,15 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   function syncSliceConstruction(): void {
+    if (surfaceWeaveActive()) {
+      setSingleControlDisabled(
+        'spiral',
+        true,
+        'Contour Weave creates two families of surface threads.',
+      );
+      $('spiral').closest('.checkbox-control')?.classList.add('is-disabled');
+      return;
+    }
     const spiralBlockers = [
       nonPlanarSliceField() ? 'the slice field is non-planar' : '',
       state.divergence > 0 ? 'divergence is above 0°' : '',
@@ -1984,7 +2021,7 @@ if (typeof document !== 'undefined') {
     $('spiral').closest('.checkbox-control')?.classList.toggle('is-disabled', spiralBlocked);
   }
   function syncSliceLfoControls(): void {
-    const disabled = nonPlanarSliceField() || !state.sliceLfo;
+    const disabled = surfaceWeaveActive() || nonPlanarSliceField() || !state.sliceLfo;
     const disabledReason = nonPlanarSliceField()
       ? 'Slice-plane modulation is available only with planar slice fields.'
       : 'Turn on Modulate slice planes to edit this parameter.';
@@ -2216,6 +2253,27 @@ if (typeof document !== 'undefined') {
       $(id + 'Control').classList.toggle('is-disabled', disabled);
     }
   }
+  function syncWeaveControls(): void {
+    const meshOnly = Boolean(state.mesh?.lineArt);
+    setSingleControlDisabled(
+      'contourWeave',
+      meshOnly,
+      'Contour Weave requires a 3D mesh. Use SVG extrusion for artwork.',
+    );
+    const disabled = meshOnly || !state.contourWeave;
+    const reason = meshOnly
+      ? 'Contour Weave requires a 3D mesh.'
+      : 'Turn on Contour Weave to edit this parameter.';
+    for (const { id } of WEAVE_CONTROLS) {
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    for (const id of ['weavePattern', 'weaveOutput', 'weaveColor', 'weaveColorHex'])
+      setSingleControlDisabled(id, disabled, reason);
+    for (const id of ['weavePattern', 'weaveOutput', 'weaveColor'])
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    syncSliceFieldControls();
+  }
   function syncSampleAndHoldControls(): void {
     const disabled = !state.sampleAndHold;
     const reason = 'Turn on Sample-and-hold to edit this parameter.';
@@ -2386,6 +2444,29 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   syncTileShuffleControls();
+  $('contourWeave').addEventListener('change', (event) => {
+    state.contourWeave = inputTarget(event).checked;
+    syncWeaveControls();
+    redraw(false);
+  });
+  for (const id of ['weavePattern', 'weaveOutput'] as const)
+    $(id).addEventListener('change', (event) => {
+      state[id] = inputTarget(event).value;
+      redraw(false);
+    });
+  const applyWeaveColor = (value: string, quick: boolean): void => {
+    if (!/^#[0-9a-f]{6}$/i.test(value)) return;
+    state.weaveColor = value;
+    $('weaveColor').value = value;
+    $('weaveColorHex').value = value;
+    $('weaveColorSwatch').style.background = value;
+    redraw(quick);
+  };
+  for (const id of ['weaveColor', 'weaveColorHex']) {
+    $(id).addEventListener('input', (event) => applyWeaveColor(inputTarget(event).value, true));
+    $(id).addEventListener('change', (event) => applyWeaveColor(inputTarget(event).value, false));
+  }
+  syncWeaveControls();
   $('sampleAndHold').addEventListener('change', (event) => {
     state.sampleAndHold = inputTarget(event).checked;
     syncSampleAndHoldControls();
@@ -2885,6 +2966,7 @@ if (typeof document !== 'undefined') {
     ['tileShuffleExtent', 'tileShuffleExtent'],
     ['tileShuffleAffected', 'tileShuffleAffected'],
     ['tileShuffleSeed', 'tileShuffleSeed'],
+    ...WEAVE_CONTROLS.map(({ id }) => [id, id] as const),
     ['sampleAndHoldSpacing', 'sampleAndHoldSpacing'],
     ['sampleAndHoldLength', 'sampleAndHoldLength'],
     ['sampleAndHoldMix', 'sampleAndHoldMix'],
@@ -2942,6 +3024,8 @@ if (typeof document !== 'undefined') {
     'staggeredSlicesOrientation',
     'staggeredSlicesPattern',
     'wraparoundTearOrientation',
+    'weavePattern',
+    'weaveOutput',
     'sampleAndHoldAxis',
     'misregistrationScope',
     'blueprintStyle',
@@ -2973,6 +3057,7 @@ if (typeof document !== 'undefined') {
     'staggeredSlices',
     'wraparoundTear',
     'tileShuffle',
+    'contourWeave',
     'sampleAndHold',
     'misregistration',
     'kaleidoscope',
@@ -3024,6 +3109,9 @@ if (typeof document !== 'undefined') {
     $('color').value = state.color;
     $('colorHex').value = state.color;
     $('swatch').style.background = state.color;
+    $('weaveColor').value = state.weaveColor;
+    $('weaveColorHex').value = state.weaveColor;
+    $('weaveColorSwatch').style.background = state.weaveColor;
     $('backgroundColor').value = state.backgroundColor;
     $('backgroundColorHex').value = state.backgroundColor;
     $('backgroundSwatch').style.background = state.backgroundColor;
@@ -3060,6 +3148,7 @@ if (typeof document !== 'undefined') {
     syncWraparoundTearControls();
     syncTileShuffleControls();
     syncSampleAndHoldControls();
+    syncWeaveControls();
     syncMisregistrationControls();
     syncKaleidoscopeControls();
     syncVectorZoomControls();
@@ -3429,6 +3518,7 @@ if (typeof document !== 'undefined') {
       staggeredSlices: 0.2,
       wraparoundTear: 0.2,
       tileShuffle: 0.16,
+      contourWeave: 0.15,
       sampleAndHold: 0.2,
       misregistration: 0.18,
       kaleidoscope: 0.2,
@@ -3527,12 +3617,33 @@ if (typeof document !== 'undefined') {
     randomizePair('tileShuffleAffected', 'tileShuffleAffected', () => randomInt(20, 85));
     randomizePair('tileShuffleSeed', 'tileShuffleSeed', () => randomInt(0, 9999));
     syncTileShuffleControls();
+    $('contourWeave').checked = state.contourWeave;
+    for (const { id, min, max, step } of WEAVE_CONTROLS)
+      randomizePair(id, id, () => {
+        if (id === 'weaveDensity') return randomInt(65, 150);
+        if (id === 'weaveAngle') return randomInt(60, 120);
+        if (id === 'weaveTwist') return randomInt(-90, 90);
+        if (id === 'weaveProtection') return 100;
+        if (id === 'weaveWidth') return randomIn(0, 1.2);
+        if (id === 'weaveGap') return randomIn(0.2, 1.5);
+        return step === 1 ? randomInt(min, max) : randomIn(min, max);
+      });
+    randomizeSelect('weavePattern', 'weavePattern', Object.keys(WEAVE_PATTERNS));
+    randomizeSelect('weaveOutput', 'weaveOutput', Object.keys(WEAVE_OUTPUTS));
+    randomizeColor(
+      'weaveColor',
+      'weaveColor',
+      ['#b87333', '#2563eb', '#15181a', '#ec008c'],
+      'weaveColorSwatch',
+    );
+    syncWeaveControls();
     $('sampleAndHold').checked = state.sampleAndHold;
     randomizePair('sampleAndHoldSpacing', 'sampleAndHoldSpacing', () => randomIn(0.8, 8));
     randomizePair('sampleAndHoldLength', 'sampleAndHoldLength', () => randomInt(2, 12));
     randomizePair('sampleAndHoldMix', 'sampleAndHoldMix', () => randomInt(35, 100));
     randomizeSelect('sampleAndHoldAxis', 'sampleAndHoldAxis', ['y', 'y', 'x']);
     syncSampleAndHoldControls();
+    syncWeaveControls();
     $('misregistration').checked = state.misregistration;
     randomizePair('misregistrationCopies', 'misregistrationCopies', () => randomInt(1, 3));
     randomizePair('misregistrationOffset', 'misregistrationOffset', () => randomIn(0.5, 5));
@@ -3644,6 +3755,7 @@ if (typeof document !== 'undefined') {
     'tileShuffleRows',
     'tileShuffleColumns',
     'misregistrationCopies',
+    'weavePhase',
     'halftoneCycles',
     'kaleidoscopeSegments',
     'gradientColors',
@@ -3652,7 +3764,7 @@ if (typeof document !== 'undefined') {
   for (const [controlId, settingKey] of morphKeyById) {
     if (!document.querySelector(`#${controlId}Control .morph-toggle`)) continue;
     const input = document.getElementById(controlId + 'N') as HTMLInputElement | null;
-    const color = controlId === 'color';
+    const color = controlId === 'color' || controlId === 'weaveColor';
     animationParameters.push({
       controlId,
       settingKey: settingKey as keyof ContourSettings & string,
@@ -4324,7 +4436,9 @@ if (typeof document !== 'undefined') {
         const color = String(value);
         $<HTMLInputElement>(descriptor.controlId).value = color;
         $<HTMLInputElement>(descriptor.controlId + 'Hex').value = color;
-        const swatch = document.getElementById('swatch');
+        const swatch = document.getElementById(
+          descriptor.controlId === 'weaveColor' ? 'weaveColorSwatch' : 'swatch',
+        );
         if (swatch) swatch.style.background = color;
       } else {
         $<HTMLInputElement>(descriptor.controlId).value = String(value);

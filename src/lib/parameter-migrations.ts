@@ -1,3 +1,4 @@
+import { LEGACY_WEAVE_KEYS, resolveWeaveSettings } from './contour-weave-settings';
 import { resolveMapSettings } from './map-settings';
 import { type ContourSettings } from './contour-engine';
 import { HYPERBOLIC_TILING_DEFAULTS, isHyperbolicPair } from './hyperbolic-tiling';
@@ -25,9 +26,14 @@ const projectionWarpModes = [
 /** Normalize old or incomplete saved settings without mutating stored data. */
 export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSettings {
   const restored = structuredClone(snapshot);
-  Object.assign(restored, resolveMapSettings(snapshot));
+  Object.assign(restored, resolveMapSettings(snapshot), resolveWeaveSettings(snapshot));
   delete (restored as unknown as Record<string, unknown>).mapLakes;
   const values = restored as unknown as Record<string, unknown>;
+  for (const key of LEGACY_WEAVE_KEYS) {
+    delete values[key];
+    if (restored.morphTargets) delete restored.morphTargets[key];
+    if (restored.morphTargets2) delete restored.morphTargets2[key];
+  }
 
   for (let index = 1; index <= 4; index++) {
     const prefix = `vectorZoom${index}`;

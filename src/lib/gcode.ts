@@ -7,6 +7,7 @@ import {
 } from './gcode-3d-toolpaths';
 
 export type ToolpathGroup = {
+  preserveGaps?: boolean;
   color?: string;
   label?: string;
   runs?: number[][];
@@ -133,7 +134,9 @@ export function generateGCode(
       ? optimizeRuns(
           preparedRuns.flatMap((run) => [run.flat()]),
           cursor,
-          options.motion?.kind === 'coordinated-xyz' && options.motion.settings.lineWeightPressure
+          group.preserveGaps ||
+            (options.motion?.kind === 'coordinated-xyz' &&
+              options.motion.settings.lineWeightPressure)
             ? 0
             : mergeTolerance,
           options.motion?.kind === 'coordinated-xyz' &&
