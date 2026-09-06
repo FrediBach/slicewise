@@ -158,6 +158,30 @@ button {
   line-height: 1.55;
 }
 
+.effect-accordion {
+  border-top: 1px solid var(--line);
+}
+.effect-accordion > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12px;
+  font-weight: 600;
+}
+.effect-accordion > summary::-webkit-details-marker {
+  display: none;
+}
+.effect-accordion[open] > summary > svg {
+  transform: rotate(180deg);
+}
+.effect-accordion-content {
+  padding-bottom: 12px;
+}
+
 .control-section {
   border-bottom: 1px solid var(--line);
 }
