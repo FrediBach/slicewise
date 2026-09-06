@@ -62,7 +62,7 @@ Generative terrain uses a seeded square height field with warped gradient noise,
 
 Imported meshes are welded, centred on their bounding-box midpoint, and uniformly normalized to a bounding-sphere radius of 1. Original model units therefore do not determine output size; artboard, margin, scale, and offsets do.
 
-Built-in demo meshes include Torus knot, Ripple sphere, Rounded cube, Soft diamond, Ring torus, Twisted bloom, Hourglass, Tetrapod, and Radish. They are deterministic, closed procedural meshes and initially use Z-up orientation.
+Built-in demo meshes include Torus knot, Ripple sphere, Rounded cube, Rounded pyramid, Twin balls, Pebble, Rounded cylinder, Soft diamond, Ring torus, Twisted bloom, Hourglass, Tetrapod, and Radish. Rounded pyramid softens the square base, edges, and apex; Twin balls joins two lobes through a smooth waist; Pebble is a flattened ellipsoid; Rounded cylinder has soft shoulders and ends. They are deterministic, closed procedural meshes and initially use Z-up orientation.
 
 ## Morph
 

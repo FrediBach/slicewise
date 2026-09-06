@@ -294,3 +294,66 @@ export function tetrapodDemo(segments = 160, rings = 80): ParsedMesh {
     }
   return { verts: Float64Array.from(verts), tris: Uint32Array.from(tris) };
 }
+
+/** Smooth, star-shaped solids sampled with shared poles and a closed longitude seam. */
+export function roundedDemo(
+  kind: 'pyramid' | 'twin-balls' | 'pebble' | 'rounded-cylinder',
+  segments = 128,
+  rings = 80,
+): ParsedMesh {
+  const verts: number[] = [];
+  const tris: number[] = [];
+  const point = (phi: number, theta: number): number[] => {
+    const x = Math.sin(phi) * Math.cos(theta);
+    const y = Math.sin(phi) * Math.sin(theta);
+    const z = Math.cos(phi);
+    if (kind === 'pebble') return [x * 1.15, y * 0.85, z * 0.55];
+    let radius: number;
+    if (kind === 'pyramid') {
+      // A smooth maximum of the five supporting planes rounds both the
+      // square base and apex. Solve its convex level set along each ray.
+      const planes = [x + z * 0.6, -x + z * 0.6, y + z * 0.6, -y + z * 0.6, -z];
+      let low = 0;
+      let high = 3;
+      for (let step = 0; step < 36; step++) {
+        const r = (low + high) / 2;
+        const values = planes.map((v) => (r * v - 0.65) * 10);
+        const max = Math.max(...values);
+        const field = max + Math.log(values.reduce((sum, v) => sum + Math.exp(v - max), 0));
+        if (field > 0) high = r;
+        else low = r;
+      }
+      radius = (low + high) / 2;
+    } else if (kind === 'twin-balls') {
+      // Cassini surface: the product of distances to two axial foci is
+      // constant. b > a keeps the lobes joined by a smooth, nonzero waist.
+      const a = 0.8;
+      const b = 0.9;
+      const cosine = 2 * z * z - 1;
+      radius = Math.sqrt(a * a * cosine + Math.sqrt(b ** 4 - a ** 4 * (1 - cosine * cosine)));
+    } else {
+      radius = ((x * x + y * y) ** 2 + z ** 4) ** -0.25;
+    }
+    return [x * radius, y * radius, z * radius];
+  };
+  verts.push(...point(0, 0));
+  for (let i = 1; i < rings; i++) {
+    for (let j = 0; j < segments; j++) {
+      verts.push(...point((i / rings) * Math.PI, (j / segments) * Math.PI * 2));
+    }
+  }
+  const bottom = verts.length / 3;
+  verts.push(...point(Math.PI, 0));
+  for (let j = 0; j < segments; j++) {
+    const next = (j + 1) % segments;
+    tris.push(0, 1 + j, 1 + next);
+    for (let i = 0; i < rings - 2; i++) {
+      const a = 1 + i * segments + j;
+      const b = 1 + i * segments + next;
+      tris.push(a, a + segments, b + segments, a, b + segments, b);
+    }
+    const last = 1 + (rings - 2) * segments;
+    tris.push(bottom, last + next, last + j);
+  }
+  return { verts: Float64Array.from(verts), tris: Uint32Array.from(tris) };
+}

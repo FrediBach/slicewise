@@ -25,6 +25,10 @@ export function SourcePanel() {
           knot: 'Loads a looping torus knot with strong depth and silhouette variation.',
           ripple: 'Loads a sphere with rhythmic radial waves across its surface.',
           cube: 'Loads a softened cube with broad faces and rounded transitions.',
+          pyramid: 'Loads a square pyramid with a rounded apex, edges, and base.',
+          'twin-balls': 'Loads two rounded lobes seamlessly joined through a soft waist.',
+          pebble: 'Loads a flattened ellipsoid for simple, flowing oval contours.',
+          'rounded-cylinder': 'Loads a cylinder with softly rounded shoulders and ends.',
           diamond: 'Loads a smooth faceted form with pointed vertical poles.',
           torus: 'Loads a simple ring torus for clear circular contour studies.',
           twist: 'Loads a twisted, petal-like form with rotational symmetry.',
@@ -43,6 +47,10 @@ export function SourcePanel() {
           <option value="knot">Torus knot</option>
           <option value="ripple">Ripple sphere</option>
           <option value="cube">Rounded cube</option>
+          <option value="pyramid">Rounded pyramid</option>
+          <option value="twin-balls">Twin balls</option>
+          <option value="pebble">Pebble</option>
+          <option value="rounded-cylinder">Rounded cylinder</option>
           <option value="diamond">Soft diamond</option>
           <option value="torus">Ring torus</option>
           <option value="twist">Twisted bloom</option>
@@ -72,6 +80,10 @@ export function SourcePanel() {
           >
             <option value="gyroid">Gyroid</option>
             <option value="schwarzP">Schwarz P</option>
+            <option value="pyramid">Rounded pyramid</option>
+            <option value="twin-balls">Twin balls</option>
+            <option value="pebble">Pebble</option>
+            <option value="rounded-cylinder">Rounded cylinder</option>
             <option value="diamond">Diamond</option>
             <option value="neovius">Neovius</option>
             <option value="metaballs">Metaballs</option>
