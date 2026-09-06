@@ -7,6 +7,7 @@ import {
   WEAVE_OUTPUTS,
 } from './contour-weave-settings';
 
+import { WEATHER_COLOR_CONTROLS, resolveWeatherColors } from './weather-bands';
 import { MAP_CONTROLS, MAP_DEFAULTS } from './map-settings';
 import { createColorGradient, createColorPair } from './colorPair';
 import { contourTrackPoint, type ContourSequenceSource } from './contour-features';
@@ -490,6 +491,8 @@ const state: AppState = {
   ],
   lineIndexColorEnabled: false,
   lineIndexColors: [{ index: 1, color: '#ef4444', series: 'single', reverse: false }],
+  weatherBands: false,
+  ...resolveWeatherColors({}),
   halftone: false,
   halftoneSize: 2.4,
   halftoneContrast: 75,
@@ -2458,6 +2461,34 @@ if (typeof document !== 'undefined') {
     );
     $('blueprintStyleControl').classList.toggle('is-disabled', !state.blueprint);
   }
+  function syncWeatherControls(): void {
+    for (const { id } of WEATHER_COLOR_CONTROLS) {
+      const reason = 'Turn on Weather-map bands to edit this colour.';
+      setDisabled($<HTMLInputElement>(id), !state.weatherBands, reason);
+      setDisabled($<HTMLInputElement>(id + 'Hex'), !state.weatherBands, reason);
+      $(id + 'Control').classList.toggle('is-disabled', !state.weatherBands);
+    }
+  }
+  for (const { id } of WEATHER_COLOR_CONTROLS) {
+    const applyColor = (value: string, quick: boolean): void => {
+      if (!/^#[0-9a-f]{6}$/i.test(value)) return;
+      state[id] = value.toLowerCase();
+      $<HTMLInputElement>(id).value = state[id];
+      $<HTMLInputElement>(id + 'Hex').value = state[id];
+      $(id + 'Swatch').style.background = state[id];
+      redraw(quick);
+    };
+    for (const inputId of [id, id + 'Hex']) {
+      $(inputId).addEventListener('input', (event) => applyColor(inputTarget(event).value, true));
+      $(inputId).addEventListener('change', (event) => applyColor(inputTarget(event).value, false));
+    }
+  }
+  syncWeatherControls();
+  $('weatherBands').addEventListener('change', (event) => {
+    state.weatherBands = inputTarget(event).checked;
+    syncWeatherControls();
+    redraw(false);
+  });
   $('halftone').addEventListener('change', (e) => {
     state.halftone = inputTarget(e).checked;
     syncHalftoneControls();
@@ -3144,6 +3175,7 @@ if (typeof document !== 'undefined') {
     'sampleAndHold',
     'misregistration',
     'kaleidoscope',
+    'weatherBands',
     'halftone',
     'chroma',
     'humanizer',
@@ -3212,6 +3244,13 @@ if (typeof document !== 'undefined') {
       $<HTMLInputElement>(id + 'Hex').value = color;
       $(`${id}Swatch`).style.background = color;
     }
+    for (const { id } of WEATHER_COLOR_CONTROLS) {
+      const color = String(state[id]);
+      $<HTMLInputElement>(id).value = color;
+      $<HTMLInputElement>(id + 'Hex').value = color;
+      $(id + 'Swatch').style.background = color;
+    }
+    syncWeatherControls();
     $('bed').style.background = previewBackground(state);
     $('pw').value = String(state.pw);
     $('ph').value = String(state.ph);

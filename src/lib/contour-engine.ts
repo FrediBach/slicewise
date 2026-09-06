@@ -1,5 +1,7 @@
 'use strict';
 
+import { weatherPalette, weatherBandFills } from './weather-bands';
+
 import { svgSliceContours } from './svg-slice-field';
 
 import { refineContourSegments } from './contour-refinement';
@@ -221,6 +223,10 @@ export interface ContourSettings
   margin: number;
   clipToArtboard: boolean;
   bg: boolean;
+  weatherBands?: boolean;
+  weatherLowColor?: string;
+  weatherMidColor?: string;
+  weatherHighColor?: string;
   halftone: boolean;
   halftoneSize: number;
   halftoneContrast: number;
@@ -1458,6 +1464,7 @@ function splitPolylineByBands(
 }
 
 function gradientPalette(settings: ContourSettings): string[] {
+  if (settings.weatherBands) return weatherPalette(settings);
   if (!settings.gradientEnabled) return [settings.blueprint ? '#f5f9ff' : settings.color];
   const stops = (settings.gradientStops || []).slice().sort((a, b) => a.position - b.position);
   if (stops.length < 2) return [settings.color];
@@ -1492,7 +1499,8 @@ function colorPlan(
   const palette = gradientPalette(settings);
   const gradientCount = palette.length;
   const indexedPalette = new Map<number, number>();
-  if (!settings.lineIndexColorEnabled) return { palette, indexedPalette, gradientCount };
+  if (settings.weatherBands || !settings.lineIndexColorEnabled)
+    return { palette, indexedPalette, gradientCount };
   for (const rule of settings.lineIndexColors || []) {
     if (!/^#[0-9a-f]{6}$/i.test(rule.color)) continue;
     let paletteIndex = palette.findIndex(
@@ -2529,7 +2537,7 @@ function computeLineArtInstance(
       : simplified.run;
     const colorIndex =
       indexedPalette.get(sourceIndex) ??
-      (settings.gradientEnabled
+      (settings.gradientEnabled || settings.weatherBands
         ? clamp(
             Math.floor((sourceIndex / Math.max(1, offsets.length - 2)) * gradientCount),
             0,
@@ -2569,6 +2577,9 @@ function computeLineArtInstance(
       nodes += run.length / 2;
     }
   }
+  const weather = settings.weatherBands
+    ? weatherBandFills(runsByColor.map((runs, i) => ({ color: palette[i], runs })))
+    : null;
   const blueprintGeometry: BlueprintGeometry = {
     fieldMin: 0,
     fieldMax: 0,
@@ -2626,12 +2637,21 @@ function computeLineArtInstance(
       W,
       H,
       (color) => `<path d="${pathData}" stroke="${color}" ${dash} ${attrs}/>`,
-      settings.gradientEnabled || settings.lineIndexColorEnabled ? baseArtwork : '',
+      settings.gradientEnabled || settings.weatherBands || settings.lineIndexColorEnabled
+        ? baseArtwork
+        : '',
     );
-    renderedPaths *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
-    renderedNodes *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
+    renderedPaths *=
+      settings.gradientEnabled || settings.weatherBands || settings.lineIndexColorEnabled ? 4 : 3;
+    renderedNodes *=
+      settings.gradientEnabled || settings.weatherBands || settings.lineIndexColorEnabled ? 4 : 3;
   } else {
     artwork = baseArtwork;
+  }
+  if (weather) {
+    artwork = weather.svg + artwork;
+    renderedPaths += weather.paths;
+    renderedNodes += weather.nodes;
   }
   if (mapAnnotations) {
     artwork += mapAnnotations.svg;
@@ -2683,7 +2703,7 @@ ${artwork}
                   label:
                     settings.contourWeave && index === palette.length - 1
                       ? 'surface weave · weft'
-                      : settings.gradientEnabled
+                      : settings.gradientEnabled || settings.weatherBands
                         ? `gradient colour ${index + 1}`
                         : lineArtKind === 'hyperbolic-tiling'
                           ? 'Hyperbolic tiling'
@@ -2996,7 +3016,7 @@ function computeContourInstance(
         thread.family === 'weft'
           ? crossColorIndex
           : (indexedPalette.get(thread.index - low) ??
-            (settings.gradientEnabled
+            (settings.gradientEnabled || settings.weatherBands
               ? clamp(Math.floor(position * gradient.length), 0, gradient.length - 1)
               : 0));
       out[color][thread.family === 'warp' && settings.halftone ? toneBand(position) : 0][
@@ -3037,7 +3057,7 @@ function computeContourInstance(
       const position = index / Math.max(1, slices.length - 1);
       const color =
         indexedPalette.get(index) ??
-        (settings.gradientEnabled
+        (settings.gradientEnabled || settings.weatherBands
           ? Math.min(gradient.length - 1, Math.floor(position * gradient.length))
           : 0);
       out[color][settings.halftone ? toneBand(position) : 0][weightBand(position, index)].push(
@@ -3063,14 +3083,14 @@ function computeContourInstance(
             const indexes = Array.from({ length: chunk.pts.length / 3 }, (_, index) => index);
             emitProjectedPath(indexes, chunk.pts, P, quality, vis, step, phaseRuns[chunk.band]);
           }
-        if (settings.gradientEnabled || indexedPalette.size) {
+        if (settings.gradientEnabled || settings.weatherBands || indexedPalette.size) {
           const bandCount = indexedPalette.size ? N : gradient.length;
           for (const chunk of splitPolylineByBands(poly, pts, values, bandCount)) {
             const indexes = Array.from({ length: chunk.pts.length / 3 }, (_, i) => i);
             const position = (chunk.band + 0.5) / bandCount;
             const colorIndex =
               indexedPalette.get(chunk.band) ??
-              (settings.gradientEnabled
+              (settings.gradientEnabled || settings.weatherBands
                 ? clamp(Math.floor(position * gradient.length), 0, gradient.length - 1)
                 : 0);
             emitProjectedPath(
@@ -3119,7 +3139,7 @@ function computeContourInstance(
         : worldPoints;
       const band =
         indexedPalette.get(sliceIndex) ??
-        (settings.gradientEnabled
+        (settings.gradientEnabled || settings.weatherBands
           ? clamp(Math.floor(position * gradient.length), 0, gradient.length - 1)
           : 0);
       const tone = settings.halftone ? toneBand(position) : 0;
@@ -3215,7 +3235,8 @@ function computeContourInstance(
           settings.contourWeave || settings.axis === 'svg' || mesh.preserveSurface ? 1 : quality,
           (!settings.humanizer && originalSharp.get(clipped)) || sharpVertices(clipped),
         );
-        if (!quick || settings.topographicMap || settings.misregistration) plotRuns.push(clipped);
+        if (!quick || settings.topographicMap || settings.misregistration || settings.weatherBands)
+          plotRuns.push(clipped);
         nodes += clipped.length / 2;
         paths++;
       }
@@ -3244,6 +3265,7 @@ function computeContourInstance(
       terrainFeatures.push(feature);
     }
   }
+  const weatherRuns: Array<{ color: string; runs: Polyline[] }> = [];
   const colorPaths: string[][][] = [];
   const toolpaths: ContourToolpathGroup[] = [];
   const annotationSourceRuns: Polyline[] = [];
@@ -3272,6 +3294,7 @@ function computeContourInstance(
       }
       pathsForColor.push(pathsForTone);
     }
+    if (settings.weatherBands) weatherRuns.push({ color: palette[index], runs: runsForColor });
     colorPaths.push(pathsForColor);
     primaryRegistrationRuns.push(...runsForColor);
     if (!quick && runsForColor.length) {
@@ -3280,7 +3303,7 @@ function computeContourInstance(
         label:
           settings.contourWeave && index === palette.length - 1
             ? 'surface weave · weft'
-            : settings.gradientEnabled
+            : settings.gradientEnabled || settings.weatherBands
               ? `gradient colour ${index + 1}`
               : 'contours',
         runs: runsForColor,
@@ -3441,7 +3464,10 @@ function computeContourInstance(
         .join('\n'),
     )
     .join('\n');
-  const outlineColor = settings.blueprint && !settings.gradientEnabled ? '#f5f9ff' : settings.color;
+  const outlineColor =
+    settings.blueprint && !(settings.gradientEnabled || settings.weatherBands)
+      ? '#f5f9ff'
+      : settings.color;
   const outline = outlinePath
     ? `<path d="${outlinePath}" stroke="${outlineColor}" stroke-width="${fmt(settings.sw)}" ${attrs}/>`
     : '';
@@ -3452,14 +3478,21 @@ function computeContourInstance(
         W,
         H,
         pathsWithColor,
-        settings.gradientEnabled || settings.lineIndexColorEnabled ? baseArtwork : '',
+        settings.gradientEnabled || settings.weatherBands || settings.lineIndexColorEnabled
+          ? baseArtwork
+          : '',
       )
     : baseArtwork;
   if (settings.chroma) {
-    renderedPaths *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
-    renderedNodes *= settings.gradientEnabled || settings.lineIndexColorEnabled ? 4 : 3;
+    renderedPaths *=
+      settings.gradientEnabled || settings.weatherBands || settings.lineIndexColorEnabled ? 4 : 3;
+    renderedNodes *=
+      settings.gradientEnabled || settings.weatherBands || settings.lineIndexColorEnabled ? 4 : 3;
   }
-  artwork = contours;
+  const weather = settings.weatherBands ? weatherBandFills(weatherRuns) : null;
+  artwork = (weather?.svg ?? '') + contours;
+  renderedPaths += weather?.paths ?? 0;
+  renderedNodes += weather?.nodes ?? 0;
   if (mapAnnotations) {
     artwork += mapAnnotations.svg;
     renderedPaths += mapAnnotations.paths;

@@ -217,3 +217,7 @@ npm run build
 ```
 
 For changes to controls or bindings, also exercise upload, demo switching, orbit controls, undo/redo, randomization, preview rendering, and both SVG and G-code export in the browser. Build success verifies module and worker graphs, but it does not replace interaction testing.
+
+### Weather-map styling
+
+`weather-bands.ts` supplies shared colour-control defaults, validates the three colour anchors, blends the eleven-step diverging palette, and serializes closed-loop SVG fills without DOM access. Both mesh and line-art composition collect finished, clipped contour runs before annotation gaps, sort intact loops by descending projected area, and place opaque fills underneath the normal strokes. Open fragments are never implicitly closed. The standard colour-group pipeline supplies matching contour colours to G-code; the fill polygons are SVG-only. The optional `weatherBands` worker setting defaults to false when migrating older snapshots.

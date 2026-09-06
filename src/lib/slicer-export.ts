@@ -28,6 +28,7 @@ export interface ExportState {
   optimizeTravel: boolean;
   mergeTolerance: number;
   kaleidoscope: boolean;
+  weatherBands?: boolean;
   halftone: boolean;
   chroma: boolean;
   misregistration: boolean;
@@ -110,6 +111,7 @@ export function createGCodeExportPreflight(state: ExportState): GCodeExportPrefl
       : undefined,
     effects: {
       kaleidoscope: state.kaleidoscope,
+      weatherBands: state.weatherBands,
       halftone: state.halftone,
       chroma: state.chroma,
       misregistration: state.misregistration,

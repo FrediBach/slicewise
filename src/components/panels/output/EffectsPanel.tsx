@@ -1,7 +1,14 @@
+import { WEATHER_COLOR_CONTROLS } from '../../../lib/weather-bands';
 import { EffectAccordion } from './EffectAccordion';
 import { ContourWeaveControls } from './ContourWeaveControls';
 import { TopographicMapControls } from './TopographicMapControls';
-import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../../controls/FormControls';
+import {
+  Checkbox,
+  ColorControl,
+  FieldGroup,
+  SelectControl,
+  ValueControl,
+} from '../../controls/FormControls';
 import { Section } from '../../ui/section';
 import { GlitchControls } from './GlitchControls';
 import { MisregistrationControls } from './MisregistrationControls';
@@ -15,7 +22,7 @@ export function EffectsPanel() {
   return (
     <Section
       title="Effects"
-      description="Layer plotter-safe texture, colour, and annotations."
+      description="Layer texture, colour, fills, and annotations."
       badge="06"
     >
       <FieldGroup title="Post-processing">
@@ -86,6 +93,29 @@ export function EffectsPanel() {
         </EffectAccordion>
         <EffectAccordion title="Vector zoom">
           <VectorZoomControls />
+        </EffectAccordion>
+        <EffectAccordion title="Weather-map bands">
+          <Checkbox id="weatherBands">Weather-map bands</Checkbox>
+          <div className="effect-controls">
+            {WEATHER_COLOR_CONTROLS.map(({ id, label, defaultValue }) => (
+              <ColorControl
+                key={id}
+                id={id}
+                label={label}
+                defaultValue={defaultValue}
+                swatchId={`${id}Swatch`}
+                morphable={false}
+                disabled
+                disabledReason="Turn on Weather-map bands to edit this colour."
+              />
+            ))}
+          </div>
+          <p className="gradient-note blueprint-note">
+            Eleven bands blend from low through midpoint to high colour in contour order. Closed
+            loops receive flat colour fills; open lines remain unfilled. Overrides the contour
+            palette. SVG keeps the fills; plotters draw coloured outlines. Best with closed contours
+            and hidden-line removal off.
+          </p>
         </EffectAccordion>
         <EffectAccordion title="Halftone stroke">
           <Checkbox id="halftone" randomizable>

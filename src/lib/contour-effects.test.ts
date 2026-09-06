@@ -6,6 +6,40 @@ import { pointInGenerativeMask } from './generative-mask';
 import { vertexNormals, weld } from './mesh';
 
 describe('contour output effects', () => {
+  it('renders weather bands in preview and export with coloured plotter outlines', () => {
+    const mesh = makeContourMesh();
+    const settings = { ...contourSettings, weatherBands: true, hide: false, sil: false, el: 90 };
+    const exact = computeContours(mesh, settings, false);
+    const quick = computeContours(mesh, settings, true);
+    expect(exact.svg).toContain('data-effect="weather-bands"');
+    expect(quick.svg).toContain('data-effect="weather-bands"');
+    expect(exact.toolpaths.length).toBeGreaterThan(1);
+    expect(exact.toolpaths.some((group) => group.color === '#276419')).toBe(true);
+    expect(exact.svg).not.toMatch(/NaN|Infinity/);
+    expect(computeContours(mesh, { ...settings, weatherBands: false }, false).svg).not.toContain(
+      'data-effect="weather-bands"',
+    );
+  });
+
+  it('uses custom weather colours in SVG fills, strokes, and plotter groups', () => {
+    const settings = {
+      ...contourSettings,
+      weatherBands: true,
+      hide: false,
+      sil: false,
+      el: 90,
+      weatherLowColor: '#123456',
+      weatherMidColor: '#abcdef',
+      weatherHighColor: '#654321',
+    };
+    const result = computeContours(makeContourMesh(), settings, false);
+    expect(result.svg).toContain('fill="#123456"');
+    expect(result.svg).toContain('stroke="#123456"');
+    expect(result.toolpaths.some((group) => group.color === '#123456')).toBe(true);
+    expect(result.toolpaths.some((group) => group.color === '#654321')).toBe(true);
+    expect(result.svg).not.toContain('#276419');
+  });
+
   it('separates contour layers along the slice direction', () => {
     const baseSettings = {
       ...contourSettings,

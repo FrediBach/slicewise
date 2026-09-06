@@ -8,7 +8,7 @@ describe('EffectsPanel', () => {
   it('initially collapses every effect while retaining mounted controls and their values', () => {
     const { container } = render(<EffectsPanel />);
     const effects = container.querySelectorAll<HTMLDetailsElement>('.effect-accordion');
-    expect(effects).toHaveLength(17);
+    expect(effects).toHaveLength(18);
     for (const effect of effects) {
       expect(effect.open).toBe(false);
       expect(effect.querySelector('input')).not.toBeNull();

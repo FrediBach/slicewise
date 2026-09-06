@@ -42,6 +42,7 @@ export type GCodeOptions = {
   effects?: Partial<
     Record<
       | 'kaleidoscope'
+      | 'weatherBands'
       | 'halftone'
       | 'chroma'
       | 'misregistration'
@@ -217,6 +218,8 @@ export function generateGCode(
   for (const comment of options.comments || []) lines.push(`; ${cleanComment(comment)}`);
   if (effects.kaleidoscope)
     lines.push('; Kaleidoscope: mirrored radial geometry is included in these toolpaths');
+  if (effects.weatherBands)
+    lines.push('; Weather-map bands: coloured outlines only; solid fills are SVG-only');
   if (effects.halftone)
     lines.push('; Note: SVG dash styling is exported as continuous plotter paths');
   if (effects.chroma)

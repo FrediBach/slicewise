@@ -8,6 +8,16 @@ const snapshot = (overrides: Record<string, unknown> = {}): ContourSettings =>
   ({ ...structuredClone(contourSettings), ...overrides }) as ContourSettings;
 
 describe('parameter snapshot migrations', () => {
+  it('restores weather colours with defaults for legacy and malformed snapshots', () => {
+    const stored = snapshot({ weatherLowColor: '#ABCDEF', weatherMidColor: 'invalid' });
+    expect(normalizeParameterSnapshot(stored)).toMatchObject({
+      weatherLowColor: '#abcdef',
+      weatherMidColor: '#ffffff',
+      weatherHighColor: '#8e0152',
+    });
+    expect(stored.weatherLowColor).toBe('#ABCDEF');
+    expect(stored.weatherHighColor).toBeUndefined();
+  });
   it('fills missing vector-zoom slots without mutating the stored snapshot', () => {
     const stored = snapshot();
     const restored = normalizeParameterSnapshot(stored);
