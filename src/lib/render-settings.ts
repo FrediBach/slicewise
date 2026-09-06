@@ -1,3 +1,4 @@
+import { SLICE_RAY_CONTROLS } from './slice-rays-settings';
 import { WEAVE_CONTROLS } from './contour-weave-settings';
 import { MAP_CONTROLS } from './map-settings';
 import { type ContourSettings } from './contour-engine';
@@ -40,6 +41,8 @@ export const renderSettingKeys = [
   'tilingDepth',
   'tilingDiskScale',
   'lines',
+  'sliceRays',
+  ...SLICE_RAY_CONTROLS.map(({ id }) => id),
   'gapEase',
   'easeStrength',
   'easeCycles',

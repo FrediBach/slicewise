@@ -1,5 +1,7 @@
 'use strict';
 
+import { SLICE_RAY_CONTROLS, SLICE_RAY_DEFAULTS, sliceRaysSupported } from './slice-rays-settings';
+
 import {
   WEAVE_CONTROLS,
   WEAVE_DEFAULTS,
@@ -394,6 +396,7 @@ const state: AppState = {
   tileShuffleAffected: 50,
   tileShuffleSeed: 4,
   ...WEAVE_DEFAULTS,
+  ...SLICE_RAY_DEFAULTS,
   sampleAndHold: false,
   sampleAndHoldAxis: 'y',
   sampleAndHoldSpacing: 2,
@@ -1387,6 +1390,7 @@ if (typeof document !== 'undefined') {
   bindPair('tileShuffleAffected', 'tileShuffleAffected');
   bindPair('tileShuffleSeed', 'tileShuffleSeed');
   for (const { id } of WEAVE_CONTROLS) bindPair(id, id);
+  for (const { id } of SLICE_RAY_CONTROLS) bindPair(id, id);
   bindPair('sampleAndHoldSpacing', 'sampleAndHoldSpacing');
   bindPair('sampleAndHoldLength', 'sampleAndHoldLength');
   bindPair('sampleAndHoldMix', 'sampleAndHoldMix');
@@ -2073,7 +2077,20 @@ if (typeof document !== 'undefined') {
     syncEaseCenter();
     redraw(false);
   });
+  function syncSliceRayControls(): void {
+    const supported = !state.mesh?.lineArt && sliceRaysSupported(state);
+    const reason = supported
+      ? 'Enable slice rays to edit this parameter.'
+      : 'Slice rays require a 3D mesh and planar slices, with spiral, modulation, divergence, and weave off.';
+    setSingleControlDisabled('sliceRays', !supported, reason);
+    $('sliceRays').closest('.checkbox-control')?.classList.toggle('is-disabled', !supported);
+    for (const { id } of SLICE_RAY_CONTROLS) {
+      setControlPairDisabled(id, !supported || !state.sliceRays, reason);
+      $(id + 'Control').classList.toggle('is-disabled', !supported || !state.sliceRays);
+    }
+  }
   function syncSliceConstruction(): void {
+    syncSliceRayControls();
     if (surfaceWeaveActive()) {
       setSingleControlDisabled(
         'spiral',
@@ -2155,6 +2172,7 @@ if (typeof document !== 'undefined') {
   });
   $('spiral').addEventListener('change', (e) => {
     state.spiral = inputTarget(e).checked;
+    syncSliceRayControls();
     redraw(false);
   });
   syncSliceFieldControls();
@@ -2656,6 +2674,11 @@ if (typeof document !== 'undefined') {
     syncHumanizerControls();
     redraw(false);
   });
+  $('sliceRays').addEventListener('change', (e) => {
+    state.sliceRays = inputTarget(e).checked;
+    syncSliceRayControls();
+    redraw(false);
+  });
   $('yarnCurl').addEventListener('change', (e) => {
     state.yarnCurl = inputTarget(e).checked;
     syncYarnCurlControls();
@@ -3081,6 +3104,7 @@ if (typeof document !== 'undefined') {
     ['tileShuffleAffected', 'tileShuffleAffected'],
     ['tileShuffleSeed', 'tileShuffleSeed'],
     ...WEAVE_CONTROLS.map(({ id }) => [id, id] as const),
+    ...SLICE_RAY_CONTROLS.map(({ id }) => [id, id] as const),
     ['sampleAndHoldSpacing', 'sampleAndHoldSpacing'],
     ['sampleAndHoldLength', 'sampleAndHoldLength'],
     ['sampleAndHoldMix', 'sampleAndHoldMix'],
@@ -3180,6 +3204,7 @@ if (typeof document !== 'undefined') {
     'chroma',
     'humanizer',
     'yarnCurl',
+    'sliceRays',
     'blueprint',
     'topographicMap',
     'vectorZoom1Enabled',
@@ -3652,6 +3677,7 @@ if (typeof document !== 'undefined') {
       chroma: 0.18,
       humanizer: 0.3,
       yarnCurl: 0.25,
+      sliceRays: 0.2,
       blueprint: 0.16,
       topographicMap: 0.18,
     } satisfies Partial<Record<keyof AppState, number>>;
@@ -3822,6 +3848,10 @@ if (typeof document !== 'undefined') {
     $('humanizer').checked = state.humanizer;
     randomizePair('humanizerAmount', 'humanizerAmount', () => randomInt(18, 58));
     syncHumanizerControls();
+    $('sliceRays').checked = state.sliceRays;
+    for (const { id, min, max } of SLICE_RAY_CONTROLS)
+      randomizePair(id, id, () => randomInt(min, id === 'sliceRayLength' ? 30 : max));
+    syncSliceRayControls();
     $('yarnCurl').checked = state.yarnCurl;
     randomizePair('yarnCutPercent', 'yarnCutPercent', () => randomInt(5, 300));
     randomizePair('yarnCurlSize', 'yarnCurlSize', () => randomInt(65, 175));

@@ -1,3 +1,4 @@
+import { SliceRayControls } from './contours/SliceRayControls';
 import { SliceFieldControls } from './contours/SliceFieldControls';
 import { Section } from '../ui/section';
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
@@ -87,6 +88,7 @@ export function ContoursPanel() {
         />
       </FieldGroup>
       <SliceFieldControls />
+      <SliceRayControls />
       <FieldGroup title="Path construction" className="field-group--checks">
         <div className="check-grid">
           <Checkbox id="spiral" randomizable>

@@ -1,3 +1,4 @@
+import { SLICE_RAY_DEFAULTS } from '../../lib/slice-rays-settings';
 import { MAP_DEFAULTS } from '../../lib/map-settings';
 import { sphereDemo } from '../../lib/demo-meshes';
 import { vertexNormals, weld } from '../../lib/mesh';
@@ -8,6 +9,7 @@ export const makeContourMesh = () => {
 };
 
 export const contourSettings = {
+  ...SLICE_RAY_DEFAULTS,
   az: 35,
   el: 24,
   roll: 0,

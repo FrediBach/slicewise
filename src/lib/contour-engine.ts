@@ -1,5 +1,13 @@
 'use strict';
 
+import { createSliceRays } from './slice-rays';
+import {
+  SLICE_RAY_CONTROLS,
+  sliceRaysSupported,
+  resolveSliceRaySettings,
+  type SliceRaySettings,
+} from './slice-rays-settings';
+
 import { weatherPalette, weatherBandFills } from './weather-bands';
 
 import { svgSliceContours } from './svg-slice-field';
@@ -124,6 +132,7 @@ export interface LineIndexColor {
 export interface ContourSettings
   extends
     Partial<MapSettings>,
+    Partial<SliceRaySettings>,
     Partial<ContourWeaveSettings>,
     BlockGlitchSettings,
     ScanBandGlitchSettings,
@@ -1651,6 +1660,8 @@ function deterministicDrawingNumber(
       settings.sw,
       settings.humanizer,
       settings.humanizerAmount,
+      settings.sliceRays,
+      ...SLICE_RAY_CONTROLS.map(({ id }) => settings[id]),
       settings.yarnCurl,
       settings.yarnCutPercent,
       settings.yarnCurlSize,
@@ -2921,12 +2932,14 @@ function computeContourInstance(
   };
   let vis: VisibilityTest | null = null,
     visOutline: VisibilityTest | null = null,
+    rayVisibility: VisibilityTest | null = null,
     step = 0.6;
   if (settings.hide) {
     const res = quick ? 320 : 1100;
     const D = buildDepth(P, mesh, W, H, res);
     const depthRange = P.dmax - P.dmin || 1;
     vis = makeVisibleTest(D, depthRange * 0.006 + 1e-6, 1);
+    rayVisibility = makeVisibleTest(D, depthRange * 0.006 + 1e-6, 1, true);
     // outlines sit exactly on the depth cliff, so they need a wider, kinder test
     visOutline = makeVisibleTest(D, depthRange * 0.03 + 1e-6, 2, true);
     step = Math.max(0.25, W / D.rw);
@@ -2983,6 +2996,7 @@ function computeContourInstance(
   );
   const curveStrength = (quality - 1) / 9;
   let sequenceSource: ContourSequenceSource | undefined;
+  let preserveRayGaps = false;
   if (settings.contourWeave) {
     const weaveSettings = resolveWeaveSettings(settings);
     const crossColorIndex = palette.length;
@@ -3164,6 +3178,35 @@ function computeContourInstance(
         for (const run of projectedRuns) contourLevels.set(run, position);
       out[band][tone][weight].push(...projectedRuns);
       if (!quick) features.push(measureContourSlice(sliceIndex, position, projectedRuns));
+      if (settings.sliceRays && sliceRaysSupported(settings) && field.constantDirection) {
+        const rays = createSliceRays(
+          worldPoints,
+          polylines,
+          field.constantDirection,
+          settings,
+          sliceIndex,
+        );
+        if (rays.length && resolveSliceRaySettings(settings).sliceRayFade > 0)
+          preserveRayGaps = true;
+        for (const ray of rays) {
+          const outputRay = explodeAmount
+            ? ray.map(
+                (value, index) => value + outputWorldPoints[index % 3] - worldPoints[index % 3],
+              )
+            : ray;
+          emitProjectedPath(
+            [0, 1],
+            ray,
+            P,
+            quality,
+            rayVisibility,
+            step,
+            out[band][tone][weight],
+            0,
+            outputRay,
+          );
+        }
+      }
     }
     if (!quick) sequenceSource = { version: 1, slices: features };
   }
@@ -3536,6 +3579,7 @@ function computeContourInstance(
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}mm" height="${H}mm" viewBox="0 0 ${W} ${H}">
 ${artwork}
 </svg>`;
+  if (preserveRayGaps) for (const group of toolpaths) group.preserveGaps = true;
   const ms = performance.now() - t0;
   return {
     svg,
@@ -3674,6 +3718,7 @@ ${background}${layers}${documentOverlay(settings, blueprint)}
         : group.color.toLowerCase();
       const existing = groups.get(key);
       if (existing) {
+        if (group.preserveGaps) existing.preserveGaps = true;
         const existingCount = existing.runs.length;
         existing.runs.push(...group.runs);
         if (existing.runWeights || group.runWeights) {
@@ -3684,6 +3729,7 @@ ${background}${layers}${documentOverlay(settings, blueprint)}
         groups.set(key, {
           color: group.color,
           label: registrationCopy ? group.label : 'morphed contours',
+          ...(group.preserveGaps ? { preserveGaps: true } : {}),
           runs: [...group.runs],
           runWeights: group.runWeights ? [...group.runWeights] : undefined,
         });
