@@ -900,6 +900,7 @@ if (typeof document !== 'undefined') {
           lineArtOffsets: offsets?.buffer,
           lineArtKind: mesh.lineArt?.kind,
           terrain: mesh.terrain === true,
+          preserveSurface: mesh.preserveSurface === true,
         },
       },
       transfer,

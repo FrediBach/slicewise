@@ -74,12 +74,13 @@ export function parseSVG(
     const base = verts.length / 3;
     for (let i = 0; i < position.count; i++) {
       verts.push(position.getX(i), -position.getY(i), position.getZ(i));
-      tris.push(base + i);
     }
+    // Flipping SVG Y reflects the mesh, so reverse each triangle winding.
+    for (let i = 0; i < position.count; i += 3) tris.push(base + i, base + i + 2, base + i + 1);
     geometry.dispose();
     if (geometry !== sourceGeometry) sourceGeometry.dispose();
   }
-  return { verts: Float64Array.from(verts), tris: Uint32Array.from(tris) };
+  return { verts: Float64Array.from(verts), tris: Uint32Array.from(tris), preserveSurface: true };
 }
 
 function signedArea(points: Vector2[]): number {

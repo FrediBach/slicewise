@@ -7,6 +7,7 @@ self.addEventListener('message', ({ data }) => {
     mesh = {
       V: new Float32Array(data.mesh.V),
       terrain: data.mesh.terrain === true,
+      preserveSurface: data.mesh.preserveSurface === true,
       T: new Uint32Array(data.mesh.T),
       N: new Float32Array(data.mesh.N),
       ...(data.mesh.lineArtOffsets

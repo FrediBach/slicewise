@@ -1,16 +1,20 @@
 'use strict';
 
 export type RawMesh = {
+  /** Slice the authored triangle surface without normal-based reconstruction. */
+  preserveSurface?: boolean;
   verts: Float32Array | Float64Array;
   tris: Uint32Array;
 };
 
 export type ParsedMesh = {
+  preserveSurface?: boolean;
   verts: Float64Array;
   tris: Uint32Array;
 };
 
 export type NormalizedMesh = {
+  preserveSurface?: boolean;
   V: Float32Array;
   T: Uint32Array;
 };
@@ -302,7 +306,7 @@ function weld(raw: RawMesh): NormalizedMesh {
   }
   const r = Math.sqrt(r2) || 1;
   for (let i = 0; i < V.length; i++) V[i] /= r;
-  return { V, T: t2.subarray(0, n) };
+  return { V, T: t2.subarray(0, n), ...(raw.preserveSurface ? { preserveSurface: true } : {}) };
 }
 
 function vertexNormals(V: Float32Array, T: Uint32Array): Float32Array {

@@ -93,6 +93,8 @@ type MorphValue = number | string;
 type MorphTargets = Record<string, MorphValue>;
 
 export interface ContourMesh {
+  /** Preserve authored faces instead of reconstructing a smooth surface from normals. */
+  preserveSurface?: boolean;
   /** Set only for the dedicated square terrain source in its original Z-up orientation. */
   terrain?: boolean;
   V: NumericArray;
@@ -403,7 +405,7 @@ export function extractScalarFieldLevel(
   if (S.length < NV || !Number.isFinite(level)) return { pts: [], segs: [] };
   const scalarDir = field.constantDirection;
   const scalarAtPoint = field.evaluate;
-  const curveStrength = clamp(options.curveStrength ?? 0, 0, 1);
+  const curveStrength = mesh.preserveSurface ? 0 : clamp(options.curveStrength ?? 0, 0, 1);
   const rootIterations = Math.round(clamp(options.rootIterations ?? 12, 1, 32));
   const adaptiveDepth = Math.round(clamp(options.adaptiveDepth ?? 0, 0, 5));
   const idx = new Map<number, number>(); // edge key -> point index
@@ -3137,7 +3139,7 @@ function computeContourInstance(
         if (level !== undefined) contourLevels.set(clipped, level);
         d += serialiseRun(
           clipped,
-          settings.contourWeave ? 1 : quality,
+          settings.contourWeave || mesh.preserveSurface ? 1 : quality,
           (!settings.humanizer && originalSharp.get(clipped)) || sharpVertices(clipped),
         );
         if (!quick || settings.topographicMap || settings.misregistration) plotRuns.push(clipped);
@@ -3413,7 +3415,13 @@ function computeContourInstance(
           ...zoomGuideRuns,
         ]
       : primaryRegistrationRuns;
-  const registration = misregistrationArtwork(registrationSourceRuns, settings, W, H, quality);
+  const registration = misregistrationArtwork(
+    registrationSourceRuns,
+    settings,
+    W,
+    H,
+    mesh.preserveSurface ? 1 : quality,
+  );
   artwork += registration.svg;
   renderedPaths += registration.paths;
   renderedNodes += registration.nodes;
