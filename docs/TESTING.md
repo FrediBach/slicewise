@@ -48,6 +48,7 @@ Prioritize observable contracts and failure-prone transformations:
 - Render snapshots: exhaustive worker keys, omission of browser-only state, derived metadata, and detached mutable values.
 - Parameter history and migrations: duplicate suppression, branch truncation, bounded eviction, snapshot isolation, legacy compatibility, and invalid saved values.
 - Animation projects: detached base settings, complete keyframe capture, exact endpoints, easing, typed interpolation, discrete seed behavior, timeline editing boundaries, and forced suppression of the separate Morph grid.
+- Animation preview caching: slow-worker backpressure and visible completion, stable frame slots, loop-aware prefetch, bounded bytes/frame count, progressive temporal sampling, and project/mesh invalidation. `animation-runtime.test.tsx` exercises the real runtime with a deliberately delayed worker, including cached replay and exact pause settling.
 - Animation video export: endpoint-inclusive frame timing, timestamps, even dimensions, codec fallback, opaque backgrounds, safe filenames, progress/cancellation, and resource cleanup.
 
 Avoid snapshots of entire panels. They are noisy and do not prove that controls remain connected to the imperative runtime. Prefer assertions about accessible controls, event payloads, and exported data.
@@ -63,6 +64,7 @@ Coverage currently measures the focused core under active test:
 - `animation-project.ts`
 - `animation-storage.ts`
 - `animation-playback.ts`
+- `animation-frame-cache.ts`
 - `animation-history.ts`
 - `animation-interpolation.ts`
 - `animation-migrations.ts`

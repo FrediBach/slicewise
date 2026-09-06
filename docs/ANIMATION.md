@@ -40,6 +40,12 @@ Evaluation clones the base settings and always clears `morphEnabled`, `morphSeco
 
 Playback is clock-driven. `animation-playback.ts` derives the playhead from elapsed monotonic time, while `slicer.ts` requests quick renders at the configured preview cadence. Slow contour work may drop preview frames without slowing the timeline. Scrubbing also uses quick renders, followed by a debounced exact settle render; pausing and non-loop completion settle exactly.
 
+Playback submits work only when the contour worker and queue are idle. Advancing the playhead no longer supersedes an unfinished frame, so expensive results reach the preview instead of being perpetually discarded. Control values update with displayed frames, and timeline notifications follow the project FPS rather than every browser refresh. Animation presentations skip the unchanged Config G-code serialization/preflight.
+
+`animation-frame-cache.ts` owns the DOM-free playback cache and scheduling policy. Frames use stable FPS-aligned timeline indexes, allowing later loops and replay to reuse completed SVG previews and their evaluated settings. On a cache hit, spare worker time prepares the next missing frame within a bounded 32-slot look-ahead, wrapping only for loops. Prefetched results populate the cache without jumping the viewport ahead. A newly displayed cached frame supersedes older visible work, while a still-valid late result can remain useful to the cache.
+
+The cache holds at most 240 frames and an estimated 32 MiB (UTF-16 SVG/settings strings plus per-frame overhead). If either limit is exceeded, it repeatedly doubles the sampling interval and drops off-grid entries, retaining samples across the timeline instead of continually evicting the start of a loop. Oversized individual frames can display but are not retained. The immutable project identity and mesh version scope every cache generation: edits, undo/redo, timing changes, and source replacement invalidate old frames, including late responses. Leaving Animation mode releases the cache. This is a local in-memory preview cache; it never supplies paused exact renders, Config export, or video-export frames.
+
 Animation renders use explicit settings snapshots with history ignored and a distinct render purpose. Animation-preview results may update the viewport but cannot replace the last exact Config result used by SVG/G-code export. Animation-export results are routed only to the waiting video frame.
 
 ## Local persistence

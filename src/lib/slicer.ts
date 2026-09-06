@@ -77,6 +77,7 @@ import {
   webSerialProvider,
 } from './grbl-serial';
 import { createAnimationHistory } from './animation-history';
+import { AnimationFrameCache, planAnimationPreview } from './animation-frame-cache';
 import {
   loadAnimationProject,
   localAnimationProjectId,
@@ -198,7 +199,10 @@ type RenderRequest = RenderRequestOptions & {
   meshVersion: number;
   queuedAt: number;
   dispatchedAt?: number;
+  animationFrame?: { generation: number; frame: number; prefetch: boolean };
 };
+
+type CachedAnimationFrame = { result: ContourResult; settings: ContourSettings };
 
 type RenderWorkerMessage =
   | { type: 'result'; id: number; meshVersion: number; result: ContourResult }
@@ -556,6 +560,8 @@ if (typeof document !== 'undefined') {
     lastDispatch = 0,
     meshVersion = 0;
   let previewPerformance = initialPreviewPerformance();
+  const animationFrameCache = new AnimationFrameCache<CachedAnimationFrame>();
+  let displayedAnimationFrame: CachedAnimationFrame | undefined;
 
   function recordMeasure(name: string, start: number, end: number): void {
     try {
@@ -642,7 +648,9 @@ if (typeof document !== 'undefined') {
     renderSequencerSourceOverlay();
     $('rPaths').textContent = result.paths.toLocaleString();
     $('rPts').textContent = Math.round(result.nodes).toLocaleString();
-    updateExportSize();
+    // Config export data stays frozen during animation. Avoid serializing and
+    // validating that same G-code again on every animation frame.
+    if (request.purpose === 'config') updateExportSize();
     $('rMs').textContent = Math.round(result.ms) + ' ms';
   }
   function applyRender(result: ContourResult, request: RenderRequest): void {
@@ -774,6 +782,22 @@ if (typeof document !== 'undefined') {
         performance.now(),
       );
     if (data.type === 'result' && completedRequest?.id === data.id) {
+      const frame = completedRequest.animationFrame;
+      let cachedFrame: CachedAnimationFrame | undefined;
+      if (frame && animationMode && animationProject && data.meshVersion === meshVersion) {
+        configureAnimationFrameCache();
+        if (frame.generation === animationFrameCache.generation) {
+          cachedFrame = { result: data.result, settings: completedRequest.settings };
+          animationFrameCache.put(
+            frame.frame,
+            cachedFrame,
+            data.result.svg.length * 2 +
+              JSON.stringify(completedRequest.settings).length * 2 +
+              1024,
+            frame.generation,
+          );
+        }
+      }
       const disposition = renderDisposition({
         responseId: data.id,
         latestRequestId: requestId,
@@ -788,10 +812,19 @@ if (typeof document !== 'undefined') {
           animationExportRenderWaiter.resolve(data.result);
           animationExportRenderWaiter = null;
         }
-      } else if (disposition === 'commit' || disposition === 'preview') {
+      } else if (
+        (disposition === 'commit' || disposition === 'preview') &&
+        !frame?.prefetch &&
+        (!frame || cachedFrame !== undefined)
+      ) {
         const applyStarted = performance.now();
         if (disposition === 'commit') applyRender(data.result, completedRequest);
-        else applyPreview(data.result, completedRequest);
+        else {
+          applyPreview(data.result, completedRequest);
+          displayedAnimationFrame = cachedFrame;
+          if (animationPlaying && completedRequest.purpose === 'animation-preview')
+            syncAnimationControlValues(completedRequest.settings);
+        }
         recordMeasure('slicewise:render:dom-apply', applyStarted, performance.now());
         measureNextPaint(completedRequest);
       }
@@ -826,6 +859,8 @@ if (typeof document !== 'undefined') {
   /* --------------------------------------------------------- load model */
   function sendMeshToWorker(mesh: RenderMesh): void {
     previewPerformance = initialPreviewPerformance();
+    animationFrameCache.clear();
+    displayedAnimationFrame = undefined;
     const V = mesh.V.slice(),
       T = mesh.T.slice(),
       N = mesh.N.slice();
@@ -4259,6 +4294,10 @@ if (typeof document !== 'undefined') {
 
   function renderAnimationAt(timeMs: number, quick: boolean): void {
     if (!animationProject) return;
+    if (animationPlaying && quick) {
+      renderAnimationPlaybackAt(timeMs);
+      return;
+    }
     const settings = evaluateAnimationSettings(animationProject, timeMs, animationParameters);
     syncAnimationControlValues(settings);
     requestRender({
@@ -4267,6 +4306,59 @@ if (typeof document !== 'undefined') {
       history: 'ignore',
       purpose: 'animation-preview',
     });
+  }
+
+  function configureAnimationFrameCache(): void {
+    if (!animationProject) return;
+    const generation = animationFrameCache.generation;
+    animationFrameCache.configure(
+      animationProject,
+      meshVersion,
+      animationProject.durationMs,
+      animationProject.fps,
+    );
+    if (generation !== animationFrameCache.generation) displayedAnimationFrame = undefined;
+  }
+
+  function renderAnimationPlaybackAt(timeMs: number): void {
+    if (!animationProject || !state.mesh) return;
+    configureAnimationFrameCache();
+    const plan = planAnimationPreview(
+      animationFrameCache,
+      timeMs,
+      renderInFlight || queuedRender !== null,
+      animationProject.loopPreview,
+    );
+    if (plan.cached && plan.cached !== displayedAnimationFrame) {
+      // A newer cached presentation supersedes any older in-flight preview,
+      // but that result can still populate the cache when it completes.
+      const request: RenderRequest = {
+        settings: plan.cached.settings,
+        quality: 'quick',
+        history: 'ignore',
+        purpose: 'animation-preview',
+        id: ++requestId,
+        meshVersion,
+        queuedAt: performance.now(),
+      };
+      latestRenderPurpose = request.purpose;
+      applyPreview(plan.cached.result, request);
+      syncAnimationControlValues(plan.cached.settings);
+      displayedAnimationFrame = plan.cached;
+    }
+    if (plan.renderFrame === undefined) return;
+    const settings = evaluateAnimationSettings(
+      animationProject,
+      animationFrameCache.timeAt(plan.renderFrame),
+      animationParameters,
+    );
+    requestRender({ settings, quality: 'quick', history: 'ignore', purpose: 'animation-preview' });
+    if (queuedRender)
+      queuedRender.animationFrame = {
+        generation: animationFrameCache.generation,
+        frame: plan.renderFrame,
+        prefetch: plan.prefetch,
+      };
   }
 
   function clearAnimationSettle(): void {
@@ -4340,8 +4432,8 @@ if (typeof document !== 'undefined') {
         now,
         animationProject.fps,
       );
+      publishAnimationState();
     }
-    publishAnimationState();
     animationPlaybackFrame = requestAnimationFrame(tickAnimationPlayback);
   }
 
@@ -4361,6 +4453,7 @@ if (typeof document !== 'undefined') {
       animationPlaybackStartedAt + animationPreviewIntervalMs(animationProject.fps);
     syncAnimationControlLocks();
     publishAnimationState();
+    renderAnimationPlaybackAt(animationPlayheadMs);
     animationPlaybackFrame = requestAnimationFrame(tickAnimationPlayback);
   }
 
@@ -4575,6 +4668,8 @@ if (typeof document !== 'undefined') {
     animationGestureActive = false;
     draggingAnimationKeyframeId = null;
     animationMode = false;
+    animationFrameCache.clear();
+    displayedAnimationFrame = undefined;
     document.body.classList.remove('animation-mode');
     unlockConfigControls();
     if (animationConfigSnapshot) restoreParameterSnapshot(animationConfigSnapshot);
