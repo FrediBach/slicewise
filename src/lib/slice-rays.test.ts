@@ -146,9 +146,7 @@ describe('slice rays', () => {
     expect(hiddenRays.paths).toBeGreaterThan(hiddenBase.paths);
     expect(hiddenRays.svg).not.toMatch(/NaN|Infinity/);
     for (const patch of [
-      { axis: 'spherical' },
-      { sliceLfo: true },
-      { divergence: 30 },
+      { axis: 'svg', svgSlicePaths: [[-1, 0, 1, 0]] },
       { spiral: true },
       { contourWeave: true },
     ]) {

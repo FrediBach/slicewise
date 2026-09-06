@@ -1,6 +1,7 @@
 'use strict';
 
 import { createSliceRays } from './slice-rays';
+import { createSliceNormalCollector, createSurfaceSliceRays } from './slice-ray-surface';
 import {
   SLICE_RAY_CONTROLS,
   sliceRaysSupported,
@@ -287,16 +288,20 @@ export interface ContourResult {
 }
 
 export interface PointSegments {
+  surfaceNormals?: number[];
   pts: number[];
   segs: number[];
 }
 
 export interface ScalarFieldSliceMetadata {
+  /** Cutting-surface direction for rays; LFO explosion still uses the base normal. */
+  rayGradient?: MeshScalarField['gradient'];
   constantDirection?: Vec3;
   gradient?: MeshScalarField['gradient'];
 }
 
 interface CachedSlice {
+  surfaceNormals?: number[];
   position: number;
   metadata: ScalarFieldSliceMetadata;
   worldPoints: number[];
@@ -304,6 +309,7 @@ interface CachedSlice {
 }
 
 export interface ScalarFieldLevelOptions {
+  captureSurfaceNormals?: boolean;
   curveStrength?: number;
   rootIterations?: number;
   /** Model-space chord tolerance for normal-guided planar contour spans. */
@@ -425,6 +431,7 @@ export function extractScalarFieldLevel(
 ): PointSegments {
   // Returns {pts:[x,y,z,...], segs:[i,j,...]} for one scalar-field level.
   const { T, V, N } = mesh;
+  const normalCollector = options.captureSurfaceNormals ? createSliceNormalCollector(mesh) : null;
   const NV = V.length / 3;
   const S = field.values;
   if (S.length < NV || !Number.isFinite(level)) return { pts: [], segs: [] };
@@ -575,7 +582,11 @@ export function extractScalarFieldLevel(
         e1 = intersect(a, b);
         e2 = intersect(c, b);
       }
-      if (e1 !== e2) segs.push(e1, e2);
+      if (e1 !== e2) {
+        segs.push(e1, e2);
+        normalCollector?.add(e1, pts);
+        normalCollector?.add(e2, pts);
+      }
     };
     const refine = (a: FieldPoint, b: FieldPoint, c: FieldPoint, depth: number): void => {
       const ab = midpoint(a, b),
@@ -617,9 +628,10 @@ export function extractScalarFieldLevel(
         b = fieldPoint(T[index + 1]),
         c = fieldPoint(T[index + 2]);
       if (![...a, ...b, ...c].every(Number.isFinite)) continue;
+      normalCollector?.triangle(T[index], T[index + 1], T[index + 2]);
       refine(a, b, c, 0);
     }
-    return { pts, segs };
+    return { pts, segs, ...(normalCollector ? { surfaceNormals: normalCollector.normals } : {}) };
   }
 
   for (let i = 0; i < T.length; i += 3) {
@@ -653,6 +665,7 @@ export function extractScalarFieldLevel(
       pb = sb > 0,
       pc = sc > 0;
     if (pa === pb && pb === pc) continue; // no crossing
+    normalCollector?.triangle(a, b, c);
     let e1, e2;
     if (pa === pb) {
       e1 = getPoint(a, c);
@@ -664,11 +677,15 @@ export function extractScalarFieldLevel(
       e1 = getPoint(a, b);
       e2 = getPoint(c, b);
     }
-    if (e1 !== e2) segs.push(e1, e2);
+    if (e1 !== e2) {
+      segs.push(e1, e2);
+      normalCollector?.add(e1, pts);
+      normalCollector?.add(e2, pts);
+    }
   }
   if (refinePlanar)
     return { pts, segs: refineContourSegments(pts, segs, tangents, curveStrength, curveTolerance) };
-  return { pts, segs };
+  return { pts, segs, ...(normalCollector ? { surfaceNormals: normalCollector.normals } : {}) };
 }
 
 /* ------------------------------------------- chain segments into runs */
@@ -719,8 +736,10 @@ const contourTopologyCache = new WeakMap<ContourMesh, Map<string, CachedSlice[]>
 export function extractGeodesicVoronoiBoundary(
   mesh: ContourMesh,
   voronoi: IntrinsicVoronoiData,
+  captureSurfaceNormals = false,
 ): PointSegments {
   const { V, T } = mesh;
+  const normalCollector = captureSurfaceNormals ? createSliceNormalCollector(mesh) : null;
   const vertexCount = Math.floor(V.length / 3);
   if (voronoi.labels.length < vertexCount || voronoi.differenceValues.length < vertexCount)
     return { pts: [], segs: [] };
@@ -758,6 +777,7 @@ export function extractGeodesicVoronoiBoundary(
       ![a, b, c].every((vertex) => Number.isInteger(vertex) && vertex >= 0 && vertex < vertexCount)
     )
       continue;
+    normalCollector?.triangle(a, b, c);
     const crossed = new Set<number>();
     for (const [first, second] of [
       [a, b],
@@ -773,9 +793,11 @@ export function extractGeodesicVoronoiBoundary(
     if (crossed.size === 2) {
       const points = Array.from(crossed);
       segs.push(points[0], points[1]);
+      normalCollector?.add(points[0], pts);
+      normalCollector?.add(points[1], pts);
     }
   }
-  return { pts, segs };
+  return { pts, segs, ...(normalCollector ? { surfaceNormals: normalCollector.normals } : {}) };
 }
 
 interface SliceLfoField {
@@ -856,6 +878,20 @@ function createSliceLfoField(
   return { values, evaluate };
 }
 
+function numericalFieldGradient(
+  evaluate: NonNullable<MeshScalarField['evaluate']>,
+): NonNullable<MeshScalarField['gradient']> {
+  return (x, y, z) => {
+    const h = 1e-5;
+    const gradient: Vec3 = [
+      (evaluate(x + h, y, z) - evaluate(x - h, y, z)) / (2 * h),
+      (evaluate(x, y + h, z) - evaluate(x, y - h, z)) / (2 * h),
+      (evaluate(x, y, z + h) - evaluate(x, y, z - h)) / (2 * h),
+    ];
+    return gradient.every(Number.isFinite) ? gradient : null;
+  };
+}
+
 function contourSlices(
   mesh: ContourMesh,
   settings: ContourSettings,
@@ -893,13 +929,14 @@ function contourSlices(
 
   const slices: CachedSlice[] = [];
   if (field.levelMode === 'voronoi-boundary') {
-    const boundary = field.voronoi
-      ? extractGeodesicVoronoiBoundary(mesh, field.voronoi)
+    const boundary: PointSegments = field.voronoi
+      ? extractGeodesicVoronoiBoundary(mesh, field.voronoi, true)
       : { pts: [], segs: [] };
     slices.push({
       position: 0.5,
       metadata: {},
       worldPoints: boundary.pts,
+      surfaceNormals: boundary.surfaceNormals,
       polylines: boundary.segs.length ? chain(boundary.pts, boundary.segs) : [],
     });
     if (key) {
@@ -993,7 +1030,8 @@ function contourSlices(
       3,
       baseAdaptiveDepth + (fmAdditionalCycles > carrierCycles * 0.75 ? 1 : 0),
     );
-    const { pts, segs } = extractScalarFieldLevel(mesh, sliceField, level, {
+    const { pts, segs, surfaceNormals } = extractScalarFieldLevel(mesh, sliceField, level, {
+      captureSurfaceNormals: !sliceDirection || Boolean(lfoAmplitude),
       curveStrength,
       curveTolerance: 0.0006 * Math.pow(0.72, curveStrength * 9),
       rootIterations: 6 + Math.round(clamp(curveStrength, 0, 1) * 18),
@@ -1002,8 +1040,15 @@ function contourSlices(
     slices.push({
       position,
       metadata: sliceDirection
-        ? { constantDirection: sliceDirection }
-        : { gradient: field.gradient },
+        ? {
+            constantDirection: sliceDirection,
+            rayGradient:
+              lfoAmplitude && sliceField.evaluate
+                ? numericalFieldGradient(sliceField.evaluate)
+                : undefined,
+          }
+        : { gradient: field.gradient, rayGradient: field.gradient },
+      surfaceNormals,
       worldPoints: pts,
       polylines: segs.length ? chain(pts, segs) : [],
     });
@@ -3136,7 +3181,7 @@ function computeContourInstance(
     const slices = contourSlices(mesh, settings, field, fieldFeatures, N, curveStrength);
     const features: ContourSequenceSource['slices'] = [];
     for (let sliceIndex = 0; sliceIndex < slices.length; sliceIndex++) {
-      const { position, metadata, worldPoints, polylines } = slices[sliceIndex];
+      const { position, metadata, worldPoints, polylines, surfaceNormals } = slices[sliceIndex];
       if (!polylines.length) {
         if (!quick) features.push(measureContourSlice(sliceIndex, position, []));
         continue;
@@ -3178,34 +3223,48 @@ function computeContourInstance(
         for (const run of projectedRuns) contourLevels.set(run, position);
       out[band][tone][weight].push(...projectedRuns);
       if (!quick) features.push(measureContourSlice(sliceIndex, position, projectedRuns));
-      if (settings.sliceRays && sliceRaysSupported(settings) && field.constantDirection) {
-        const rays = createSliceRays(
-          worldPoints,
-          polylines,
-          field.constantDirection,
-          settings,
-          sliceIndex,
-        );
+      if (settings.sliceRays && sliceRaysSupported(settings)) {
+        const rays = surfaceNormals
+          ? createSurfaceSliceRays(
+              worldPoints,
+              polylines,
+              surfaceNormals,
+              metadata.rayGradient,
+              settings,
+              sliceIndex,
+              outputWorldPoints,
+            )
+          : metadata.constantDirection
+            ? createSliceRays(
+                worldPoints,
+                polylines,
+                metadata.constantDirection,
+                settings,
+                sliceIndex,
+              ).map((points) => ({
+                points,
+                outputPoints: explodeAmount
+                  ? points.map(
+                      (value, index) =>
+                        value + outputWorldPoints[index % 3] - worldPoints[index % 3],
+                    )
+                  : points,
+              }))
+            : [];
         if (rays.length && resolveSliceRaySettings(settings).sliceRayFade > 0)
           preserveRayGaps = true;
-        for (const ray of rays) {
-          const outputRay = explodeAmount
-            ? ray.map(
-                (value, index) => value + outputWorldPoints[index % 3] - worldPoints[index % 3],
-              )
-            : ray;
+        for (const ray of rays)
           emitProjectedPath(
             [0, 1],
-            ray,
+            ray.points,
             P,
             quality,
             rayVisibility,
             step,
             out[band][tone][weight],
             0,
-            outputRay,
+            ray.outputPoints,
           );
-        }
       }
     }
     if (!quick) sequenceSource = { version: 1, slices: features };

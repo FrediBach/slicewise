@@ -2081,7 +2081,7 @@ if (typeof document !== 'undefined') {
     const supported = !state.mesh?.lineArt && sliceRaysSupported(state);
     const reason = supported
       ? 'Enable slice rays to edit this parameter.'
-      : 'Slice rays require a 3D mesh and planar slices, with spiral, modulation, divergence, and weave off.';
+      : 'Slice rays require a mesh scalar field, with Continuous spiral and Contour Weave off.';
     setSingleControlDisabled('sliceRays', !supported, reason);
     $('sliceRays').closest('.checkbox-control')?.classList.toggle('is-disabled', !supported);
     for (const { id } of SLICE_RAY_CONTROLS) {

@@ -95,15 +95,24 @@ it('binds slice rays, restores history, and disables incompatible modes', async 
   input('redo').click();
   await settle();
   expect(latest().sliceRayFade).toBe(75);
-  change('axis', 'spherical');
-  await settle();
-  expect(input('sliceRays')).toBeDisabled();
-  expect(input('sliceRayAmount')).toBeDisabled();
-  change('axis', 'up');
+  for (const axis of ['spherical', 'cylindrical', 'geodesic', 'curvature', 'up']) {
+    change('axis', axis);
+    await settle();
+    expect(input('sliceRays')).not.toBeDisabled();
+    expect(input('sliceRayAmount')).not.toBeDisabled();
+    expect(latest().sliceRays).toBe(true);
+    expect(latest().sliceRayFade).toBe(75);
+  }
+  change('sliceLfo', true);
   await settle();
   expect(input('sliceRays')).not.toBeDisabled();
-  expect(input('sliceRays')).toBeChecked();
-  for (const mode of ['spiral', 'sliceLfo', 'contourWeave']) {
+  change('divergenceN', '35');
+  await settle();
+  expect(input('sliceRays')).not.toBeDisabled();
+  change('sliceLfo', false);
+  change('divergenceN', '0');
+  await settle();
+  for (const mode of ['spiral', 'contourWeave']) {
     change(mode, true);
     await settle();
     expect(input('sliceRays')).toBeDisabled();
@@ -111,4 +120,8 @@ it('binds slice rays, restores history, and disables incompatible modes', async 
     await settle();
     expect(input('sliceRays')).not.toBeDisabled();
   }
+  change('axis', 'svg');
+  await settle();
+  expect(input('sliceRays')).toBeDisabled();
+  expect(input('sliceRays')).toBeChecked();
 });

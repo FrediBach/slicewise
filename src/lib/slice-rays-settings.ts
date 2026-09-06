@@ -35,10 +35,10 @@ export function sliceRaysSupported(settings: {
   contourWeave?: boolean;
 }): boolean {
   return (
-    ['x', 'y', 'up', 'cam', 'custom'].includes(settings.axis) &&
+    ['x', 'y', 'up', 'cam', 'custom', 'spherical', 'cylindrical', 'geodesic', 'curvature'].includes(
+      settings.axis,
+    ) &&
     !settings.spiral &&
-    !settings.sliceLfo &&
-    !settings.divergence &&
     !settings.contourWeave
   );
 }

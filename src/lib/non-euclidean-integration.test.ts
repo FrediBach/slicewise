@@ -40,6 +40,8 @@ const hardeningSettings = {
   panX: 3,
   panY: -4,
   lines: 6,
+  sliceRays: true,
+  sliceRayAmount: 8,
   quality: 4,
   gapEase: 'sine-in-out',
   easeStrength: 125,

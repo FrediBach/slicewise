@@ -83,10 +83,7 @@ export function createSliceRays(
     );
     if (plusInside === minusInside) continue;
     if (plusInside) for (let k = 0; k < 3; k++) direction[k] *= -1;
-    const hash = Math.sin((i + 1) * 127.1 + salt * 311.7) * 43758.5453;
-    // Mesh normalization uses a diameter of two model units.
-    let reach =
-      (s.sliceRayLength / 50) * (1 - (s.sliceRayVariation / 100) * (hash - Math.floor(hash)));
+    let reach = sliceRayReach(s, i, salt);
     for (const edge of edges) {
       if (edge === edges[edgeIndex]) continue;
       const ex = edge.b[u] - edge.a[u],
@@ -100,23 +97,41 @@ export function createSliceRays(
       if (hit > epsilon && along >= 0 && along <= 1) reach = Math.min(reach, hit - epsilon);
     }
     if (reach <= epsilon) continue;
-    const emit = (start: number, end: number) => {
-      if (end - start <= epsilon) return;
-      output.push([
-        ...origin.map((value, k) => value + direction[k] * start),
-        ...origin.map((value, k) => value + direction[k] * end),
-      ]);
-    };
-    const fade = s.sliceRayFade / 100;
-    const solid = reach * (1 - fade);
-    if (!fade) emit(0, reach);
-    else {
-      // Six progressively shorter strokes and wider gaps suggest decreasing light.
-      const cell = (reach - solid) / 6;
-      emit(0, solid + cell * 0.85);
-      for (let dash = 1; dash < 6; dash++)
-        emit(solid + dash * cell, solid + (dash + 0.85 - dash * 0.13) * cell);
-    }
+    output.push(...fadeSliceRay(origin, direction, reach, s.sliceRayFade, epsilon));
+  }
+  return output;
+}
+
+/** Shared deterministic length and pen-down fade geometry for all slicing fields. */
+export function sliceRayReach(s: SliceRaySettings, index: number, salt: number): number {
+  const hash = Math.sin((index + 1) * 127.1 + salt * 311.7) * 43758.5453;
+  return (s.sliceRayLength / 50) * (1 - (s.sliceRayVariation / 100) * (hash - Math.floor(hash)));
+}
+
+export function fadeSliceRay(
+  origin: readonly number[],
+  direction: readonly number[],
+  reach: number,
+  fadePercent: number,
+  epsilon = 1e-8,
+): number[][] {
+  const output: number[][] = [];
+  const emit = (start: number, end: number) => {
+    if (end - start <= epsilon) return;
+    output.push([
+      ...origin.map((value, k) => value + direction[k] * start),
+      ...origin.map((value, k) => value + direction[k] * end),
+    ]);
+  };
+  const fade = fadePercent / 100;
+  const solid = reach * (1 - fade);
+  if (!fade) emit(0, reach);
+  else {
+    // Six progressively shorter strokes and wider gaps suggest decreasing light.
+    const cell = (reach - solid) / 6;
+    emit(0, solid + cell * 0.85);
+    for (let dash = 1; dash < 6; dash++)
+      emit(solid + dash * cell, solid + (dash + 0.85 - dash * 0.13) * cell);
   }
   return output;
 }
