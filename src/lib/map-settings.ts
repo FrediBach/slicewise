@@ -4,7 +4,7 @@ export const MAP_CONTROLS = [
   { id: 'mapSymbolScale', label: 'Symbol size', min: 50, max: 200, value: 100, group: 'Layout' },
   { id: 'mapBuildings', label: 'Houses', min: 0, max: 100, value: 12, group: 'Features' },
   { id: 'mapLandmarks', label: 'Landmarks', min: 0, max: 20, value: 4, group: 'Features' },
-  { id: 'mapWoodland', label: 'Woodland clusters', min: 0, max: 30, value: 5, group: 'Features' },
+  { id: 'mapWoodland', label: 'Trees & woodland', min: 0, max: 30, value: 5, group: 'Features' },
   { id: 'mapRoads', label: 'Roads', min: 0, max: 8, value: 2, group: 'Water & routes' },
   { id: 'mapRivers', label: 'Rivers', min: 0, max: 6, value: 1, group: 'Water & routes' },
   { id: 'mapLabels', label: 'Place labels', min: 0, max: 24, value: 6, group: 'Lettering' },

@@ -241,7 +241,9 @@ export function createMapFeatures(domain: MapFeatureDomain, settings: MapSetting
         kind === 'house' ? site[0] + (rng() - 0.5) * w * 0.22 : left + w * (0.12 + rng() * 0.76);
       const y =
         kind === 'house' ? site[1] + (rng() - 0.5) * h * 0.22 : top + h * (0.12 + rng() * 0.76);
-      const radius = size * (kind === 'woodland' ? 4 : 2.5);
+      // Mix isolated trees and groves without changing earlier placements as the count grows.
+      const singleTree = kind === 'woodland' && (placed + seed) % 2 === 0;
+      const radius = size * (kind === 'woodland' ? (singleTree ? 1.8 : 4) : 2.5);
       if (!inside(x, y) || occupied.some((p) => Math.hypot(x - p[0], y - p[1]) < radius + p[2]))
         continue;
       let runs: number[][] = [],
@@ -261,19 +263,22 @@ export function createMapFeatures(domain: MapFeatureDomain, settings: MapSetting
         masks = [box(x, y, size * 2.5, size * 2.5)];
         name = mapPlaceName(placed + 100, seed, placed % 3 ? 'HAMLET' : 'FARM');
       } else {
-        for (const [tx, ty] of [
-          [-1.8, 0.8],
-          [0, -1.2],
-          [1.8, 0.8],
-        ])
+        const trees = singleTree
+          ? [[0, 0]]
+          : [
+              [-1.8, 0.8],
+              [0, -1.2],
+              [1.8, 0.8],
+            ];
+        for (const [tx, ty] of trees)
           runs.push(
             ...[
               [-0.9, 0.6, 0, -1.2, 0.9, 0.6, -0.9, 0.6],
               [0, 0.6, 0, 1.2],
             ].map((run) => moved(run, x + tx * size, y + ty * size, size)),
           );
-        masks = [box(x, y, size * 5.7, size * 5)];
-        name = mapPlaceName(placed + 120, seed, 'WOOD');
+        masks = [box(x, y, size * (singleTree ? 2.1 : 5.7), size * (singleTree ? 2.7 : 5))];
+        name = mapPlaceName(placed + 120, seed, singleTree ? 'TREE' : 'WOOD');
       }
       if (accept({ kind, name, anchor: [x, y], runs, masks })) {
         occupied.push([x, y, radius]);

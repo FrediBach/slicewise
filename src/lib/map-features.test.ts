@@ -63,6 +63,24 @@ describe('configurable map features', () => {
     expect(big.masks[0].width).toBeCloseTo(small.masks[0].width * 3);
   });
 
+  it.each([0, 1, 938])(
+    'mixes single trees and groves with compact clearances (seed %s)',
+    (mapSeed) => {
+      const features = createMapFeatures(domain, { ...empty, mapWoodland: 5, mapSeed });
+      expect(features).toHaveLength(5);
+      const singles = features.filter((feature) => feature.runs.length === 2);
+      const groves = features.filter((feature) => feature.runs.length === 6);
+      expect(singles.length).toBeGreaterThan(0);
+      expect(groves.length).toBeGreaterThan(0);
+      expect(singles.length + groves.length).toBe(5);
+      for (const tree of singles) {
+        expect(tree.name).toMatch(/ TREE$/);
+        expect(tree.masks[0].width).toBeLessThan(groves[0].masks[0].width);
+        expect(tree.masks[0].height).toBeLessThan(groves[0].masks[0].height);
+      }
+    },
+  );
+
   it('removes all annotations at zero and shares feature geometry with SVG', () => {
     const options = {
       ...domain,
