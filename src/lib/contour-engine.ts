@@ -16,7 +16,7 @@ import {
   type WraparoundTearSettings,
 } from './wraparound-tear';
 import { kaleidoscopeRun, type KaleidoscopeSettings } from './kaleidoscope';
-import { createMapAnnotations } from './mapAnnotations';
+import { clearMapLabelGaps, createMapAnnotations } from './mapAnnotations';
 import {
   createMisregistrationGroups,
   type MisregistrationGroup,
@@ -2526,6 +2526,22 @@ function computeLineArtInstance(
         title: settings.documentTitle,
       })
     : null;
+  if (mapAnnotations) {
+    paths = 0;
+    nodes = 0;
+    pathData = '';
+    for (let i = 0; i < runsByColor.length; i++) {
+      runsByColor[i] = runsByColor[i].flatMap((run) =>
+        clearMapLabelGaps(run, mapAnnotations.masks),
+      );
+      pathDataByColor[i] = runsByColor[i]
+        .map((run) => serialiseRun(run, 1, sharpVertices(run)))
+        .join('');
+      pathData += pathDataByColor[i];
+      paths += runsByColor[i].length;
+      nodes += runsByColor[i].reduce((sum, run) => sum + run.length / 2, 0);
+    }
+  }
   const clippedAnnotationRuns =
     mapAnnotations?.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)) ?? [];
   const attrs = `fill="none" stroke-width="${settings.sw}" stroke-linecap="round" stroke-linejoin="round"`;
@@ -2832,10 +2848,14 @@ function computeContourInstance(
   const gradient = gradientPalette(settings);
   const { palette, indexedPalette } = colorPlan(settings, N);
   const toneBandCount = settings.halftone ? 12 : 1;
-  const lineWeightMode = settings.lineWeightMode || 'uniform';
+  const mapIndex =
+    settings.topographicMap &&
+    !settings.spiral &&
+    (!settings.lineWeightMode || settings.lineWeightMode === 'uniform');
+  const lineWeightMode = mapIndex ? 'index' : settings.lineWeightMode || 'uniform';
   const weightBandCount = lineWeightMode === 'uniform' ? 1 : lineWeightMode === 'index' ? 2 : 8;
   const weightValue = (position: number, index: number): number => {
-    const interval = clamp(Math.round(settings.lineWeightInterval || 5), 2, 20);
+    const interval = mapIndex ? 5 : clamp(Math.round(settings.lineWeightInterval || 5), 2, 20);
     if (lineWeightMode === 'index') return (index + 1) % interval === 0 ? 1 : 0;
     if (lineWeightMode === 'wave')
       return 0.5 - 0.5 * Math.cos(((index + 1) / interval) * Math.PI * 2);
@@ -2856,6 +2876,7 @@ function computeContourInstance(
     ),
   );
   const outlineOut: Polyline[] = [];
+  const contourLevels = new WeakMap<Polyline, number>();
   const quality = clamp(
     Math.round(
       quick ? previewCurveQuality(settings.quality, settings.previewDetail) : settings.quality,
@@ -2956,6 +2977,8 @@ function computeContourInstance(
           0,
           outputWorldPoints,
         );
+      if (settings.topographicMap && (!mapIndex || (sliceIndex + 1) % 5 === 0))
+        for (const run of projectedRuns) contourLevels.set(run, position);
       out[band][tone][weight].push(...projectedRuns);
       if (!quick) features.push(measureContourSlice(sliceIndex, position, projectedRuns));
     }
@@ -3016,6 +3039,8 @@ function computeContourInstance(
       );
       for (const clipped of applyVectorZooms(clippedRuns, vectorZooms)) {
         if (clipped.length < 4) continue;
+        const level = contourLevels.get(raw);
+        if (level !== undefined) contourLevels.set(clipped, level);
         const sharp =
           clipped === run && !settings.humanizer ? simplified.sharp : sharpVertices(clipped);
         d += serialiseRun(clipped, quality, sharp);
@@ -3029,6 +3054,7 @@ function computeContourInstance(
   const colorPaths: string[][][] = [];
   const toolpaths: ContourToolpathGroup[] = [];
   const annotationSourceRuns: Polyline[] = [];
+  const mapGroups: Array<{ runs: Polyline[]; paths: string[]; weight: number }> = [];
   for (let index = 0; index < out.length; index++) {
     const pathsForColor: string[][] = [];
     const runsForColor: Polyline[] = [];
@@ -3039,10 +3065,12 @@ function computeContourInstance(
         const weightGroup = toneGroup[weight];
         const group = serialiseGroup(weightGroup);
         pathsForTone.push(group.d);
+        if (settings.topographicMap)
+          mapGroups.push({ runs: group.runs, paths: pathsForTone, weight });
         runsForColor.push(...group.runs);
         runWeightsForColor.push(
           ...group.runs.map(() =>
-            weightBandCount <= 1 || (settings.lineWeightAmount || 0) <= 0
+            weightBandCount <= 1 || (!mapIndex && (settings.lineWeightAmount || 0) <= 0)
               ? 0
               : weight / (weightBandCount - 1),
           ),
@@ -3063,7 +3091,7 @@ function computeContourInstance(
     }
   }
   const outlineGroup = serialiseGroup(outlineOut);
-  const outlinePath = outlineGroup.d;
+  let outlinePath = outlineGroup.d;
   annotationSourceRuns.push(...outlineGroup.runs);
   primaryRegistrationRuns.push(...outlineGroup.runs);
   if (!quick && outlineGroup.runs.length) {
@@ -3077,12 +3105,13 @@ function computeContourInstance(
   }
   const strokeWidth = (weight: number): number => {
     if (weightBandCount === 1) return settings.sw;
-    const amount = clamp((settings.lineWeightAmount || 0) / 100, 0, 3);
+    const amount = mapIndex ? 0.9 : clamp((settings.lineWeightAmount || 0) / 100, 0, 3);
     return settings.sw * (1 + (weight / (weightBandCount - 1)) * amount);
   };
   const blueprint = blueprintDocument(settings, W, H, blueprintGeometry);
   const mapAnnotations = settings.topographicMap
     ? createMapAnnotations(annotationSourceRuns, {
+        levels: annotationSourceRuns.map((run) => contourLevels.get(run)),
         width: W,
         height: H,
         margin: settings.margin,
@@ -3093,6 +3122,36 @@ function computeContourInstance(
         title: settings.documentTitle,
       })
     : null;
+  if (mapAnnotations) {
+    paths = 0;
+    nodes = 0;
+    const clear = (runs: Polyline[]) =>
+      runs.flatMap((run) => clearMapLabelGaps(run, mapAnnotations.masks));
+    for (const group of mapGroups) {
+      const cleared = clear(group.runs);
+      group.paths[group.weight] = cleared
+        .map((run) => serialiseRun(run, 1, sharpVertices(run)))
+        .join('');
+      paths += cleared.length;
+      nodes += cleared.reduce((sum, run) => sum + run.length / 2, 0);
+    }
+    const clearedOutline = clear(outlineGroup.runs);
+    outlinePath = clearedOutline.map((run) => serialiseRun(run, 1, sharpVertices(run))).join('');
+    paths += clearedOutline.length;
+    nodes += clearedOutline.reduce((sum, run) => sum + run.length / 2, 0);
+    for (const group of toolpaths) {
+      const weights: number[] = [];
+      group.runs = group.runs.flatMap((run, index) => {
+        const cleared = clearMapLabelGaps(run, mapAnnotations.masks);
+        weights.push(...cleared.map(() => group.runWeights?.[index] ?? 0));
+        return cleared;
+      });
+      if (group.runWeights) group.runWeights = weights;
+    }
+    const clearedRegistration = clear(primaryRegistrationRuns);
+    primaryRegistrationRuns.length = 0;
+    primaryRegistrationRuns.push(...clearedRegistration);
+  }
   const clippedAnnotationRuns =
     mapAnnotations?.runs.flatMap((run) => clipArtworkRun(run, settings, W, H)) ?? [];
   if (!quick && clippedAnnotationRuns.length) {

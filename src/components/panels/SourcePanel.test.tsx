@@ -24,3 +24,12 @@ describe('SourcePanel hyperbolic tiling controls', () => {
     );
   });
 });
+
+it('offers terrain independently from implicit meshes with dedicated controls', () => {
+  render(<SourcePanel />);
+  expect(screen.getByRole('combobox', { name: 'Source' })).toHaveTextContent('Generative terrain');
+  expect(document.querySelector('#genField')).not.toHaveTextContent('Relief');
+  expect(screen.getByRole('slider', { name: 'Terrain seed', hidden: true })).toHaveValue('7');
+  expect(screen.getByRole('slider', { name: 'Vertical relief', hidden: true })).toHaveValue('55');
+  expect(screen.getByRole('slider', { name: 'Erosion', hidden: true })).toHaveValue('40');
+});

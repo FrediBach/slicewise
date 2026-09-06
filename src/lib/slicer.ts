@@ -9,6 +9,7 @@ import {
   type GradientStop,
   type LineIndexColor,
 } from './contour-engine';
+import { TERRAIN_CONTROLS, TERRAIN_DEFAULTS, type TerrainParams } from './generative-terrain';
 import { GEN_DEFAULTS, type GeneratedMesh, type GenerativeParams } from './generativeMesh';
 import {
   generateHyperbolicTiling,
@@ -164,7 +165,8 @@ type NormalizedMesh = Omit<RenderMesh, 'N'> & { N?: Float32Array };
 
 type RenderSettings = Omit<ContourSettings, 'documentTitle' | 'suppressBackground'>;
 type AppState = RenderSettings &
-  GenerativeParams & {
+  GenerativeParams &
+  TerrainParams & {
     mesh: RenderMesh | null;
     name: string;
     source: string;
@@ -212,7 +214,11 @@ type RenderWorkerMessage =
   | { type: 'result'; id: number; meshVersion: number; result: ContourResult }
   | { type: 'error'; id: number; meshVersion: number; message: string };
 
-type GenerationRequest = { id: number; params: GenerativeParams };
+type GenerationRequest = {
+  id: number;
+  source: 'generative' | 'terrain';
+  params: GenerativeParams | TerrainParams;
+};
 type GenerationWorkerMessage =
   | {
       type: 'result';
@@ -280,6 +286,7 @@ const state: AppState = {
   svgCenterlinePruning: 2,
   ...HYPERBOLIC_TILING_DEFAULTS,
   ...GEN_DEFAULTS,
+  ...TERRAIN_DEFAULTS,
   az: 35,
   el: 24,
   roll: 0,
@@ -1160,11 +1167,12 @@ if (typeof document !== 'undefined') {
     ) as unknown as GenerativeParams;
   }
   function setGenerativeBusy(busy: boolean): void {
+    $('terrainControls').closest('.terrain-controls')?.classList.toggle('is-building', busy);
     $('generativeControls').closest('.generative-controls')?.classList.toggle('is-building', busy);
     syncPreviewBusy();
     $('mName').textContent =
-      busy && state.source === 'generative'
-        ? `generative · ${state.genField} · building…`
+      busy && (state.source === 'generative' || state.source === 'terrain')
+        ? `${state.source === 'terrain' ? 'terrain' : `generative · ${state.genField}`} · building…`
         : state.name;
   }
   function dispatchGeneration(): void {
@@ -1176,15 +1184,24 @@ if (typeof document !== 'undefined') {
     generativeWorker.postMessage({ type: 'generate', ...request });
   }
   function queueGeneration(delay = 100): void {
-    if (state.source !== 'generative') return;
-    queuedGeneration = { id: ++generationId, params: generativeParams() };
+    if (state.source !== 'generative' && state.source !== 'terrain') return;
+    queuedGeneration = {
+      id: ++generationId,
+      source: state.source,
+      params:
+        state.source === 'terrain'
+          ? (Object.fromEntries(
+              TERRAIN_CONTROLS.map(({ id }) => [id, state[id]]),
+            ) as unknown as TerrainParams)
+          : generativeParams(),
+    };
     syncPreviewBusy();
     clearTimeout(generationTimer);
     if (generationInFlight) return;
     generationTimer = setTimeout(dispatchGeneration, delay);
   }
-  function loadGenerative(announce = true): void {
-    state.source = 'generative';
+  function loadGenerative(announce = true, source: 'generative' | 'terrain' = 'generative'): void {
+    state.source = source;
     state.svgSource = null;
     state.svgSourceName = '';
     state.upY = false;
@@ -1192,17 +1209,30 @@ if (typeof document !== 'undefined') {
     $('upY').setAttribute('aria-pressed', 'false');
     syncSourceControls();
     queueGeneration(0);
-    if (announce) toast('Generating mesh');
+    if (announce) toast(source === 'terrain' ? 'Generating terrain' : 'Generating mesh');
   }
   generativeWorker.addEventListener(
     'message',
     ({ data }: MessageEvent<GenerationWorkerMessage>) => {
       generationInFlight = false;
-      if (data.type === 'error' && data.id === generationId && state.source === 'generative')
+      if (
+        data.type === 'error' &&
+        data.id === generationId &&
+        (state.source === 'generative' || state.source === 'terrain')
+      )
         showError(data.message);
-      if (data.type === 'result' && data.id === generationId && state.source === 'generative') {
+      if (
+        data.type === 'result' &&
+        data.id === generationId &&
+        (state.source === 'generative' || state.source === 'terrain')
+      ) {
         rawCache = { verts: new Float32Array(data.positions), tris: new Uint32Array(data.indices) };
-        setMesh(rawCache, `generative · ${state.genField}`);
+        setMesh(
+          rawCache,
+          state.source === 'terrain'
+            ? `terrain · seed ${state.terrainSeed}`
+            : `generative · ${state.genField}`,
+        );
         $('mName').title = `Generated in ${Math.round(data.stats.ms)} ms`;
       }
       if (queuedGeneration) dispatchGeneration();
@@ -1213,7 +1243,7 @@ if (typeof document !== 'undefined') {
     generationInFlight = false;
     queuedGeneration = null;
     setGenerativeBusy(false);
-    if (state.source === 'generative')
+    if (state.source === 'generative' || state.source === 'terrain')
       showError('The mesh generator stopped unexpectedly — reload the page to restart it');
   });
 
@@ -1505,14 +1535,18 @@ if (typeof document !== 'undefined') {
   });
   syncProjectionWarpControls();
 
-  function bindGenerativePair(id: string, key: keyof Omit<GenerativeParams, 'genField'>): void {
+  function bindGenerativePair(
+    id: string,
+    key: keyof Omit<GenerativeParams, 'genField'> | keyof TerrainParams,
+  ): void {
     const slider = $(id),
       number = $(id + 'N');
     setDisabledPair(slider, number, slider.disabled);
     const apply = (value: string, from: 's' | 'n', final = false): void => {
       let next = clamp(parseFloat(value), parseFloat(number.min), parseFloat(number.max));
       if (Number.isNaN(next)) return;
-      if (id === 'genSeed' || id === 'genRes') next = Math.round(next);
+      if (id === 'genSeed' || id === 'genRes' || id === 'terrainSeed' || id === 'terrainRes')
+        next = Math.round(next);
       state[key] = next;
       if (from !== 's') slider.value = String(next);
       if (from !== 'n') number.value = String(next);
@@ -1524,6 +1558,7 @@ if (typeof document !== 'undefined') {
     number.addEventListener('change', (event) => apply(inputTarget(event).value, 'n', true));
   }
   for (const key of generativeKeys) bindGenerativePair(key, key);
+  for (const { id } of TERRAIN_CONTROLS) bindGenerativePair(id, id);
   $('genField').addEventListener('change', (event) => {
     state.genField = inputTarget(event).value as GenerativeParams['genField'];
     queueGeneration(0);
@@ -1668,6 +1703,7 @@ if (typeof document !== 'undefined') {
     $('svgRoundnessControl').classList.toggle('is-disabled', !roundnessActive);
   }
   function syncSourceControls(): void {
+    $('terrainControls').hidden = state.source !== 'terrain';
     $('generativeControls').hidden = state.source !== 'generative';
     $('tilingControls').hidden = state.source !== 'hyperbolic-tiling';
     syncSVGControls();
@@ -2560,9 +2596,11 @@ if (typeof document !== 'undefined') {
   $('demo').addEventListener('change', (e) =>
     inputTarget(e).value === 'generative'
       ? loadGenerative()
-      : inputTarget(e).value === 'hyperbolic-tiling'
-        ? loadHyperbolicTiling()
-        : loadDemo(inputTarget(e).value),
+      : inputTarget(e).value === 'terrain'
+        ? loadGenerative(true, 'terrain')
+        : inputTarget(e).value === 'hyperbolic-tiling'
+          ? loadHyperbolicTiling()
+          : loadDemo(inputTarget(e).value),
   );
   $('file').addEventListener('change', (e) => {
     const file = inputTarget(e).files?.[0];

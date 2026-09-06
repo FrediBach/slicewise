@@ -1,6 +1,7 @@
 import { Box, FileUp } from 'lucide-react';
 import { Section } from '../ui/section';
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../controls/FormControls';
+import { TerrainControls } from './TerrainControls';
 import { GEN_DEFAULTS } from '../../lib/generativeMesh';
 import { HYPERBOLIC_TILING_DEFAULTS } from '../../lib/hyperbolic-tiling';
 
@@ -18,6 +19,7 @@ export function SourcePanel() {
         defaultValue="knot"
         rowClassName="demo-row"
         optionDescriptions={{
+          terrain: 'Generates a square landscape with mountain ridges, valleys, and erosion.',
           generative: 'Builds a configurable implicit-surface mesh locally in the browser.',
           'hyperbolic-tiling': 'Generates line art from a regular tiling of the Poincaré disk.',
           knot: 'Loads a looping torus knot with strong depth and silhouette variation.',
@@ -34,6 +36,7 @@ export function SourcePanel() {
       >
         <optgroup label="Generate">
           <option value="generative">Generative mesh</option>
+          <option value="terrain">Generative terrain</option>
           <option value="hyperbolic-tiling">Hyperbolic tiling</option>
         </optgroup>
         <optgroup label="Demo meshes">
@@ -65,7 +68,6 @@ export function SourcePanel() {
               neovius: 'Creates a dense periodic surface with strong spherical chambers.',
               metaballs: 'Blends seeded soft volumes into an organic connected solid.',
               supershape: 'Builds a sculptural radial form from superformula profiles.',
-              relief: 'Creates a closed circular terrain medallion designed for height contours.',
             }}
           >
             <option value="gyroid">Gyroid</option>
@@ -74,7 +76,6 @@ export function SourcePanel() {
             <option value="neovius">Neovius</option>
             <option value="metaballs">Metaballs</option>
             <option value="supershape">Supershape</option>
-            <option value="relief">Relief · topographic</option>
           </SelectControl>
           <ValueControl
             id="genSeed"
@@ -157,6 +158,7 @@ export function SourcePanel() {
           </p>
         </div>
       </FieldGroup>
+      <TerrainControls />
       <FieldGroup title="Hyperbolic tiling" className="tiling-controls">
         <div id="tilingControls" hidden>
           <ValueControl

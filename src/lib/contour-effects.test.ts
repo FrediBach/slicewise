@@ -771,9 +771,8 @@ describe('contour output effects', () => {
     expect(first.svg).toContain('id="topographic-annotations"');
     expect(first.svg).toMatch(/data-locations="[A-Z,]+"/);
     expect(first.svg).toMatch(/data-altitudes="[0-9,]+"/);
-    expect(first.svg).toContain('<text');
-    expect(first.svg).toContain('font-family="DM Mono,ui-monospace,monospace"');
-    expect(first.svg).toContain('data-label-mask=');
+    expect(first.svg).toContain('data-map-label=');
+    expect(first.svg).toContain('data-elevation-units="illustrative-metres"');
     expect(first.svg).not.toContain('2KM');
     expect(first.paths).toBeGreaterThan(baseline.paths);
     expect(first.toolpaths.flatMap((group) => group.runs).length).toBeGreaterThan(

@@ -1,5 +1,7 @@
 /** Deterministic, plotter-safe annotations for simulated topographic maps. */
 
+import { clipRunToGlitchRectangle } from './block-glitch';
+
 type Polyline = number[];
 
 export interface MapAnnotationOptions {
@@ -11,6 +13,8 @@ export interface MapAnnotationOptions {
   color: string;
   backgroundColor: string;
   title: string;
+  /** Normalized scalar levels, aligned with sourceRuns. Absent for decorative line art. */
+  levels?: readonly (number | undefined)[];
 }
 
 export interface MapAnnotations {
@@ -20,37 +24,39 @@ export interface MapAnnotations {
   nodes: number;
   locations: string[];
   altitudes: number[];
+  masks: LabelMask[];
 }
 
-const GLYPHS: Record<string, readonly string[]> = {
-  '0': ['01110', '10001', '10011', '10101', '11001', '10001', '01110'],
-  '1': ['00100', '01100', '00100', '00100', '00100', '00100', '01110'],
-  '2': ['01110', '10001', '00001', '00010', '00100', '01000', '11111'],
-  '3': ['11110', '00001', '00001', '01110', '00001', '00001', '11110'],
-  '4': ['00010', '00110', '01010', '10010', '11111', '00010', '00010'],
-  '5': ['11111', '10000', '10000', '11110', '00001', '00001', '11110'],
-  '6': ['01110', '10000', '10000', '11110', '10001', '10001', '01110'],
-  '7': ['11111', '00001', '00010', '00100', '01000', '01000', '01000'],
-  '8': ['01110', '10001', '10001', '01110', '10001', '10001', '01110'],
-  '9': ['01110', '10001', '10001', '01111', '00001', '00001', '01110'],
-  A: ['01110', '10001', '10001', '11111', '10001', '10001', '10001'],
-  C: ['01111', '10000', '10000', '10000', '10000', '10000', '01111'],
-  D: ['11110', '10001', '10001', '10001', '10001', '10001', '11110'],
-  E: ['11111', '10000', '10000', '11110', '10000', '10000', '11111'],
-  G: ['01111', '10000', '10000', '10111', '10001', '10001', '01110'],
-  H: ['10001', '10001', '10001', '11111', '10001', '10001', '10001'],
-  I: ['11111', '00100', '00100', '00100', '00100', '00100', '11111'],
-  K: ['10001', '10010', '10100', '11000', '10100', '10010', '10001'],
-  L: ['10000', '10000', '10000', '10000', '10000', '10000', '11111'],
-  M: ['10001', '11011', '10101', '10101', '10001', '10001', '10001'],
-  N: ['10001', '11001', '10101', '10011', '10001', '10001', '10001'],
-  O: ['01110', '10001', '10001', '10001', '10001', '10001', '01110'],
-  P: ['11110', '10001', '10001', '11110', '10000', '10000', '10000'],
-  R: ['11110', '10001', '10001', '11110', '10100', '10010', '10001'],
-  S: ['01111', '10000', '10000', '01110', '00001', '00001', '11110'],
-  T: ['11111', '00100', '00100', '00100', '00100', '00100', '00100'],
-  U: ['10001', '10001', '10001', '10001', '10001', '10001', '01110'],
-  V: ['10001', '10001', '10001', '10001', '10001', '01010', '00100'],
+// Compact single-stroke lettering. Each pair is one point on a 4 × 6 grid.
+const GLYPHS: Record<string, string> = {
+  '0': '103041453616050110',
+  '1': '122026|0646',
+  '2': '0110304142300646',
+  '3': '0030414223|2344453606',
+  '4': '300343|4046',
+  '5': '4000033344453606',
+  '6': '401000063646443403',
+  '7': '004026',
+  '8': '103041423313020110|13233445463616050413',
+  '9': '4341301001021333434606',
+  A: '062046|1333',
+  C: '401000063646',
+  D: '060010304042443606',
+  E: '40000646|0333',
+  G: '4010000636464323',
+  H: '0006|4046|0343',
+  I: '0040|2026|0646',
+  K: '0006|400346',
+  L: '000646',
+  M: '0600224046',
+  N: '06004640',
+  O: '1030404244361606040210',
+  P: '06003040423303',
+  R: '06003040423303|2346',
+  S: '401000022344463606',
+  T: '0040|2026',
+  U: '0006364640',
+  V: '002640',
 };
 
 const PLACE_NAMES = [
@@ -121,32 +127,55 @@ function pointAlong(run: Polyline, fraction: number): [number, number] {
 }
 
 function textWidth(text: string, cell: number): number {
-  return Math.max(0, text.length * cell * 7 * 0.62);
+  return Math.max(0, (text.length * 6 - 2) * cell);
 }
 
-type MapLabel = { text: string; x: number; y: number; cell: number };
+export type LabelMask = { x: number; y: number; width: number; height: number; angle: number };
 
-function strokeText(text: string, x: number, y: number, cell: number): Polyline[] {
+type MapLabel = LabelMask & { text: string; cell: number };
+
+function transformRun(run: Polyline, mask: LabelMask, inverse = false): Polyline {
+  const c = Math.cos(mask.angle),
+    s = Math.sin(mask.angle);
+  const result: number[] = [];
+  for (let i = 0; i < run.length; i += 2) {
+    const x = run[i] - (inverse ? mask.x : 0),
+      y = run[i + 1] - (inverse ? mask.y : 0);
+    result.push(
+      inverse ? x * c + y * s : mask.x + x * c - y * s,
+      inverse ? -x * s + y * c : mask.y + x * s + y * c,
+    );
+  }
+  return result;
+}
+
+/** Cut real pen-up gaps, using the same rotated rectangles as the SVG labels. */
+export function clearMapLabelGaps(run: Polyline, masks: readonly LabelMask[]): Polyline[] {
+  let result = [run];
+  for (const mask of masks)
+    result = result.flatMap((part) =>
+      clipRunToGlitchRectangle(
+        transformRun(part, mask, true),
+        {
+          left: -0.65,
+          top: -0.65,
+          right: mask.width + 0.65,
+          bottom: mask.height + 0.65,
+        },
+        false,
+      ).map((part) => transformRun(part, mask)),
+    );
+  return result;
+}
+
+function strokeText(label: MapLabel): Polyline[] {
   const runs: Polyline[] = [];
-  for (let characterIndex = 0; characterIndex < text.length; characterIndex++) {
-    const glyph = GLYPHS[text[characterIndex]];
-    if (!glyph) continue;
-    const offsetX = x + characterIndex * cell * 6;
-    for (let row = 0; row < glyph.length; row++) {
-      const pixels = glyph[row];
-      let column = 0;
-      while (column < pixels.length) {
-        while (column < pixels.length && pixels[column] !== '1') column++;
-        const start = column;
-        while (column < pixels.length && pixels[column] === '1') column++;
-        if (start < column)
-          runs.push([
-            offsetX + start * cell,
-            y + row * cell,
-            offsetX + (column - 0.2) * cell,
-            y + row * cell,
-          ]);
-      }
+  for (let index = 0; index < label.text.length; index++) {
+    for (const stroke of (GLYPHS[label.text[index]] || '').split('|')) {
+      const run: number[] = [];
+      for (let i = 0; i + 1 < stroke.length; i += 2)
+        run.push((index * 6 + Number(stroke[i])) * label.cell, Number(stroke[i + 1]) * label.cell);
+      if (run.length >= 4) runs.push(transformRun(run, label));
     }
   }
   return runs;
@@ -169,122 +198,133 @@ export function createMapAnnotations(
   options: MapAnnotationOptions,
 ): MapAnnotations {
   const { width, height } = options;
-  const inset = clamp(options.margin * 0.45, 3, 10);
-  const candidates: Array<{ run: Polyline; length: number }> = [];
-  for (const run of sourceRuns) {
-    if (run.length < 6) continue;
+  const inset = Math.max(3, options.margin);
+  const minDimension = Math.min(width, height);
+  const candidates: Array<{ run: Polyline; length: number; level: number | undefined }> = [];
+  for (let index = 0; index < sourceRuns.length; index++) {
+    const run = sourceRuns[index];
+    if (run.length < 6 || !run.every(Number.isFinite)) continue;
     const length = runLength(run);
-    if (length >= 8) candidates.push({ run, length });
+    if (length >= 8) candidates.push({ run, length, level: options.levels?.[index] });
   }
   candidates.sort((a, b) => b.length - a.length);
   if (!candidates.length)
-    return { svg: '', runs: [], paths: 0, nodes: 0, locations: [], altitudes: [] };
+    return { svg: '', runs: [], paths: 0, nodes: 0, locations: [], altitudes: [], masks: [] };
+  // Name choices are independent of viewport, contour count, and line sorting.
+  const rng = makeRng(hashText(options.title));
+  const labels: MapLabel[] = [],
+    symbols: Polyline[] = [];
+  const locations: string[] = [],
+    altitudes: number[] = [];
+  const occupied: Array<{ left: number; top: number; right: number; bottom: number }> = [];
+  const place = (
+    text: string,
+    anchorX: number,
+    anchorY: number,
+    cell: number,
+    angle: number,
+  ): boolean => {
+    const w = textWidth(text, cell),
+      h = cell * 6;
+    const c = Math.cos(angle),
+      s = Math.sin(angle);
+    const label = {
+      text,
+      cell,
+      width: w,
+      height: h,
+      angle,
+      x: anchorX - (w / 2) * c + (h / 2) * s,
+      y: anchorY - (w / 2) * s - (h / 2) * c,
+    };
+    const corners = transformRun([0, 0, w, 0, w, h, 0, h], label);
+    const xs = corners.filter((_, i) => i % 2 === 0),
+      ys = corners.filter((_, i) => i % 2 === 1);
+    const box = {
+      left: Math.min(...xs) - 1.5,
+      right: Math.max(...xs) + 1.5,
+      top: Math.min(...ys) - 1.5,
+      bottom: Math.max(...ys) + 1.5,
+    };
+    if (
+      box.left < inset ||
+      box.right > width - inset ||
+      box.top < inset ||
+      box.bottom > height - inset ||
+      occupied.some(
+        (b) => box.left < b.right && box.right > b.left && box.top < b.bottom && box.bottom > b.top,
+      )
+    )
+      return false;
+    occupied.push(box);
+    labels.push(label);
+    return true;
+  };
 
-  const geometrySignature = candidates
-    .slice(0, 24)
-    .map(({ run, length }) => `${fmt(run[0])},${fmt(run[1])},${fmt(length)}`)
-    .join('|');
-  const rng = makeRng(hashText(`${options.title}|${width}|${height}|${geometrySignature}`));
-  const runs: Polyline[] = [];
-  const symbolRuns: Polyline[] = [];
-  const labels: MapLabel[] = [];
-  const locations: string[] = [];
-  const altitudes: number[] = [];
-  const occupied: Array<[number, number]> = [];
-  const minDimension = Math.min(width, height);
-
-  // Index-contour-style altitude callouts. Long outer contours receive lower
-  // synthetic elevations; progressively shorter contours receive higher ones.
-  const altitudeCount = clamp(Math.round(options.lineCount / 10), 2, 6);
-  for (let index = 0; index < altitudeCount; index++) {
-    const candidateIndex = Math.round(
-      ((index + 1) / (altitudeCount + 1)) * (candidates.length - 1),
-    );
-    const candidate = candidates[candidateIndex];
-    const [anchorX, anchorY] = pointAlong(candidate.run, 0.22 + rng() * 0.56);
-    const altitude = Math.round((((index + 1) / (altitudeCount + 1)) * 1800) / 50) * 50;
-    const label = `${altitude}M`;
-    const cell = clamp(minDimension * 0.0034, 0.28, 0.48);
-    const labelWidth = textWidth(label, cell);
-    const x = clamp(anchorX - labelWidth / 2, inset, width - inset - labelWidth);
-    const y = clamp(anchorY - cell * 4.7, inset, height - inset - cell * 7);
-    const tick = [anchorX - cell, anchorY, anchorX + cell, anchorY];
-    runs.push(tick);
-    symbolRuns.push(tick);
-    runs.push(...strokeText(label, x, y, cell));
-    labels.push({ text: label, x, y, cell });
-    occupied.push([x + labelWidth / 2, y + cell * 3.5]);
-    altitudes.push(altitude);
+  // Elevations follow actual scalar positions, never contour perimeter or sort order.
+  // These are illustrative metre values: the source mesh has no georeferencing.
+  const byLevel = new Map<number, typeof candidates>();
+  for (const candidate of candidates)
+    if (candidate.level !== undefined && Number.isFinite(candidate.level)) {
+      const altitude = Math.round((clamp(candidate.level, 0, 1) * 1800) / 10) * 10;
+      const group = byLevel.get(altitude) || [];
+      group.push(candidate);
+      byLevel.set(altitude, group);
+    }
+  const levels = [...byLevel.keys()].sort((a, b) => a - b);
+  const target = clamp(Math.round(options.lineCount / 8), 2, 10);
+  const selected = levels.filter(
+    (_, i) => i % Math.max(1, Math.ceil(levels.length / target)) === 0,
+  );
+  for (const altitude of selected) {
+    let placed = false;
+    for (const { run, length } of byLevel.get(altitude)!) {
+      const cell = clamp(minDimension * 0.0025, 0.3, 0.5),
+        label = `${altitude}M`;
+      if (length < textWidth(label, cell) * 2.5) continue;
+      for (const fraction of [0.5, 0.28, 0.72, 0.14, 0.86]) {
+        const span = (textWidth(label, cell) / length) * 0.55;
+        const a = pointAlong(run, fraction - span),
+          b = pointAlong(run, fraction + span);
+        const [x, y] = pointAlong(run, fraction);
+        // Avoid tight corners, peaks and hairpins that cannot hold legible inline text.
+        if (Math.hypot(b[0] - a[0], b[1] - a[1]) < textWidth(label, cell) * 0.9) continue;
+        let angle = Math.atan2(b[1] - a[1], b[0] - a[0]);
+        if (angle > Math.PI / 2) angle -= Math.PI;
+        if (angle < -Math.PI / 2) angle += Math.PI;
+        if (place(label, x, y, cell, angle)) {
+          altitudes.push(altitude);
+          placed = true;
+          break;
+        }
+      }
+      if (placed) break;
+    }
   }
-
-  // Place names use the same contour geometry as anchors, then reject points
-  // that crowd earlier labels. The seeded order is stable for a given design.
-  const placeTarget = clamp(Math.round(minDimension / 45), 3, 6);
   const names = [...PLACE_NAMES];
-  for (let index = names.length - 1; index > 0; index--) {
-    const swap = Math.floor(rng() * (index + 1));
-    [names[index], names[swap]] = [names[swap], names[index]];
+  for (let i = names.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [names[i], names[j]] = [names[j], names[i]];
   }
+  const placeTarget = clamp(Math.round(minDimension / 65), 2, 4);
   for (
     let attempt = 0;
-    attempt < candidates.length * 4 && locations.length < placeTarget;
+    attempt < Math.min(candidates.length * 4, 100) && locations.length < placeTarget;
     attempt++
   ) {
     const candidate = candidates[Math.floor(rng() * candidates.length)];
-    const [markerX, markerY] = pointAlong(candidate.run, 0.12 + rng() * 0.76);
-    if (
-      markerX < inset + 5 ||
-      markerX > width - inset - 5 ||
-      markerY < inset + 5 ||
-      markerY > height - inset - 5 ||
-      occupied.some(([x, y]) => Math.hypot(markerX - x, markerY - y) < minDimension * 0.14)
-    )
-      continue;
-    const name = names[locations.length];
-    const cell = clamp(minDimension * 0.0042, 0.34, 0.56);
-    const labelWidth = textWidth(name, cell);
-    const labelX =
-      markerX + cell * 3 + labelWidth <= width - inset
-        ? markerX + cell * 3
-        : markerX - cell * 3 - labelWidth;
-    const labelY = clamp(markerY - cell * 3.5, inset, height - inset - cell * 7);
-    const radius = cell * 1.25;
-    const marker = [
-      markerX,
-      markerY - radius,
-      markerX + radius,
-      markerY,
-      markerX,
-      markerY + radius,
-      markerX - radius,
-      markerY,
-      markerX,
-      markerY - radius,
-    ];
-    runs.push(marker);
-    symbolRuns.push(marker);
-    runs.push(...strokeText(name, labelX, labelY, cell));
-    labels.push({ text: name, x: labelX, y: labelY, cell });
-    occupied.push([markerX, markerY]);
-    locations.push(name);
+    const [x, y] = pointAlong(candidate.run, 0.15 + rng() * 0.7);
+    const cell = clamp(minDimension * 0.003, 0.35, 0.55);
+    const name = names[locations.length],
+      labelWidth = textWidth(name, cell);
+    const labelX = x + labelWidth / 2 + 3;
+    if (place(name, labelX, y, cell, 0)) {
+      symbols.push([x - 0.8, y, x + 0.8, y], [x, y - 0.8, x, y + 0.8]);
+      locations.push(name);
+    }
   }
-
-  const pathData = serialiseRuns(symbolRuns);
-  const escapedLocations = locations.join(',');
-  const masks = labels
-    .map(({ text, x, y, cell }) => {
-      const fontSize = cell * 7;
-      const padding = Math.max(0.45, cell * 1.2);
-      return `<rect data-label-mask="${text}" x="${fmt(x - padding)}" y="${fmt(y - padding)}" width="${fmt(textWidth(text, cell) + padding * 2)}" height="${fmt(fontSize + padding * 2)}" rx="${fmt(padding * 0.55)}"/>`;
-    })
-    .join('');
-  const text = labels
-    .map(({ text, x, y, cell }) => {
-      const fontSize = cell * 7;
-      return `<text x="${fmt(x)}" y="${fmt(y + fontSize * 0.82)}" font-size="${fmt(fontSize)}">${text}</text>`;
-    })
-    .join('');
-  const svg = `<g id="topographic-annotations" data-locations="${escapedLocations}" data-altitudes="${altitudes.join(',')}"><g fill="${options.backgroundColor}" stroke="none">${masks}</g><g fill="${options.color}" stroke="none" font-family="DM Mono,ui-monospace,monospace" font-weight="500" letter-spacing="${fmt(minDimension * 0.0007)}">${text}</g><path d="${pathData}" fill="none" stroke="${options.color}" stroke-width="${fmt(Math.max(0.18, options.strokeWidth * 0.78))}" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+  const runs = [...symbols, ...labels.flatMap(strokeText)];
+  const svg = `<g id="topographic-annotations" data-locations="${locations.join(',')}" data-altitudes="${altitudes.join(',')}" data-elevation-units="illustrative-metres" fill="none" stroke="${options.color}" stroke-width="${fmt(Math.max(0.16, options.strokeWidth * 0.75))}" stroke-linecap="round" stroke-linejoin="round"><path d="${serialiseRuns(symbols)}"/>${labels.map((label) => `<path data-map-label="${label.text}" d="${serialiseRuns(strokeText(label))}"/>`).join('')}</g>`;
   return {
     svg,
     runs,
@@ -292,5 +332,6 @@ export function createMapAnnotations(
     nodes: runs.reduce((sum, run) => sum + run.length / 2, 0),
     locations,
     altitudes,
+    masks: labels,
   };
 }

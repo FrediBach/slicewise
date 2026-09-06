@@ -16,8 +16,9 @@ function TopographicMapControl() {
       </Checkbox>
       <div className="effect-controls">
         <p className="gradient-note blueprint-note">
-          Adds masked elevation labels, generated place names and location markers. Placements
-          remain stable for the same contour geometry.
+          Adds index contours, inline elevation labels and spaced place markers. Lettering and label
+          gaps are drawn identically in SVG and plotter output. Elevations are illustrative metres
+          based on contour levels, not surveyed heights.
         </p>
       </div>
     </>

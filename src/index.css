@@ -2532,3 +2532,10 @@ button:focus-visible,
     margin-left: 0;
   }
 }
+
+.terrain-controls:has(#terrainControls[hidden]) {
+  display: none;
+}
+.terrain-controls.is-building {
+  opacity: 0.7;
+}

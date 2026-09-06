@@ -87,6 +87,7 @@ Coverage currently measures the focused core under active test:
 - `grbl-serial.ts`
 - `gcode-validation.ts`
 - `generativeMesh.ts`
+- `generative-terrain.ts`
 - `hyperbolic-tiling.ts`
 - `mapAnnotations.ts`
 - `mesh.ts`
@@ -134,3 +135,5 @@ Use three layers of confidence when extracting behavior from `contour-engine.ts`
 Prefer moving one cohesive pipeline stage at a time. Avoid tests that duplicate the implementation line for line; specify inputs, output geometry or metadata, ordering, and invariants such as finite coordinates and closed loops.
 
 The HTML report is generated under `coverage/` and is ignored by Git.
+
+`generative-terrain.test.ts` verifies deterministic height fields, square boundaries without a base, winding/normals, independent parameter effects, and terrain contour integration. `terrain-runtime.test.tsx` exercises source switching, slider/number synchronization, queued generation, and stale worker replies. `mapAnnotations.test.ts` covers scalar-level labels, collision rejection, rotated plotter gaps, and decorative line-art fallback.

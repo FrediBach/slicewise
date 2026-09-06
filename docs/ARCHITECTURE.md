@@ -36,7 +36,7 @@ lib/slicer.ts ── preview / clipboard / download
                               └── gcode.ts for G-code export
 ```
 
-Generative meshes use a separate path: `slicer.ts` sends implicit-field parameters to `generative-mesh-worker.ts`, which calls `generativeMesh.ts` and transfers typed-array buffers back to the main thread. Uploaded SVG artwork is parsed lazily through `svg-mesh.ts`. It can become an extruded mesh or scale-axis centreline polylines; centreline points and run offsets are transferred to the contour worker as typed arrays.
+Generative meshes and terrain use a separate path: `slicer.ts` sends source-discriminated parameters to `generative-mesh-worker.ts`, which calls `generativeMesh.ts` for implicit solids or `generative-terrain.ts` for square height fields and transfers typed-array buffers back to the main thread. Uploaded SVG artwork is parsed lazily through `svg-mesh.ts`. It can become an extruded mesh or scale-axis centreline polylines; centreline points and run offsets are transferred to the contour worker as typed arrays.
 
 ## Module responsibilities
 
@@ -83,6 +83,8 @@ Generative meshes use a separate path: `slicer.ts` sends implicit-field paramete
 - `kaleidoscope.ts` clips finished polylines to a radial wedge and alternately mirrors them around the artboard centre, preserving identical geometry for SVG and G-code.
 - `vector-zoom.ts` crops rectangular or circular source regions, clears destination windows, uniformly scales vector detail into corner insets, and constructs segmented dashed borders and leaders for identical SVG/G-code output.
 - `slicer-worker.ts` is deliberately small: it stores the current transferable mesh or line-art source, invokes `computeContours`, and reports results or errors. Line art transfers packed 3D points and run offsets plus a source-kind discriminator.
+- `generative-terrain.ts` generates deterministic open square height fields using domain-warped gradient noise, ridged octaves, downhill drainage incision, and conservative talus relaxation. A regular grid has upward winding and no walls, floor, or edge falloff. Its finite bounded source controls share defaults and ranges with React. The generation queue transfers buffers and ignores stale results across source changes.
+- `mapAnnotations.ts` places collision-tested contour-aligned labels using scalar positions retained through finished path effects, and provides rotated rectangle subtraction for physical label gaps. SVG and plotter output share vector lettering; implicit metre values are illustrative. No elevations are inferred from path length. Explicit index line weights take priority over the topographic fallback.
 - `generativeMesh.ts` generates indexed meshes from implicit fields. Its worker transfers array buffers rather than cloning large arrays.
 - `svg-mesh.ts` converts filled SVG artwork into extruded mesh geometry or pruned medial/scale-axis centreline polylines.
 - `toolpaths.ts` owns rectangular clipping, near-endpoint joining, greedy run ordering, and reversible 2-opt refinement. Optimized results retain source-run indexes so export-only metadata such as line-weight pressure stays aligned after ordering or reversal.
