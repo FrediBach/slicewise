@@ -69,7 +69,10 @@ it('binds map amounts to render settings and restores them with undo and redo', 
   input('topographicMap').checked = true;
   input('topographicMap').dispatchEvent(new Event('change', { bubbles: true }));
   await settle();
-  for (const { id } of MAP_CONTROLS) expect(input(id)).not.toBeDisabled();
+  for (const { id } of MAP_CONTROLS) {
+    if (id === 'mapRoads' || id === 'mapRivers') expect(input(id)).toBeDisabled();
+    else expect(input(id)).not.toBeDisabled();
+  }
   input('mapBuildingsN').value = '37';
   input('mapBuildingsN').dispatchEvent(new Event('input', { bubbles: true }));
   input('mapBuildingsN').dispatchEvent(new Event('change', { bubbles: true }));

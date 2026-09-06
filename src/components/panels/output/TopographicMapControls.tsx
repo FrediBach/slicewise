@@ -15,6 +15,13 @@ export function TopographicMapControls() {
         {(['Features', 'Water & routes', 'Lettering', 'Layout'] as const).map((group) => (
           <details key={group} className="map-control-group" open={group === 'Features'}>
             <summary>{group}</summary>
+            {group === 'Water & routes' && (
+              <p className="gradient-note">
+                Requires Generative terrain with Z up. Rivers descend through drainage channels and
+                stop at outlets or depressions. Roads prefer gentle grades. Unsuitable routes are
+                omitted.
+              </p>
+            )}
             {MAP_CONTROLS.map(({ id, label, min, max, value, group: controlGroup }) =>
               controlGroup === group ? (
                 <ValueControl
@@ -36,9 +43,9 @@ export function TopographicMapControls() {
           </details>
         ))}
         <p className="gradient-note">
-          Houses, churches, towers, ruins, campsites, summits, woodland, double-line roads and water
-          features are illustrative. Elevations use contour levels, not surveyed heights. All marks
-          and clearances are included in plotter output.
+          Houses, churches, towers, ruins, campsites, summits and woodland are illustrative.
+          Elevations use contour levels, not surveyed heights. All marks and clearances are included
+          in plotter output.
         </p>
       </div>
     </>

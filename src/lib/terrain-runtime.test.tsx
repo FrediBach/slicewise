@@ -11,7 +11,13 @@ vi.mock('./animation-storage', () => ({
 }));
 vi.mock('./video-encoder', () => ({ detectAnimationVideoCodec: vi.fn(async () => null) }));
 
-type Request = { type: string; id: number; source: string; params: TerrainParams };
+type Request = {
+  type: string;
+  id: number;
+  source: string;
+  params: TerrainParams;
+  mesh?: { terrain?: boolean };
+};
 class WorkerStub extends EventTarget {
   static instances: WorkerStub[] = [];
   requests: Request[] = [];
@@ -74,6 +80,27 @@ it('switches terrain sources, coalesces slider edits, and rejects stale generati
   expect(latest.params.terrainSeed).toBe(24);
   generator.complete(latest);
   expect(document.getElementById('mName')).toHaveTextContent('terrain · seed 24');
+  const renderer = WorkerStub.instances[0];
+  expect(renderer.requests.filter((request) => request.type === 'mesh').at(-1)?.mesh?.terrain).toBe(
+    true,
+  );
+  const mapToggle = document.getElementById('topographicMap') as HTMLInputElement;
+  mapToggle.checked = true;
+  mapToggle.dispatchEvent(new Event('change', { bubbles: true }));
+  expect(document.getElementById('mapRoads')).not.toBeDisabled();
+  expect(document.getElementById('mapRivers')).not.toBeDisabled();
+  document.getElementById('upY')!.click();
+  expect(renderer.requests.filter((request) => request.type === 'mesh').at(-1)?.mesh?.terrain).toBe(
+    false,
+  );
+  expect(document.getElementById('mapRoads')).toBeDisabled();
+  document.getElementById('upZ')!.click();
+  expect(renderer.requests.filter((request) => request.type === 'mesh').at(-1)?.mesh?.terrain).toBe(
+    true,
+  );
+  expect(document.getElementById('mapRoads')).not.toBeDisabled();
+  expect(document.getElementById('mapLakes')).toBeNull();
+
   edit('terrainErosionN', '85', 'input');
   await vi.advanceTimersByTimeAsync(120);
   const stale = generator.requests.at(-1)!;

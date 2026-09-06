@@ -14,6 +14,7 @@ export interface MapAnnotationOptions {
   backgroundColor: string;
   title: string;
   map?: Partial<MapSettings>;
+  terrainFeatures?: MapFeature[];
   /** Normalized scalar levels, aligned with sourceRuns. Absent for decorative line art. */
   levels?: readonly (number | undefined)[];
 }
@@ -320,10 +321,10 @@ export function createMapAnnotations(
     };
   // Name choices are independent of viewport, contour count, and line sorting.
   const rng = makeRng(hashText(options.title) ^ settings.mapSeed);
-  const features = createMapFeatures(
-    { runs: sourceRuns, width, height, margin: options.margin },
-    settings,
-  );
+  const features = [
+    ...(options.terrainFeatures ?? []),
+    ...createMapFeatures({ runs: sourceRuns, width, height, margin: options.margin }, settings),
+  ];
   const labels: MapLabel[] = [],
     symbols: Polyline[] = [];
   const locations: string[] = [],

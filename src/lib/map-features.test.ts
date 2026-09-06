@@ -16,7 +16,6 @@ const empty = {
   mapWoodland: 0,
   mapRoads: 0,
   mapRivers: 0,
-  mapLakes: 0,
   mapLabels: 0,
   mapElevations: 0,
 };
@@ -24,9 +23,6 @@ const pairs = [
   ['mapBuildings', 'house'],
   ['mapLandmarks', 'landmark'],
   ['mapWoodland', 'woodland'],
-  ['mapRoads', 'road'],
-  ['mapRivers', 'river'],
-  ['mapLakes', 'lake'],
 ] as const;
 
 describe('configurable map features', () => {

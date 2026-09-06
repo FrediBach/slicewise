@@ -891,6 +891,7 @@ if (typeof document !== 'undefined') {
           N: N.buffer,
           lineArtOffsets: offsets?.buffer,
           lineArtKind: mesh.lineArt?.kind,
+          terrain: mesh.terrain === true,
         },
       },
       transfer,
@@ -909,8 +910,10 @@ if (typeof document !== 'undefined') {
           V[i + 2] = y;
         }
       }
+      m.terrain = state.source === 'terrain' && !state.upY;
       m.N = vertexNormals(m.V, m.T);
       state.mesh = m as RenderMesh;
+      syncMapControls();
       sendMeshToWorker(state.mesh);
       state.name = name;
       $('mName').textContent = name;
@@ -1707,6 +1710,7 @@ if (typeof document !== 'undefined') {
     $('svgRoundnessControl').classList.toggle('is-disabled', !roundnessActive);
   }
   function syncSourceControls(): void {
+    syncMapControls();
     $('terrainControls').hidden = state.source !== 'terrain';
     $('generativeControls').hidden = state.source !== 'generative';
     $('tilingControls').hidden = state.source !== 'hyperbolic-tiling';
@@ -2296,12 +2300,17 @@ if (typeof document !== 'undefined') {
   }
   function syncMapControls(): void {
     for (const { id } of MAP_CONTROLS) {
+      const needsTerrain = id === 'mapRoads' || id === 'mapRivers';
+      const enabled =
+        state.topographicMap && (!needsTerrain || (state.source === 'terrain' && !state.upY));
       setControlPairDisabled(
         id,
-        !state.topographicMap,
-        'Turn on Topographic map to edit this parameter.',
+        !enabled,
+        needsTerrain && state.topographicMap
+          ? 'Select Generative terrain with Z up to generate terrain-following routes.'
+          : 'Turn on Topographic map to edit this parameter.',
       );
-      $(id + 'Control').classList.toggle('is-disabled', !state.topographicMap);
+      $(id + 'Control').classList.toggle('is-disabled', !enabled);
     }
   }
   function syncBlueprintControls(): void {

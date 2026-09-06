@@ -410,3 +410,10 @@ it('migrates map amounts with explicit zeros and finite bounded defaults', () =>
   });
   expect(stored.mapRivers).toBe(999);
 });
+
+it('discards the removed decorative lake setting from old snapshots', () => {
+  const restored = normalizeParameterSnapshot(snapshot({ mapLakes: 4, mapRoads: 2, mapRivers: 1 }));
+  expect(restored).not.toHaveProperty('mapLakes');
+  expect(restored.mapRoads).toBe(2);
+  expect(restored.mapRivers).toBe(1);
+});

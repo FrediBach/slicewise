@@ -10,7 +10,6 @@ const options = {
   color: '#000000',
   backgroundColor: '#ffffff',
   title: 'terrain',
-  map: { mapBuildings: 0, mapLandmarks: 0, mapRoads: 0, mapRivers: 0, mapLakes: 0, mapWoodland: 0 },
 };
 const runs = [
   [10, 20, 60, 20, 110, 20],

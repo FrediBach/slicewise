@@ -3,7 +3,7 @@ import type { LabelMask } from './mapAnnotations';
 import type { MapSettings } from './map-settings';
 
 type Point = [number, number];
-export type MapFeatureKind = 'house' | 'landmark' | 'woodland' | 'road' | 'river' | 'lake';
+export type MapFeatureKind = 'house' | 'landmark' | 'woodland' | 'road' | 'river';
 export interface MapFeature {
   kind: MapFeatureKind;
   name: string;
@@ -225,55 +225,11 @@ export function createMapFeatures(domain: MapFeatureDomain, settings: MapSetting
     }
     return false;
   };
-  for (const kind of ['road', 'river'] as const) {
-    const rng = mapRandom(seed, kind === 'road' ? 1823 : 7193);
-    const count = kind === 'road' ? settings.mapRoads : settings.mapRivers;
-    for (let i = 0; i < count; i++) {
-      let a: Point, b: Point;
-      if (kind === 'road') {
-        a = sites[i % sites.length];
-        b = sites[(i + 1) % sites.length];
-      } else {
-        a = [left + w * (0.2 + rng() * 0.6), top + h * 0.08];
-        b = [left + w * (0.2 + rng() * 0.6), bottom - h * 0.08];
-      }
-      const dx = b[0] - a[0],
-        dy = b[1] - a[1],
-        length = Math.hypot(dx, dy);
-      if (length < 8) continue;
-      const bend = (rng() - 0.5) * Math.min(w, h) * 0.18,
-        phase = rng() * 6.28;
-      const center: number[] = [];
-      for (let j = 0; j <= 24; j++) {
-        const t = j / 24;
-        const wave =
-          Math.sin(Math.PI * t) *
-          (bend + (kind === 'river' ? Math.sin(t * 12 + phase) * Math.min(w, h) * 0.035 : 0));
-        center.push(a[0] + dx * t - (dy / length) * wave, a[1] + dy * t + (dx / length) * wave);
-      }
-      const halfWidth = size * (kind === 'road' ? 0.5 : 0.6);
-      accept({
-        kind,
-        name: mapPlaceName(
-          i + (kind === 'road' ? 20 : 40),
-          seed,
-          kind === 'road' ? 'ROAD' : 'RIVER',
-        ),
-        anchor: [center[24], center[25]],
-        runs: [
-          offsetRun(center, halfWidth, kind === 'river'),
-          offsetRun(center, -halfWidth, kind === 'river'),
-        ],
-        masks: corridor(center, halfWidth * 1.2),
-      });
-    }
-  }
   const occupied: Array<[number, number, number]> = [];
-  for (const kind of ['lake', 'landmark', 'house', 'woodland'] as const) {
-    const salt = { lake: 1109, landmark: 4001, house: 6007, woodland: 8009 }[kind];
+  for (const kind of ['landmark', 'house', 'woodland'] as const) {
+    const salt = { landmark: 4001, house: 6007, woodland: 8009 }[kind];
     const rng = mapRandom(seed, salt);
     const count = {
-      lake: settings.mapLakes,
       landmark: settings.mapLandmarks,
       house: settings.mapBuildings,
       woodland: settings.mapWoodland,
@@ -285,54 +241,13 @@ export function createMapFeatures(domain: MapFeatureDomain, settings: MapSetting
         kind === 'house' ? site[0] + (rng() - 0.5) * w * 0.22 : left + w * (0.12 + rng() * 0.76);
       const y =
         kind === 'house' ? site[1] + (rng() - 0.5) * h * 0.22 : top + h * (0.12 + rng() * 0.76);
-      const radius = size * (kind === 'lake' ? 5 : kind === 'woodland' ? 4 : 2.5);
+      const radius = size * (kind === 'woodland' ? 4 : 2.5);
       if (!inside(x, y) || occupied.some((p) => Math.hypot(x - p[0], y - p[1]) < radius + p[2]))
         continue;
       let runs: number[][] = [],
-        masks: LabelMask[] = [],
+        masks: LabelMask[],
         name: string;
-      if (kind === 'lake') {
-        const outline: number[] = [];
-        for (let i = 0; i <= 32; i++) {
-          const a = (i / 32) * Math.PI * 2,
-            r = 1 + 0.12 * Math.sin(a * 3 + placed);
-          outline.push(x + Math.cos(a) * radius * r, y + Math.sin(a) * radius * 0.6 * r);
-        }
-        runs = [
-          outline,
-          [x - radius * 0.45, y - size * 0.6, x + radius * 0.25, y - size * 0.6],
-          [x - radius * 0.2, y + size * 0.6, x + radius * 0.45, y + size * 0.6],
-        ];
-        // Scanline strips clear the lake interior while keeping its irregular shoreline.
-        const lakeTop = Math.min(...outline.filter((_, i) => i % 2 === 1));
-        const lakeBottom = Math.max(...outline.filter((_, i) => i % 2 === 1));
-        const step = (lakeBottom - lakeTop) / 20;
-        for (let row = 0; row < 20; row++) {
-          const scanY = lakeTop + (row + 0.5) * step,
-            intersections: number[] = [];
-          for (let i = 2; i < outline.length; i += 2) {
-            const ay = outline[i - 1],
-              by = outline[i + 1];
-            if ((ay <= scanY && by > scanY) || (by <= scanY && ay > scanY))
-              intersections.push(
-                outline[i - 2] + ((outline[i] - outline[i - 2]) * (scanY - ay)) / (by - ay),
-              );
-          }
-          if (intersections.length >= 2) {
-            const left = Math.min(...intersections),
-              right = Math.max(...intersections);
-            masks.push({
-              x: left,
-              y: scanY - step / 2,
-              width: right - left,
-              height: step,
-              angle: 0,
-              padding: 0.05,
-            });
-          }
-        }
-        name = mapPlaceName(placed + 60, seed, 'LAKE');
-      } else if (kind === 'landmark') {
+      if (kind === 'landmark') {
         const landmark = LANDMARKS[placed % LANDMARKS.length];
         runs = landmark.runs.map((run) => moved(run, x, y, size));
         masks = [box(x, y - size * 0.4, size * 3.8, size * 4.8)];
@@ -367,4 +282,31 @@ export function createMapFeatures(domain: MapFeatureDomain, settings: MapSetting
     }
   }
   return result;
+}
+
+/** Route centrelines already follow the terrain and have passed through projection/effects. */
+export function terrainRouteFeature(
+  kind: 'road' | 'river',
+  runs: number[][],
+  index: number,
+  settings: MapSettings,
+  size: number,
+): MapFeature {
+  const width = size * (kind === 'road' ? 0.35 : 0.22);
+  const longest = runs.reduce((a, b) => (a.length >= b.length ? a : b), [] as number[]);
+  const middle = Math.floor(longest.length / 4) * 2;
+  return {
+    kind,
+    name: mapPlaceName(
+      index + (kind === 'road' ? 20 : 40),
+      settings.mapSeed,
+      kind === 'road' ? 'ROAD' : 'RIVER',
+    ),
+    anchor: [longest[middle] ?? 0, longest[middle + 1] ?? 0],
+    runs: runs.flatMap((run) => [
+      offsetRun(run, width, kind === 'river'),
+      offsetRun(run, -width, kind === 'river'),
+    ]),
+    masks: runs.flatMap((run) => corridor(run, width)),
+  };
 }

@@ -1,5 +1,7 @@
 'use strict';
 
+import { createTerrainRoutes } from './terrain-routes';
+import { terrainRouteFeature } from './map-features';
 import { resolveMapSettings, type MapSettings } from './map-settings';
 
 import { clipRunToRect } from './toolpaths';
@@ -85,6 +87,8 @@ type MorphValue = number | string;
 type MorphTargets = Record<string, MorphValue>;
 
 export interface ContourMesh {
+  /** Set only for the dedicated square terrain source in its original Z-up orientation. */
+  terrain?: boolean;
   V: NumericArray;
   T: NumericArray;
   N?: NumericArray;
@@ -3063,6 +3067,28 @@ function computeContourInstance(
     }
     return { d, runs: plotRuns };
   };
+  const terrainFeatures = [];
+  if (settings.topographicMap && mesh.terrain) {
+    const mapSettings = resolveMapSettings(settings);
+    const routes = createTerrainRoutes(mesh, mapSettings);
+    for (let index = 0; index < routes.length; index++) {
+      const route = routes[index],
+        projected: Polyline[] = [];
+      const indexes = Array.from({ length: route.points.length / 3 }, (_, i) => i);
+      emitProjectedPath(indexes, route.points, P, quality, vis, step, projected);
+      const group = serialiseGroup(projected);
+      if (!group.runs.length) continue;
+      const feature = terrainRouteFeature(
+        route.kind,
+        group.runs,
+        index,
+        mapSettings,
+        ((Math.min(W, H) / 150) * mapSettings.mapSymbolScale) / 100,
+      );
+      feature.runs = feature.runs.flatMap((run) => clipArtworkRun(run, settings, W, H));
+      terrainFeatures.push(feature);
+    }
+  }
   const colorPaths: string[][][] = [];
   const toolpaths: ContourToolpathGroup[] = [];
   const annotationSourceRuns: Polyline[] = [];
@@ -3123,6 +3149,7 @@ function computeContourInstance(
   const blueprint = blueprintDocument(settings, W, H, blueprintGeometry);
   const mapAnnotations = settings.topographicMap
     ? createMapAnnotations(annotationSourceRuns, {
+        terrainFeatures,
         levels: annotationSourceRuns.map((run) => contourLevels.get(run)),
         width: W,
         height: H,

@@ -6,6 +6,7 @@ self.addEventListener('message', ({ data }) => {
   if (data.type === 'mesh') {
     mesh = {
       V: new Float32Array(data.mesh.V),
+      terrain: data.mesh.terrain === true,
       T: new Uint32Array(data.mesh.T),
       N: new Float32Array(data.mesh.N),
       ...(data.mesh.lineArtOffsets

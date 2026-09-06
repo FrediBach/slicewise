@@ -26,6 +26,7 @@ const projectionWarpModes = [
 export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSettings {
   const restored = structuredClone(snapshot);
   Object.assign(restored, resolveMapSettings(snapshot));
+  delete (restored as unknown as Record<string, unknown>).mapLakes;
   const values = restored as unknown as Record<string, unknown>;
 
   for (let index = 1; index <= 4; index++) {
