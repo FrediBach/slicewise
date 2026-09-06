@@ -1,3 +1,4 @@
+import { createSphericalScalarField, createCylindricalScalarField } from './scalar-fields';
 import { describe, expect, it } from 'vitest';
 import { createSliceNormalCollector, createSurfaceSliceRays } from './slice-ray-surface';
 import { SLICE_RAY_DEFAULTS } from './slice-rays-settings';
@@ -26,6 +27,21 @@ describe('surface slice rays', () => {
     face.triangle(0, 1, 2);
     face.add(0, [0.25, 0.25, 0]);
     expect(face.normals).toEqual([0, 0, 1]);
+  });
+
+  it('resolves the same outward side for either winding of a closed mesh', () => {
+    const V = [1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 1, 0, 0, -1];
+    const T = [0, 2, 4, 2, 1, 4, 1, 3, 4, 3, 0, 4, 2, 0, 5, 1, 2, 5, 3, 1, 5, 0, 3, 5];
+    const flipped = T.map((_, i) => T[i % 3 === 0 ? i : i % 3 === 1 ? i + 1 : i - 1]);
+    const sample = [1 / 3, 1 / 3, 1 / 3];
+    const forward = createSliceNormalCollector({ V, T });
+    forward.triangle(0, 2, 4);
+    forward.add(0, sample);
+    const reverse = createSliceNormalCollector({ V, T: flipped });
+    reverse.triangle(0, 4, 2);
+    reverse.add(0, sample);
+    expect(reverse.normals).toEqual(forward.normals);
+    expect(reverse.normals.every((n) => n > 0)).toBe(true);
   });
 
   it('emits outward from open intrinsic contours with winding-independent path direction', () => {
@@ -60,6 +76,88 @@ describe('surface slice rays', () => {
       }),
     ).toEqual([]);
   });
+
+  it.each(['spherical', 'cylindrical'] as const)(
+    '%s rays travel from the selected origin and emit only at exits',
+    (axis) => {
+      const surface = [-1, -0.5, 0, -1, 0.5, 0, 1, -0.5, 0, 1, 0.5, 0];
+      const outward = [-1, 0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0];
+      for (const sourceX of [-3, 0, 3]) {
+        const center: [number, number, number] = [sourceX, 0, 0];
+        const field =
+          axis === 'spherical'
+            ? createSphericalScalarField({ V: surface }, { center })
+            : createCylindricalScalarField({ V: surface }, { center, axis: [0, 0, 1] });
+        const rays = createSurfaceSliceRays(
+          surface,
+          [
+            [0, 1],
+            [2, 3],
+          ],
+          outward,
+          field.gradient,
+          settings,
+          0,
+          surface,
+          'from-origin',
+        );
+        expect(rays).toHaveLength(sourceX === 0 ? 4 : 2);
+        for (const { points: ray } of rays) {
+          const dx = ray[3] - ray[0],
+            dy = ray[4] - ray[1];
+          expect(dx * (ray[0] - sourceX) + dy * ray[1]).toBeGreaterThan(0);
+          expect(dx * ray[1] - dy * (ray[0] - sourceX)).toBeCloseTo(0);
+          if (sourceX) {
+            expect(ray[0]).toBe(-Math.sign(sourceX));
+            expect(dx * sourceX).toBeLessThan(0);
+          }
+        }
+      }
+    },
+  );
+
+  it.each(['spherical', 'cylindrical'] as const)(
+    'exports %s ray geometry travelling away from an external origin',
+    (axis) => {
+      const mesh = makeContourMesh();
+      for (const sourceX of [-300, 300]) {
+        const base = {
+          ...contourSettings,
+          axis,
+          waveCenterX: sourceX,
+          waveCenterY: 0,
+          waveCenterZ: 0,
+          cylinderElevation: 90,
+          cylinderAzimuth: 0,
+          az: -90,
+          el: 90,
+          roll: 0,
+          lensPerspective: 0,
+          lensDistortion: 0,
+          lines: 8,
+          quality: 3,
+          hide: false,
+          sil: false,
+          clipToArtboard: false,
+          sliceRayFade: 0,
+          sliceRayVariation: 0,
+        };
+        const plain = computeContours(mesh, { ...base, sliceRays: false }, false);
+        const result = computeContours(mesh, { ...base, sliceRays: true }, false);
+        const contourRuns = new Set(
+          plain.toolpaths.flatMap((g) => g.runs).map((r) => JSON.stringify(r)),
+        );
+        const rays = result.toolpaths
+          .flatMap((g) => g.runs)
+          .filter((r) => !contourRuns.has(JSON.stringify(r)));
+        expect(rays.length).toBeGreaterThan(0);
+        for (const ray of rays) {
+          expect(ray).toHaveLength(4);
+          expect((ray[2] - ray[0]) * sourceX).toBeLessThan(0);
+        }
+      }
+    },
+  );
 
   it('keeps all fade dashes translated with their interpolated exploded root', () => {
     const rays = createSurfaceSliceRays(

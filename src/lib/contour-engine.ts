@@ -2861,9 +2861,9 @@ function computeContourInstance(
     },
   );
   const waveCenter: Vec3 = [
-    clamp(Number(settings.waveCenterX) || 0, -100, 100) / 100,
-    clamp(Number(settings.waveCenterY) || 0, -100, 100) / 100,
-    clamp(Number(settings.waveCenterZ) || 0, -100, 100) / 100,
+    clamp(Number(settings.waveCenterX) || 0, -500, 500) / 100,
+    clamp(Number(settings.waveCenterY) || 0, -500, 500) / 100,
+    clamp(Number(settings.waveCenterZ) || 0, -500, 500) / 100,
   ];
   const cylinderAzimuth = (clamp(Number(settings.cylinderAzimuth) || 0, -180, 180) * Math.PI) / 180;
   const cylinderElevation =
@@ -3233,6 +3233,7 @@ function computeContourInstance(
               settings,
               sliceIndex,
               outputWorldPoints,
+              field.kind === 'analytic' ? 'from-origin' : 'tangent',
             )
           : metadata.constantDirection
             ? createSliceRays(

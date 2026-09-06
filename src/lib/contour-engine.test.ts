@@ -642,6 +642,36 @@ describe('computeContours', () => {
     },
   );
 
+  it.each(['spherical', 'cylindrical'] as const)(
+    'positions the %s origin beyond the model on every coordinate',
+    (axis) => {
+      const mesh = makeContourMesh();
+      const base = {
+        ...contourSettings,
+        axis,
+        lines: 6,
+        quality: 3,
+        sil: false,
+        hide: false,
+        sliceRays: true,
+        cylinderAzimuth: 37,
+        cylinderElevation: 52,
+      };
+      for (const key of ['waveCenterX', 'waveCenterY', 'waveCenterZ'] as const) {
+        for (const sign of [-1, 1]) {
+          const edge = computeContours(mesh, { ...base, [key]: sign * 100 }, false);
+          const outside = computeContours(mesh, { ...base, [key]: sign * 300 }, false);
+          expect(outside.toolpaths).not.toEqual(edge.toolpaths);
+          expect(outside.paths).toBeGreaterThan(0);
+          expect(outside.svg).not.toMatch(/NaN|Infinity/);
+          expect(computeContours(mesh, { ...base, [key]: sign * 500 }, true).paths).toBeGreaterThan(
+            0,
+          );
+        }
+      }
+    },
+  );
+
   it('changes spherical topology with its centre and ignores planar-only effects', () => {
     const mesh = makeContourMesh();
     const base = {
@@ -673,7 +703,7 @@ describe('computeContours', () => {
     expect(incompatible.toolpaths).toEqual(centered.toolpaths);
   });
 
-  it('morphs exactly between wavefront centres', () => {
+  it('morphs exactly to an origin outside the object', () => {
     const mesh = makeContourMesh();
     const base = {
       ...contourSettings,
@@ -687,7 +717,7 @@ describe('computeContours', () => {
       sil: false,
       bg: false,
     };
-    const target = { waveCenterX: 45, cylinderAzimuth: 65 };
+    const target = { waveCenterX: 345, cylinderAzimuth: 65 };
     const startResult = computeContours(mesh, base, false);
     const targetResult = computeContours(mesh, { ...base, ...target }, false);
     const morphResult = computeContours(

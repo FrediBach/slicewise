@@ -119,27 +119,27 @@ export function SliceFieldControls() {
       <div id="wavefrontControls" hidden>
         <ValueControl
           id="waveCenterX"
-          label="Centre X"
-          min="-100"
-          max="100"
+          label="Origin X"
+          min="-500"
+          max="500"
           step="1"
           value="0"
           unit="% radius"
         />
         <ValueControl
           id="waveCenterY"
-          label="Centre Y"
-          min="-100"
-          max="100"
+          label="Origin Y"
+          min="-500"
+          max="500"
           step="1"
           value="0"
           unit="% radius"
         />
         <ValueControl
           id="waveCenterZ"
-          label="Centre Z"
-          min="-100"
-          max="100"
+          label="Origin Z"
+          min="-500"
+          max="500"
           step="1"
           value="0"
           unit="% radius"
@@ -165,8 +165,9 @@ export function SliceFieldControls() {
           />
         </div>
         <p className="gradient-note blueprint-note">
-          Curved fields use model-space distance. Centre values are percentages of the normalized
-          model radius.
+          Move the slicing origin inside or outside the object. 0% is the model centre; ±100%
+          reaches its bounding radius, and ±500% places the origin five radii away. For a cylinder,
+          this positions its axis; moving along that axis does not change the slices.
         </p>
       </div>
       <div id="geodesicControls" hidden>

@@ -95,6 +95,27 @@ it('binds slice rays, restores history, and disables incompatible modes', async 
   input('redo').click();
   await settle();
   expect(latest().sliceRayFade).toBe(75);
+  change('axis', 'spherical');
+  await settle();
+  change('waveCenterXN', '300');
+  await settle();
+  expect(input('waveCenterX').value).toBe('300');
+  expect(latest().waveCenterX).toBe(300);
+  input('undo').click();
+  await settle();
+  expect(latest().waveCenterX).toBe(0);
+  input('redo').click();
+  await settle();
+  expect(latest().waveCenterX).toBe(300);
+  for (const [id, value] of [
+    ['waveCenterY', '-250'],
+    ['waveCenterZ', '500'],
+  ]) {
+    change(id + 'N', value);
+    await settle();
+    expect(input(id).value).toBe(value);
+    expect(latest()[id as keyof ContourSettings]).toBe(Number(value));
+  }
   for (const axis of ['spherical', 'cylindrical', 'geodesic', 'curvature', 'up']) {
     change('axis', axis);
     await settle();

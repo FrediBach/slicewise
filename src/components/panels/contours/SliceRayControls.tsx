@@ -8,8 +8,8 @@ export function SliceRayControls() {
         Enable slice rays
       </Checkbox>
       <p className="gradient-note blueprint-note">
-        Outward rays from mesh slices. Curved fields use local directions; surface fields emit away
-        from the mesh. Fade adds pen-plottable gaps.
+        Spherical rays travel away from the origin; cylindrical rays travel away from the axis. Only
+        exit crossings emit rays. Fade adds pen-plottable gaps.
       </p>
       <div className="effect-controls">
         {SLICE_RAY_CONTROLS.map(({ id, label, min, max, value, unit }) => (

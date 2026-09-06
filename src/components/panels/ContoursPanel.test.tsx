@@ -15,14 +15,14 @@ describe('ContoursPanel slice-field controls', () => {
     expect(field).toHaveTextContent('Geodesic distance · mesh');
     expect(field).toHaveTextContent('Mesh curvature');
 
-    for (const label of ['Centre X', 'Centre Y', 'Centre Z']) {
+    for (const label of ['Origin X', 'Origin Y', 'Origin Z']) {
       expect(screen.getByLabelText(label, { selector: 'input[type="range"]' })).toHaveAttribute(
         'min',
-        '-100',
+        '-500',
       );
       expect(screen.getByLabelText(label, { selector: 'input[type="range"]' })).toHaveAttribute(
         'max',
-        '100',
+        '500',
       );
       expect(screen.getByLabelText(label, { selector: 'input[type="range"]' })).toHaveValue('0');
     }

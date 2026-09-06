@@ -1,5 +1,6 @@
 import { fadeSliceRay, sliceRayReach } from './slice-rays';
 import { resolveSliceRaySettings, type SliceRaySettings } from './slice-rays-settings';
+import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
 type Point = [number, number, number];
 type Gradient = (x: number, y: number, z: number) => Point | null;
@@ -15,15 +16,42 @@ const unit = (p: Point): Point | null => {
   return Number.isFinite(length) && length > 1e-10 ? (p.map((v) => v / length) as Point) : null;
 };
 
+const orientationCache = new WeakMap<TopologyMesh, number>();
+/** Some imports and demos wind closed meshes inward. Open surfaces retain their
+ * authored side because signed volume does not define their inside/outside. */
+function outwardOrientation(mesh: TopologyMesh): number {
+  const cached = orientationCache.get(mesh);
+  if (cached !== undefined) return cached;
+  const topology = getMeshTopology(mesh);
+  let volume = 0;
+  if (!topology.boundaryEdges.length && !topology.nonManifoldEdges.length) {
+    for (let i = 0; i + 2 < mesh.T.length; i += 3) {
+      const a = at(mesh.V, mesh.T[i]),
+        b = at(mesh.V, mesh.T[i + 1]),
+        c = at(mesh.V, mesh.T[i + 2]);
+      const contribution =
+        a[0] * (b[1] * c[2] - b[2] * c[1]) +
+        a[1] * (b[2] * c[0] - b[0] * c[2]) +
+        a[2] * (b[0] * c[1] - b[1] * c[0]);
+      if (Number.isFinite(contribution)) volume += contribution;
+    }
+  }
+  const orientation = volume < -1e-12 ? -1 : 1;
+  orientationCache.set(mesh, orientation);
+  return orientation;
+}
+
 /** Capture source-surface normals while triangle ownership is still available.
  * Barycentric interpolation uses vertex normals when present, face winding otherwise.
  */
 export function createSliceNormalCollector(mesh: {
   V: ArrayLike<number>;
+  T?: ArrayLike<number>;
   N?: ArrayLike<number>;
   preserveSurface?: boolean;
 }) {
   const normals: number[] = [];
+  const orientation = mesh.T ? outwardOrientation(mesh as TopologyMesh) : 1;
   let sample: (p: Point) => Point | null = () => null;
   return {
     normals,
@@ -56,7 +84,7 @@ export function createSliceNormalCollector(mesh: {
     add(index: number, points: ArrayLike<number>) {
       const normal = sample(at(points, index));
       for (let k = 0; k < 3; k++)
-        normals[index * 3 + k] = (normals[index * 3 + k] ?? 0) + (normal?.[k] ?? 0);
+        normals[index * 3 + k] = (normals[index * 3 + k] ?? 0) + (normal?.[k] ?? 0) * orientation;
     },
   };
 }
@@ -77,6 +105,7 @@ export function createSurfaceSliceRays(
   settings: Partial<SliceRaySettings>,
   salt = 0,
   outputPoints: ArrayLike<number> = points,
+  directionMode: 'tangent' | 'from-origin' = 'tangent',
 ): SurfaceSliceRay[] {
   const s = resolveSliceRaySettings(settings);
   if (!s.sliceRays || !s.sliceRayAmount || !s.sliceRayLength) return [];
@@ -115,13 +144,20 @@ export function createSurfaceSliceRays(
       const g = gradient(...origin),
         n = g && unit(g);
       if (!n) continue;
-      direction = unit([
-        tangent[1] * n[2] - tangent[2] * n[1],
-        tangent[2] * n[0] - tangent[0] * n[2],
-        tangent[0] * n[1] - tangent[1] * n[0],
-      ]);
-      if (!direction || Math.abs(dot(direction, normal)) < 1e-7) continue;
-      if (dot(direction, normal) < 0) direction = direction.map((v) => -v) as Point;
+      if (directionMode === 'from-origin') {
+        // The distance-field gradient travels away from the spherical source
+        // or cylindrical axis. Keep only exit crossings; never flip entry rays.
+        if (dot(n, normal) <= 1e-7) continue;
+        direction = n;
+      } else {
+        direction = unit([
+          tangent[1] * n[2] - tangent[2] * n[1],
+          tangent[2] * n[0] - tangent[0] * n[2],
+          tangent[0] * n[1] - tangent[1] * n[0],
+        ]);
+        if (!direction || Math.abs(dot(direction, normal)) < 1e-7) continue;
+        if (dot(direction, normal) < 0) direction = direction.map((v) => -v) as Point;
+      }
     } else {
       const along = dot(normal, tangent);
       direction = unit(normal.map((v, k) => v - along * tangent[k]) as Point);
