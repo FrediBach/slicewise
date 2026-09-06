@@ -47,3 +47,10 @@ describe('render settings snapshots', () => {
     expect(source.morphTargets2).toEqual({ roll: 90 });
   });
 });
+
+it('detaches SVG cutting paths from runtime state', () => {
+  const source = { ...contourSettings, name: 'logo', svgSlicePaths: [[0, 0, 1, 1]] };
+  const snapshot = createRenderSettingsSnapshot(source);
+  snapshot.svgSlicePaths![0][0] = 7;
+  expect(source.svgSlicePaths[0][0]).toBe(0);
+});

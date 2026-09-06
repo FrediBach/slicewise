@@ -1,5 +1,7 @@
 'use strict';
 
+import { svgSliceContours } from './svg-slice-field';
+
 import { refineContourSegments } from './contour-refinement';
 import { createSurfaceWeave } from './contour-weave';
 import {
@@ -164,6 +166,11 @@ export interface ContourSettings
   easeCycles: number;
   easeCenter: number;
   quality: number;
+  svgSlicePaths?: number[][];
+  svgSliceScale?: number;
+  svgSliceX?: number;
+  svgSliceY?: number;
+  svgSliceRotation?: number;
   axis: string;
   cutAz: number;
   cutEl: number;
@@ -1579,6 +1586,11 @@ function deterministicDrawingNumber(
       settings.easeCenter,
       settings.quality,
       settings.axis,
+      settings.svgSlicePaths,
+      settings.svgSliceScale,
+      settings.svgSliceX,
+      settings.svgSliceY,
+      settings.svgSliceRotation,
       settings.cutAz,
       settings.cutEl,
       settings.waveCenterX,
@@ -2891,7 +2903,12 @@ function computeContourInstance(
     step = Math.max(0.25, W / D.rw);
   }
 
-  const N = quick ? previewLineCount(settings.lines, settings.previewDetail) : settings.lines;
+  const N =
+    settings.axis === 'svg' && !settings.contourWeave
+      ? Math.max(1, settings.svgSlicePaths?.length ?? 1)
+      : quick
+        ? previewLineCount(settings.lines, settings.previewDetail)
+        : settings.lines;
   const gradient = gradientPalette(settings);
   const { palette, indexedPalette } = colorPlan(settings, N);
   const toneBandCount = settings.halftone ? 12 : 1;
@@ -2993,6 +3010,33 @@ function computeContourInstance(
           ),
         ),
       };
+  } else if (settings.axis === 'svg') {
+    const slices = svgSliceContours(mesh, {
+      svgSlicePaths: settings.svgSlicePaths,
+      svgSliceScale: settings.svgSliceScale,
+      svgSliceX: settings.svgSliceX,
+      svgSliceY: settings.svgSliceY,
+      svgSliceRotation: settings.svgSliceRotation,
+      cutAz: settings.cutAz,
+      cutEl: settings.cutEl,
+      divergence: settings.divergence,
+    });
+    const features = slices.map((slice, index) => {
+      const runs: Polyline[] = [];
+      for (const poly of chain(slice.points, slice.segments))
+        emitProjectedPath(poly, slice.points, P, quality, vis, step, runs);
+      const position = index / Math.max(1, slices.length - 1);
+      const color =
+        indexedPalette.get(index) ??
+        (settings.gradientEnabled
+          ? Math.min(gradient.length - 1, Math.floor(position * gradient.length))
+          : 0);
+      out[color][settings.halftone ? toneBand(position) : 0][weightBand(position, index)].push(
+        ...runs,
+      );
+      return measureContourSlice(index, position, runs);
+    });
+    if (!quick) sequenceSource = { version: 1, slices: features };
   } else if (
     fieldFeatures.continuousSpiral &&
     !fieldFeatures.divergence &&
@@ -3159,7 +3203,7 @@ function computeContourInstance(
         if (level !== undefined) contourLevels.set(clipped, level);
         d += serialiseRun(
           clipped,
-          settings.contourWeave || mesh.preserveSurface ? 1 : quality,
+          settings.contourWeave || settings.axis === 'svg' || mesh.preserveSurface ? 1 : quality,
           (!settings.humanizer && originalSharp.get(clipped)) || sharpVertices(clipped),
         );
         if (!quick || settings.topographicMap || settings.misregistration) plotRuns.push(clipped);

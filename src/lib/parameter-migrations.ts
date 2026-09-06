@@ -28,6 +28,30 @@ export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSe
   const restored = structuredClone(snapshot);
   Object.assign(restored, resolveMapSettings(snapshot), resolveWeaveSettings(snapshot));
   delete (restored as unknown as Record<string, unknown>).mapLakes;
+  restored.svgSlicePaths =
+    Array.isArray(restored.svgSlicePaths) &&
+    restored.svgSlicePaths.every(
+      (path) =>
+        Array.isArray(path) &&
+        path.length >= 4 &&
+        path.length % 2 === 0 &&
+        path.every(Number.isFinite),
+    ) &&
+    restored.svgSlicePaths.reduce((n, path) => n + path.length / 2, 0) <= 20000
+      ? restored.svgSlicePaths
+      : [];
+  restored.svgSliceScale = Number.isFinite(restored.svgSliceScale)
+    ? clamp(restored.svgSliceScale!, 1, 300)
+    : 100;
+  restored.svgSliceX = Number.isFinite(restored.svgSliceX)
+    ? clamp(restored.svgSliceX!, -200, 200)
+    : 0;
+  restored.svgSliceY = Number.isFinite(restored.svgSliceY)
+    ? clamp(restored.svgSliceY!, -200, 200)
+    : 0;
+  restored.svgSliceRotation = Number.isFinite(restored.svgSliceRotation)
+    ? clamp(restored.svgSliceRotation!, -180, 180)
+    : 0;
   const values = restored as unknown as Record<string, unknown>;
   for (const key of LEGACY_WEAVE_KEYS) {
     delete values[key];

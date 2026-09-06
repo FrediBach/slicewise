@@ -45,6 +45,11 @@ export const renderSettingKeys = [
   'easeCycles',
   'easeCenter',
   'quality',
+  'svgSlicePaths',
+  'svgSliceScale',
+  'svgSliceX',
+  'svgSliceY',
+  'svgSliceRotation',
   'axis',
   'cutAz',
   'cutEl',
@@ -234,6 +239,7 @@ void allRenderSettingsAreListed;
 export function createRenderSettingsSnapshot(source: RenderSettingsSource): ContourSettings {
   const entries = renderSettingKeys.map((key) => [key, source[key]] as const);
   const snapshot = Object.fromEntries(entries) as unknown as ContourSettings;
+  snapshot.svgSlicePaths = source.svgSlicePaths?.map((path) => [...path]);
   snapshot.documentTitle = source.name;
   snapshot.morphTargets = { ...source.morphTargets };
   snapshot.morphTargets2 = { ...source.morphTargets2 };

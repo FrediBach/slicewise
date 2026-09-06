@@ -323,6 +323,11 @@ const state: AppState = {
   easeCycles: 1,
   easeCenter: 50,
   quality: 7,
+  svgSlicePaths: [],
+  svgSliceScale: 100,
+  svgSliceX: 0,
+  svgSliceY: 0,
+  svgSliceRotation: 0,
   axis: 'up',
   cutAz: 0,
   cutEl: 90,
@@ -859,6 +864,7 @@ if (typeof document !== 'undefined') {
         animationExportRenderWaiter = null;
       }
       showError(data.message);
+      if (completedRequest?.settings.axis === 'svg') $('svgSliceStatus').textContent = data.message;
     }
     notifyRenderWaiters();
     syncPreviewBusy();
@@ -1401,6 +1407,10 @@ if (typeof document !== 'undefined') {
   bindPair('waveCenterX', 'waveCenterX');
   bindPair('waveCenterY', 'waveCenterY');
   bindPair('waveCenterZ', 'waveCenterZ');
+  bindPair('svgSliceScale', 'svgSliceScale');
+  bindPair('svgSliceX', 'svgSliceX');
+  bindPair('svgSliceY', 'svgSliceY');
+  bindPair('svgSliceRotation', 'svgSliceRotation');
   bindPair('cylinderAzimuth', 'cylinderAzimuth');
   bindPair('cylinderElevation', 'cylinderElevation');
   bindPair('geodesicSeedAzimuth', 'geodesicSeedAzimuth');
@@ -1899,7 +1909,8 @@ if (typeof document !== 'undefined') {
     state.axis === 'spherical' || state.axis === 'cylindrical';
   const intrinsicSliceField = (): boolean =>
     state.axis === 'geodesic' || state.axis === 'curvature';
-  const nonPlanarSliceField = (): boolean => curvedSliceField() || intrinsicSliceField();
+  const nonPlanarSliceField = (): boolean =>
+    curvedSliceField() || intrinsicSliceField() || state.axis === 'svg';
   const multiSourceGeodesic = (): boolean =>
     state.axis === 'geodesic' && state.geodesicMode !== 'single';
   const fixedGeodesicSpacing = (): boolean =>
@@ -1917,8 +1928,13 @@ if (typeof document !== 'undefined') {
     );
     const curved = curvedSliceField();
     const intrinsic = intrinsicSliceField();
+    const svg = state.axis === 'svg';
+    $('svgSliceControls').hidden = woven || !svg;
+    $('svgSliceStatus').textContent = state.svgSlicePaths?.length
+      ? `${state.svgSlicePaths.length} SVG subpaths loaded`
+      : 'Upload a logo or line drawing. Text must be converted to paths.';
     const nonPlanar = curved || intrinsic || woven;
-    $('customAxis').hidden = woven || state.axis !== 'custom';
+    $('customAxis').hidden = woven || (state.axis !== 'custom' && !svg);
     $('wavefrontControls').hidden = woven || !curved;
     $('cylinderAxisControls').hidden = woven || state.axis !== 'cylindrical';
     $('geodesicControls').hidden = woven || state.axis !== 'geodesic';
@@ -1928,33 +1944,87 @@ if (typeof document !== 'undefined') {
       setControlPairDisabled(
         id,
         nonPlanar,
-        'Divergence is available only with planar slice fields.',
+        'Divergence is available with planar fields and SVG cutting paths.',
       );
       $(id + 'Control').classList.toggle('is-disabled', nonPlanar);
     }
     setSingleControlDisabled(
       'sliceLfo',
-      nonPlanar,
+      nonPlanar || svg,
       'Slice-plane modulation is available only with planar slice fields.',
     );
-    $('sliceLfo').closest('.checkbox-control')?.classList.toggle('is-disabled', nonPlanar);
+    $('sliceLfo')
+      .closest('.checkbox-control')
+      ?.classList.toggle('is-disabled', nonPlanar || svg);
     setControlPairDisabled(
       'explodeAmount',
-      intrinsic || woven,
-      'Slice explode is unavailable for intrinsic mesh fields because they do not provide a reliable local gradient.',
+      intrinsic || woven || svg,
+      'Slice explode is unavailable for intrinsic fields, SVG cutting paths, and Contour Weave.',
     );
-    $('explodeAmountControl').classList.toggle('is-disabled', intrinsic || woven);
-    const voronoi = !woven && state.axis === 'geodesic' && state.geodesicMode === 'voronoi';
+    $('explodeAmountControl').classList.toggle('is-disabled', intrinsic || woven || svg);
+    const voronoi =
+      !woven && (svg || (state.axis === 'geodesic' && state.geodesicMode === 'voronoi'));
     setControlPairDisabled(
       'lines',
       voronoi,
-      'Geodesic Voronoi mode extracts one boundary, so line count does not apply.',
+      'This slice field supplies its own paths, so line count does not apply.',
     );
     $('linesControl').classList.toggle('is-disabled', voronoi);
     syncEaseCenter();
     syncSliceLfoControls();
     syncSliceConstruction();
   }
+  let svgSliceUpload = 0;
+  async function loadSvgSliceFile(file: File): Promise<void> {
+    const request = ++svgSliceUpload;
+    $('svgSliceStatus').textContent = `Loading ${file.name}…`;
+    try {
+      if (file.size > 2_000_000) throw new Error('SVG is too large. Simplify it before importing.');
+      const text = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('Could not read the SVG. Try selecting it again.'));
+        reader.readAsText(file);
+      });
+      const { parseSVGSlicePaths } = await import('./svg-mesh');
+      const paths = parseSVGSlicePaths(text);
+      if (request !== svgSliceUpload) return;
+      state.svgSlicePaths = paths;
+      syncSliceFieldControls();
+      $('svgSliceStatus').textContent = `${file.name} · ${paths.length} SVG subpaths loaded`;
+      $('mErr').hidden = true;
+      redraw(false);
+    } catch (error) {
+      if (request === svgSliceUpload) $('svgSliceStatus').textContent = errorMessage(error);
+    } finally {
+      if (request === svgSliceUpload) $('svgSliceFile').value = '';
+    }
+  }
+  $('svgSliceFile').addEventListener('change', (event) => {
+    const file = inputTarget(event).files?.[0];
+    if (file) void loadSvgSliceFile(file);
+  });
+  const svgSliceDrop = $('svgSliceDrop');
+  svgSliceDrop.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      $('svgSliceFile').click();
+    }
+  });
+  for (const type of ['dragenter', 'dragover'])
+    svgSliceDrop.addEventListener(type, (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      svgSliceDrop.classList.add('over');
+    });
+  svgSliceDrop.addEventListener('dragleave', () => svgSliceDrop.classList.remove('over'));
+  svgSliceDrop.addEventListener('drop', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    svgSliceDrop.classList.remove('over');
+    const file = event.dataTransfer?.files[0];
+    if (file) void loadSvgSliceFile(file);
+  });
   $('axis').addEventListener('change', (e) => {
     state.axis = inputTarget(e).value;
     syncSliceFieldControls();
@@ -1974,10 +2044,10 @@ if (typeof document !== 'undefined') {
     redraw(false);
   });
   function syncEaseCenter(): void {
-    const spacingDisabled = fixedGeodesicSpacing() || surfaceWeaveActive();
+    const spacingDisabled = fixedGeodesicSpacing() || surfaceWeaveActive() || state.axis === 'svg';
     const spacingReason = surfaceWeaveActive()
       ? 'Contour Weave uses uniform material spacing controlled by Line count and Weft density.'
-      : 'Geodesic difference and Voronoi modes define their own level spacing.';
+      : 'This slice field defines its own path spacing.';
     setSingleControlDisabled('gapEase', spacingDisabled, spacingReason);
     $('gapEaseControl').classList.toggle('is-disabled', spacingDisabled);
     for (const id of ['easeStrength', 'easeCycles']) {
@@ -2935,6 +3005,10 @@ if (typeof document !== 'undefined') {
     ['waveCenterX', 'waveCenterX'],
     ['waveCenterY', 'waveCenterY'],
     ['waveCenterZ', 'waveCenterZ'],
+    ['svgSliceScale', 'svgSliceScale'],
+    ['svgSliceX', 'svgSliceX'],
+    ['svgSliceY', 'svgSliceY'],
+    ['svgSliceRotation', 'svgSliceRotation'],
     ['cylinderAzimuth', 'cylinderAzimuth'],
     ['cylinderElevation', 'cylinderElevation'],
     ['geodesicSeedAzimuth', 'geodesicSeedAzimuth'],

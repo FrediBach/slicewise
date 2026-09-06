@@ -161,3 +161,40 @@ export function parseSVGCenterlines(text: string, pruning = 2): ParsedCenterline
   offsets[usable.length] = pointCount;
   return { points: Float64Array.from(usable.flat()), offsets };
 }
+
+/** Preserve authored subpaths, including open strokes and compound-path holes. */
+export function parseSVGSlicePaths(text: string): number[][] {
+  if (text.length > 2_000_000) throw new Error('SVG is too large. Simplify it before importing.');
+  const data = new SVGLoader().parse(text);
+  const paths: number[][] = [];
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  for (const path of data.paths)
+    for (const sub of path.subPaths) {
+      const points = sub.getPoints(48);
+      if (sub.autoClose && points.length && !points[0].equals(points[points.length - 1]))
+        points.push(points[0].clone());
+      if (points.length < 2) continue;
+      const run: number[] = [];
+      for (const p of points) {
+        if (!Number.isFinite(p.x) || !Number.isFinite(p.y))
+          throw new Error('SVG contains invalid coordinates.');
+        minX = Math.min(minX, p.x);
+        maxX = Math.max(maxX, p.x);
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+        run.push(p.x, -p.y);
+      }
+      paths.push(run);
+    }
+  const span = Math.max(maxX - minX, maxY - minY);
+  if (!Number.isFinite(span) || span <= 0)
+    throw new Error('No measurable SVG paths found. Convert text to paths first.');
+  if (paths.reduce((n, p) => n + p.length / 2, 0) > 20000)
+    throw new Error('Too many SVG path points. Simplify the artwork first.');
+  return paths.map((p) =>
+    p.map((v, i) => ((v - (i % 2 ? -(minY + maxY) / 2 : (minX + maxX) / 2)) * 2) / span),
+  );
+}

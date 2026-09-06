@@ -1,3 +1,4 @@
+import { FileUp } from 'lucide-react';
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../../controls/FormControls';
 import { SliceLfoControls } from './SliceLfoControls';
 
@@ -11,6 +12,7 @@ export function SliceFieldControls() {
         randomizable
         rowClassName="select-row"
         optionDescriptions={{
+          svg: 'Extends the uploaded SVG paths through the model, with optional Divergence.',
           up: 'Slices by model-space height to create familiar topographic contours.',
           cam: 'Slices along the current viewing direction, so orbiting the camera changes the contour field.',
           x: 'Slices across the model width using parallel model-space planes.',
@@ -23,6 +25,7 @@ export function SliceFieldControls() {
           curvature: 'Contours a normalized estimate of the mesh surface curvature.',
         }}
       >
+        <option value="svg">SVG paths</option>
         <option value="up">Height · topographic</option>
         <option value="cam">View depth · camera</option>
         <option value="x">Model width</option>
@@ -33,6 +36,74 @@ export function SliceFieldControls() {
         <option value="geodesic">Geodesic distance · mesh</option>
         <option value="curvature">Mesh curvature</option>
       </SelectControl>
+      <div id="svgSliceControls" hidden>
+        <label
+          className="dropzone"
+          id="svgSliceDrop"
+          tabIndex={0}
+          role="button"
+          aria-label="Upload SVG cutting paths"
+        >
+          <input
+            id="svgSliceFile"
+            type="file"
+            accept=".svg,image/svg+xml"
+            aria-label="SVG cutting paths"
+          />
+          <span className="drop-icon">
+            <FileUp size={18} />
+          </span>
+          <strong>Drop an SVG here</strong>
+          <em>or click to browse · SVG paths</em>
+        </label>
+        <p id="svgSliceStatus" className="gradient-note" role="status" aria-live="polite">
+          Upload a logo or line drawing. Text must be converted to paths.
+        </p>
+        <ValueControl
+          id="svgSliceScale"
+          label="Logo scale"
+          min="1"
+          max="300"
+          step="1"
+          value="100"
+          unit="%"
+          morphable={false}
+        />
+        <ValueControl
+          id="svgSliceX"
+          label="Logo X"
+          min="-200"
+          max="200"
+          step="1"
+          value="0"
+          unit="% radius"
+          morphable={false}
+        />
+        <ValueControl
+          id="svgSliceY"
+          label="Logo Y"
+          min="-200"
+          max="200"
+          step="1"
+          value="0"
+          unit="% radius"
+          morphable={false}
+        />
+        <ValueControl
+          id="svgSliceRotation"
+          label="Logo rotation"
+          min="-180"
+          max="180"
+          step="1"
+          value="0"
+          unit="°"
+          morphable={false}
+        />
+        <p className="gradient-note">
+          Paths extend through the model. Divergence widens them from the near side along the
+          cutting direction.
+        </p>
+      </div>
       <div className="custom-axis" id="customAxis" hidden>
         <ValueControl id="cutAz" label="Azimuth" min="-180" max="180" step="1" value="0" unit="°" />
         <ValueControl
