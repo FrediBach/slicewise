@@ -391,3 +391,22 @@ describe('parameter snapshot migrations', () => {
     });
   });
 });
+
+it('migrates map amounts with explicit zeros and finite bounded defaults', () => {
+  const stored = snapshot({
+    mapBuildings: 0,
+    mapRivers: 999,
+    mapLabels: NaN,
+    mapSeed: -10,
+    mapTextScale: undefined,
+  });
+  const restored = normalizeParameterSnapshot(stored);
+  expect(restored).toMatchObject({
+    mapBuildings: 0,
+    mapRivers: 6,
+    mapLabels: 6,
+    mapSeed: 0,
+    mapTextScale: 100,
+  });
+  expect(stored.mapRivers).toBe(999);
+});

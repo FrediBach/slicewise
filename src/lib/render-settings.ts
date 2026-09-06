@@ -1,3 +1,4 @@
+import { MAP_CONTROLS } from './map-settings';
 import { type ContourSettings } from './contour-engine';
 
 type RuntimeOnlySetting =
@@ -171,6 +172,7 @@ export const renderSettingKeys = [
   'blueprint',
   'blueprintStyle',
   'topographicMap',
+  ...MAP_CONTROLS.map(({ id }) => id),
   'vectorZoom1Enabled',
   'vectorZoom1Shape',
   'vectorZoom1CenterX',

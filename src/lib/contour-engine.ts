@@ -1,5 +1,7 @@
 'use strict';
 
+import { resolveMapSettings, type MapSettings } from './map-settings';
+
 import { clipRunToRect } from './toolpaths';
 import {
   applyBlockGlitch,
@@ -104,6 +106,7 @@ export interface LineIndexColor {
 
 export interface ContourSettings
   extends
+    Partial<MapSettings>,
     BlockGlitchSettings,
     ScanBandGlitchSettings,
     StaggeredSliceSettings,
@@ -211,6 +214,7 @@ export interface ContourSettings
   blueprint: boolean;
   blueprintStyle: string;
   topographicMap: boolean;
+
   documentTitle: string;
   morphEnabled: boolean;
   morphSteps: number;
@@ -2524,6 +2528,7 @@ function computeLineArtInstance(
         color: effectiveAnnotationColor(settings),
         backgroundColor: effectivePaperColor(settings),
         title: settings.documentTitle,
+        map: settings,
       })
     : null;
   if (mapAnnotations) {
@@ -2848,14 +2853,18 @@ function computeContourInstance(
   const gradient = gradientPalette(settings);
   const { palette, indexedPalette } = colorPlan(settings, N);
   const toneBandCount = settings.halftone ? 12 : 1;
+  const mapIndexEvery = resolveMapSettings(settings).mapIndexEvery;
   const mapIndex =
     settings.topographicMap &&
+    mapIndexEvery > 0 &&
     !settings.spiral &&
     (!settings.lineWeightMode || settings.lineWeightMode === 'uniform');
   const lineWeightMode = mapIndex ? 'index' : settings.lineWeightMode || 'uniform';
   const weightBandCount = lineWeightMode === 'uniform' ? 1 : lineWeightMode === 'index' ? 2 : 8;
   const weightValue = (position: number, index: number): number => {
-    const interval = mapIndex ? 5 : clamp(Math.round(settings.lineWeightInterval || 5), 2, 20);
+    const interval = mapIndex
+      ? Math.max(1, mapIndexEvery)
+      : clamp(Math.round(settings.lineWeightInterval || 5), 2, 20);
     if (lineWeightMode === 'index') return (index + 1) % interval === 0 ? 1 : 0;
     if (lineWeightMode === 'wave')
       return 0.5 - 0.5 * Math.cos(((index + 1) / interval) * Math.PI * 2);
@@ -2977,7 +2986,10 @@ function computeContourInstance(
           0,
           outputWorldPoints,
         );
-      if (settings.topographicMap && (!mapIndex || (sliceIndex + 1) % 5 === 0))
+      if (
+        settings.topographicMap &&
+        (!mapIndex || (sliceIndex + 1) % Math.max(1, mapIndexEvery) === 0)
+      )
         for (const run of projectedRuns) contourLevels.set(run, position);
       out[band][tone][weight].push(...projectedRuns);
       if (!quick) features.push(measureContourSlice(sliceIndex, position, projectedRuns));
@@ -3120,6 +3132,7 @@ function computeContourInstance(
         color: effectiveAnnotationColor(settings),
         backgroundColor: effectivePaperColor(settings),
         title: settings.documentTitle,
+        map: settings,
       })
     : null;
   if (mapAnnotations) {

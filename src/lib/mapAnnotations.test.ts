@@ -10,6 +10,7 @@ const options = {
   color: '#000000',
   backgroundColor: '#ffffff',
   title: 'terrain',
+  map: { mapBuildings: 0, mapLandmarks: 0, mapRoads: 0, mapRivers: 0, mapLakes: 0, mapWoodland: 0 },
 };
 const runs = [
   [10, 20, 60, 20, 110, 20],
@@ -73,4 +74,17 @@ describe('map annotations', () => {
           ).toBe(false);
     }
   });
+});
+
+it('subtracts overlapping corridors as a union and retains untouched runs', () => {
+  const masks = [
+    { x: 4, y: 2, width: 6, height: 6, angle: 0, padding: 0 },
+    { x: 8, y: 2, width: 6, height: 6, angle: 0, padding: 0 },
+  ];
+  expect(clearMapLabelGaps([0, 5, 8, 5, 20, 5], masks)).toEqual([
+    [0, 5, 4, 5],
+    [14, 5, 20, 5],
+  ]);
+  expect(clearMapLabelGaps([0, 0, 20, 0], masks)).toEqual([[0, 0, 20, 0]]);
+  expect(clearMapLabelGaps([5, 5, 7, 5], masks)).toEqual([]);
 });

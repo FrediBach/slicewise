@@ -1,3 +1,4 @@
+import { MAP_DEFAULTS } from '../../lib/map-settings';
 import { sphereDemo } from '../../lib/demo-meshes';
 import { vertexNormals, weld } from '../../lib/mesh';
 
@@ -136,6 +137,7 @@ export const contourSettings = {
   blueprint: false,
   blueprintStyle: 'blue',
   topographicMap: false,
+  ...MAP_DEFAULTS,
   kaleidoscope: false,
   kaleidoscopeSegments: 6,
   kaleidoscopeRotation: 0,

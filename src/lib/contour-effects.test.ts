@@ -769,7 +769,7 @@ describe('contour output effects', () => {
 
     expect(first.svg).toBe(second.svg);
     expect(first.svg).toContain('id="topographic-annotations"');
-    expect(first.svg).toMatch(/data-locations="[A-Z,]+"/);
+    expect(first.svg).toMatch(/data-locations="[A-Z ,]+"/);
     expect(first.svg).toMatch(/data-altitudes="[0-9,]+"/);
     expect(first.svg).toContain('data-map-label=');
     expect(first.svg).toContain('data-elevation-units="illustrative-metres"');

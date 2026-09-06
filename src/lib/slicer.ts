@@ -1,4 +1,6 @@
 'use strict';
+
+import { MAP_CONTROLS, MAP_DEFAULTS } from './map-settings';
 import { createColorGradient, createColorPair } from './colorPair';
 import { contourTrackPoint, type ContourSequenceSource } from './contour-features';
 import {
@@ -488,6 +490,7 @@ const state: AppState = {
   blueprint: false,
   blueprintStyle: 'blue',
   topographicMap: false,
+  ...MAP_DEFAULTS,
   morphEnabled: false,
   morphSteps: 4,
   morphTargets: {},
@@ -1357,6 +1360,7 @@ if (typeof document !== 'undefined') {
   bindPair('misregistrationCopies', 'misregistrationCopies', syncMisregistrationControls);
   bindPair('misregistrationOffset', 'misregistrationOffset');
   bindPair('misregistrationRotation', 'misregistrationRotation');
+  for (const { id } of MAP_CONTROLS) bindPair(id, id);
   bindPair('halftoneSize', 'halftoneSize');
   bindPair('halftoneContrast', 'halftoneContrast');
   bindPair('halftoneCycles', 'halftoneCycles');
@@ -2290,6 +2294,16 @@ if (typeof document !== 'undefined') {
       $(id + 'Control').classList.toggle('is-disabled', !state.yarnCurl);
     }
   }
+  function syncMapControls(): void {
+    for (const { id } of MAP_CONTROLS) {
+      setControlPairDisabled(
+        id,
+        !state.topographicMap,
+        'Turn on Topographic map to edit this parameter.',
+      );
+      $(id + 'Control').classList.toggle('is-disabled', !state.topographicMap);
+    }
+  }
   function syncBlueprintControls(): void {
     setSingleControlDisabled(
       'blueprintStyle',
@@ -2460,10 +2474,12 @@ if (typeof document !== 'undefined') {
   $('blueprint').addEventListener('change', (e) => {
     state.blueprint = inputTarget(e).checked;
     syncBlueprintControls();
+    syncMapControls();
     redraw(false);
   });
   $('topographicMap').addEventListener('change', (e) => {
     state.topographicMap = inputTarget(e).checked;
+    syncMapControls();
     redraw(false);
   });
   $('blueprintStyle').addEventListener('change', (e) => {
@@ -2886,6 +2902,7 @@ if (typeof document !== 'undefined') {
     ['maskLfo2Cycles', 'maskLfo2Cycles'],
     ['maskLfo2Phase', 'maskLfo2Phase'],
     ['maskLfo2Waveform', 'maskLfo2Waveform'],
+    ...MAP_CONTROLS.map(({ id }) => [id, id] as const),
     ['halftoneSize', 'halftoneSize'],
     ['halftoneContrast', 'halftoneContrast'],
     ['halftoneCycles', 'halftoneCycles'],
@@ -3042,6 +3059,7 @@ if (typeof document !== 'undefined') {
     syncHumanizerControls();
     syncYarnCurlControls();
     syncBlueprintControls();
+    syncMapControls();
     syncMorphControls();
     const morphTargetsById: Record<string, string | number> = {},
       morphTargets2ById: Record<string, string | number> = {};
@@ -3573,6 +3591,11 @@ if (typeof document !== 'undefined') {
     }
     syncBlueprintControls();
     $('topographicMap').checked = state.topographicMap;
+    for (const { id, min, max, value } of MAP_CONTROLS)
+      randomizePair(id, id, () =>
+        randomInt(min, id === 'mapSeed' ? max : Math.min(max, Math.max(value * 2, min))),
+      );
+    syncMapControls();
 
     if (state.source === 'hyperbolic-tiling') buildHyperbolicTiling();
     else redraw(false);

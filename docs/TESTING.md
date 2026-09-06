@@ -90,6 +90,8 @@ Coverage currently measures the focused core under active test:
 - `generative-terrain.ts`
 - `hyperbolic-tiling.ts`
 - `mapAnnotations.ts`
+- `map-features.ts`
+- `map-settings.ts`
 - `mesh.ts`
 - `mesh-curvature.ts`
 - `mesh-geodesics.ts`
@@ -137,3 +139,5 @@ Prefer moving one cohesive pipeline stage at a time. Avoid tests that duplicate 
 The HTML report is generated under `coverage/` and is ignored by Git.
 
 `generative-terrain.test.ts` verifies deterministic height fields, square boundaries without a base, winding/normals, independent parameter effects, and terrain contour integration. `terrain-runtime.test.tsx` exercises source switching, slider/number synchronization, queued generation, and stale worker replies. `mapAnnotations.test.ts` covers scalar-level labels, collision rejection, rotated plotter gaps, and decorative line-art fallback.
+
+`map-features.test.ts` verifies layer isolation, zero/count controls, deterministic density prefixes, footprint bounds, scale, and SVG/plotter geometry. `map-runtime.test.tsx` covers effect enablement, slider/number bindings, worker settings, undo, and redo. Map snapshot migrations preserve zeros and sanitize invalid counts.

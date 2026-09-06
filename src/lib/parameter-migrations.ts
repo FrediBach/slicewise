@@ -1,3 +1,4 @@
+import { resolveMapSettings } from './map-settings';
 import { type ContourSettings } from './contour-engine';
 import { HYPERBOLIC_TILING_DEFAULTS, isHyperbolicPair } from './hyperbolic-tiling';
 
@@ -24,6 +25,7 @@ const projectionWarpModes = [
 /** Normalize old or incomplete saved settings without mutating stored data. */
 export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSettings {
   const restored = structuredClone(snapshot);
+  Object.assign(restored, resolveMapSettings(snapshot));
   const values = restored as unknown as Record<string, unknown>;
 
   for (let index = 1; index <= 4; index++) {

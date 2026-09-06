@@ -1,3 +1,4 @@
+import { TopographicMapControls } from './TopographicMapControls';
 import { Checkbox, FieldGroup, SelectControl, ValueControl } from '../../controls/FormControls';
 import { Section } from '../../ui/section';
 import { GlitchControls } from './GlitchControls';
@@ -7,23 +8,6 @@ import { StaggeredSliceControls } from './StaggeredSliceControls';
 import { TileShuffleControls } from './TileShuffleControls';
 import { VectorZoomControls } from './VectorZoomControls';
 import { WraparoundTearControls } from './WraparoundTearControls';
-
-function TopographicMapControl() {
-  return (
-    <>
-      <Checkbox id="topographicMap" randomizable>
-        Topographic map
-      </Checkbox>
-      <div className="effect-controls">
-        <p className="gradient-note blueprint-note">
-          Adds index contours, inline elevation labels and spaced place markers. Lettering and label
-          gaps are drawn identically in SVG and plotter output. Elevations are illustrative metres
-          based on contour levels, not surveyed heights.
-        </p>
-      </div>
-    </>
-  );
-}
 
 export function EffectsPanel() {
   return (
@@ -209,7 +193,7 @@ export function EffectsPanel() {
             block to the SVG.
           </p>
         </div>
-        <TopographicMapControl />
+        <TopographicMapControls />
       </FieldGroup>
     </Section>
   );
