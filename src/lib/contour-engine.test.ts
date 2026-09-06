@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
+import { torusKnot } from './demo-meshes';
+import { vertexNormals, weld } from './mesh';
+import { sharpVertices } from './polyline-styling';
 import { computeContours } from './contour-engine';
 import { generateGCode } from './gcode';
 import { generateHyperbolicTiling } from './hyperbolic-tiling';
@@ -51,6 +54,31 @@ describe('computeContours', () => {
         ].every(Number.isFinite),
       ),
     ).toBe(true);
+  });
+
+  it('rounds the sparse top torus-knot slices without densifying the mesh', () => {
+    const base = weld(torusKnot());
+    const mesh = { ...base, N: vertexNormals(base.V, base.T) };
+    const settings = {
+      ...contourSettings,
+      el: 90,
+      lines: 40,
+      quality: 10,
+      hide: false,
+      sil: false,
+      lineIndexColorEnabled: true,
+      lineIndexColors: [{ index: 40, color: '#ff0000', series: 'single' as const, reverse: false }],
+    };
+    const result = computeContours(mesh, settings, false);
+    const top = result.toolpaths.find((group) => group.color === '#ff0000')!;
+    expect(top.runs.length).toBeGreaterThan(0);
+    for (const run of top.runs) {
+      expect(run.slice(-2)).toEqual(run.slice(0, 2));
+      expect(Array.from(sharpVertices(run)).some(Boolean)).toBe(false);
+    }
+    expect(result.svg).not.toMatch(/NaN|Infinity/);
+    expect(mesh.V).toBe(base.V);
+    expect(mesh.T).toBe(base.T);
   });
 
   it('keeps quick previews lightweight and out of export toolpaths', () => {

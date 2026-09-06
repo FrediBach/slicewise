@@ -73,6 +73,7 @@ Coverage currently measures the focused core under active test:
 - `block-glitch.ts`
 - `colorPair.ts`
 - `contour-engine.ts`
+- `contour-refinement.ts`
 - `contour-features.ts`
 - `contour-sequence.ts`
 - `demo-meshes/index.ts`
@@ -146,3 +147,5 @@ The HTML report is generated under `coverage/` and is ignored by Git.
 `terrain-routes.test.ts` verifies strictly downhill valley drainage, accumulated tributaries, stopping in depressions, road detours through passes, rejection of impassable cliffs, exact terrain sampling after welding, and model-space route projection. Terrain runtime tests verify transfer of the source capability and route control availability across up-axis changes.
 
 `contour-weave.test.ts` covers thread geometry on source triangles, separate overlapping folds, material-index patterns and phase, complementary cut fragments, gap protection, surface ribbons, density/orientation/twist, cached geometry, migration of obsolete copy transforms, common projection/visibility, mesh-only operation, colour morphs, and protected pen grouping. `contour-weave-runtime.test.tsx` covers the new fabric controls, disabled superseded slice settings, worker snapshots, undo/redo, numeric/colour morph targets, and randomization locks. G-code tests verify that travel optimization preserves physical weave gaps.
+
+`contour-refinement.test.ts` covers sparse closed-loop accuracy, slice-plane and endpoint preservation, deterministic output, straight/degenerate fallbacks, S bends, and bounded subdivision. The contour-engine regression checks that the top torus-knot slices remain closed without false sharp corners; scalar-field tests preserve authored faces and quality-one intersections.

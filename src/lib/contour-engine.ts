@@ -1,5 +1,6 @@
 'use strict';
 
+import { refineContourSegments } from './contour-refinement';
 import { createSurfaceWeave } from './contour-weave';
 import {
   WEAVE_CONTROLS,
@@ -283,6 +284,8 @@ interface CachedSlice {
 export interface ScalarFieldLevelOptions {
   curveStrength?: number;
   rootIterations?: number;
+  /** Model-space chord tolerance for normal-guided planar contour spans. */
+  curveTolerance?: number;
   adaptiveDepth?: number;
 }
 
@@ -408,6 +411,9 @@ export function extractScalarFieldLevel(
   const curveStrength = mesh.preserveSurface ? 0 : clamp(options.curveStrength ?? 0, 0, 1);
   const rootIterations = Math.round(clamp(options.rootIterations ?? 12, 1, 32));
   const adaptiveDepth = Math.round(clamp(options.adaptiveDepth ?? 0, 0, 5));
+  const curveTolerance = options.curveTolerance ?? 0;
+  const refinePlanar = curveTolerance > 0 && curveStrength > 0 && N && scalarDir && !scalarAtPoint;
+  const tangents: number[] = [];
   const idx = new Map<number, number>(); // edge key -> point index
   const pts: number[] = [],
     segs: number[] = [];
@@ -474,8 +480,19 @@ export function extractScalarFieldLevel(
       if (value > level === startAbove) lo = t;
       else hi = t;
     }
-    const p = sample((lo + hi) * 0.5);
+    t = (lo + hi) * 0.5;
+    const p = sample(t);
     pts.push(p[0], p[1], p[2]);
+    if (refinePlanar) {
+      const nx = N[ai] + (N[bi] - N[ai]) * t;
+      const ny = N[ai + 1] + (N[bi + 1] - N[ai + 1]) * t;
+      const nz = N[ai + 2] + (N[bi + 2] - N[ai + 2]) * t;
+      tangents.push(
+        scalarDir[1] * nz - scalarDir[2] * ny,
+        scalarDir[2] * nx - scalarDir[0] * nz,
+        scalarDir[0] * ny - scalarDir[1] * nx,
+      );
+    }
     idx.set(key, id);
     return id;
   };
@@ -627,6 +644,8 @@ export function extractScalarFieldLevel(
     }
     if (e1 !== e2) segs.push(e1, e2);
   }
+  if (refinePlanar)
+    return { pts, segs: refineContourSegments(pts, segs, tangents, curveStrength, curveTolerance) };
   return { pts, segs };
 }
 
@@ -954,6 +973,7 @@ function contourSlices(
     );
     const { pts, segs } = extractScalarFieldLevel(mesh, sliceField, level, {
       curveStrength,
+      curveTolerance: 0.0006 * Math.pow(0.72, curveStrength * 9),
       rootIterations: 6 + Math.round(clamp(curveStrength, 0, 1) * 18),
       adaptiveDepth: sliceField.evaluate ? adaptiveDepth : 0,
     });

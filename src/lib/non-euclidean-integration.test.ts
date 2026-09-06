@@ -92,7 +92,8 @@ const hardeningSettings = {
   tileShuffleSeed: 17,
   sampleAndHold: true,
   sampleAndHoldAxis: 'x',
-  sampleAndHoldSpacing: 12,
+  // Retain enough samples for map-label candidates after the combined cuts.
+  sampleAndHoldSpacing: 3,
   sampleAndHoldLength: 3,
   sampleAndHoldMix: 55,
   misregistration: false,

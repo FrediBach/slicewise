@@ -141,10 +141,10 @@ At the Klein ↔ Poincaré 100% endpoint the disk-model relation is `p = k / (1 
 
 ### Density and finish
 
-| Parameter (ID)            | Type and default       | What it does                                                                                                                                                                                                                  |
-| ------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Line count (`lines`)      | Integer; **40**; 1–200 | Sets the number of slice levels. In spiral mode it sets the number of turns in the helicoidal slicing field. Higher values increase density and render cost.                                                                  |
-| Curve quality (`quality`) | Integer; **7**; 1–10   | Controls curved interpolation and path simplification. A higher value more strongly follows mesh vertex normals, uses a tighter simplification tolerance, and emits more detailed paths. At 1, contour spans remain straight. |
+| Parameter (ID)            | Type and default       | What it does                                                                                                                                                                                                                                                                                                                         |
+| ------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Line count (`lines`)      | Integer; **40**; 1–200 | Sets the number of slice levels. In spiral mode it sets the number of turns in the helicoidal slicing field. Higher values increase density and render cost.                                                                                                                                                                         |
+| Curve quality (`quality`) | Integer; **7**; 1–10   | Controls curved interpolation and path simplification. A higher value more strongly follows mesh vertex normals, uses a tighter simplification tolerance, and emits more detailed paths. Sparse bends in planar slices are adaptively rounded using those normals, including small closed caps. At 1, contour spans remain straight. |
 
 ### Line spacing
 

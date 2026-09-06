@@ -336,6 +336,34 @@ describe('scalar fields', () => {
     expect(scalarFieldCompatibility(intrinsic).gapEasing).toBe(true);
   });
 
+  it('keeps authored planar faces and quality-one intersections unchanged by refinement', () => {
+    const surface = {
+      V: new Float32Array([0, 0, -1, 1, 0, 1, 0, 1, 1]),
+      T: new Uint32Array([0, 1, 2]),
+      N: new Float32Array([0, 0, 1, 1, 0, 0, 0, 1, 0]),
+    };
+    const field = createPlanarScalarField(surface, { axis: 'up', cutAz: 0, cutEl: 90 });
+    const straight = extractScalarFieldLevel(surface, field, 0);
+    expect(
+      extractScalarFieldLevel(surface, field, 0, {
+        curveStrength: 0,
+        curveTolerance: 0.00001,
+      }),
+    ).toEqual(straight);
+    expect(
+      extractScalarFieldLevel({ ...surface, preserveSurface: true }, field, 0, {
+        curveStrength: 1,
+        curveTolerance: 0.00001,
+      }),
+    ).toEqual(straight);
+    expect(
+      extractScalarFieldLevel({ ...surface, N: undefined }, field, 0, {
+        curveStrength: 1,
+        curveTolerance: 0.00001,
+      }),
+    ).toEqual(straight);
+  });
+
   it('extracts stable finite contours from a synthetic nonlinear field', () => {
     const nonlinearMesh = {
       V: new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0, 0, 0, 0]),
