@@ -162,14 +162,38 @@ export function createContourFeasibilityFixtures(module: ManifoldToplevel) {
   }));
 }
 
+/** Target-scale workload: about 100k faces, 100 mm height, 24 non-polar cuts.
+ * Analytic generation is outside the preparation timer; no mesh simplification. */
+export function createScaleFeasibilityFixtures(module: ManifoldToplevel) {
+  const sphere = module.Manifold.sphere(50, 448);
+  try {
+    if (sphere.status() !== 'NoError') throw new Error('Invalid scale fixture.');
+    const mesh = sphere.getMesh();
+    return [
+      {
+        name: 'dense-sphere-24-slices',
+        base: { V: mesh.vertProperties.slice(), T: mesh.triVerts.slice() },
+        field: {
+          kind: 'planar',
+          normal: [0, 0, 1],
+          levels: Array.from({ length: 24 }, (_, i) => -46.7 + i * 4),
+        } as PlanarSliceField,
+      },
+    ];
+  } finally {
+    sphere.delete();
+  }
+}
+
 export function runFeasibility(
   module: ManifoldToplevel,
   repeats = 1,
-  suite: 'analytic' | 'contours' = 'analytic',
+  suite: 'analytic' | 'contours' | 'scale' = 'analytic',
 ) {
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20)
     throw new Error('Choose 1–20 feasibility repetitions.');
-  if (suite === 'contours') return runContourFeasibility(module, repeats);
+  if (suite === 'contours' || suite === 'scale')
+    return runContourFeasibility(module, repeats, suite);
   if (suite !== 'analytic') throw new Error('Unknown feasibility suite.');
   const kernel = createSolidKernel(module);
   const fixtures = createFeasibilityFixtures(module);
@@ -208,19 +232,51 @@ export function runFeasibility(
   return rows;
 }
 
-function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
+function runContourFeasibility(
+  module: ManifoldToplevel,
+  repeats: number,
+  suite: 'contours' | 'scale',
+) {
   const kernel = createSolidKernel(module);
-  const fixtures = createContourFeasibilityFixtures(module);
+  const fixtures =
+    suite === 'scale'
+      ? createScaleFeasibilityFixtures(module)
+      : createContourFeasibilityFixtures(module);
   const rows = [];
   for (let repetition = 0; repetition < repeats; repetition++) {
     for (const fixture of fixtures) {
       const start = performance.now();
+      const workload = { suite, field: fixture.field, radiusMm: 0.6 };
+      let stage = 'source-audit';
+      const progress: Record<string, number> = {
+        sourceTriangles: fixture.base.T.length / 3,
+        requestedSlices: fixture.field.levels.length,
+      };
       try {
+        if (suite === 'scale') {
+          kernel.run(fixture.base, [], 'off');
+          progress.sourceAuditMs = performance.now() - start;
+        }
+        stage = 'extraction';
+        const extractionStart = performance.now();
         const geometry = extractPlanarSlices(fixture.base, fixture.field, 0);
+        const extractionMs = performance.now() - extractionStart;
+        progress.extractionMs = extractionMs;
+        progress.contourRuns = geometry.slices.reduce(
+          (sum, slice) => sum + slice.runOffsets.length - 1,
+          0,
+        );
+        progress.contourVertices = geometry.slices.reduce(
+          (sum, slice) => sum + slice.points.length / 3,
+          0,
+        );
+        stage = 'recipe';
+        const toolStart = performance.now();
         const recipe = createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0.6);
-        const extractionMs = performance.now() - start;
+        stage = 'tool-construction';
         const tools = kernel.createRoundedTools(recipe);
-        const toolConstructionMs = performance.now() - start - extractionMs;
+        const toolConstructionMs = performance.now() - toolStart;
+        progress.toolConstructionMs = toolConstructionMs;
         for (const operation of ['inset', 'emboss'] as const) {
           const operationStart = performance.now();
           try {
@@ -236,6 +292,8 @@ function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
               status: result.topology.status,
               topology: topologySummary(result.topology),
               inputWarnings: inputWarnings(result.inputTopology),
+              ...workload,
+              ...progress,
               extractionMs,
               toolConstructionMs,
               booleanMs: performance.now() - operationStart,
@@ -252,6 +310,10 @@ function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
               repetition,
               fixture: fixture.name,
               operation,
+              ...workload,
+              ...progress,
+              failedStage: 'boolean-and-output-audit',
+              elapsedMs: performance.now() - operationStart,
               ...failureSummary(error),
               liveHandles: kernel.liveHandles,
             });
@@ -261,6 +323,10 @@ function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
         rows.push({
           repetition,
           fixture: fixture.name,
+          ...workload,
+          ...progress,
+          failedStage: stage,
+          elapsedMs: performance.now() - start,
           ...failureSummary(error),
           liveHandles: kernel.liveHandles,
         });

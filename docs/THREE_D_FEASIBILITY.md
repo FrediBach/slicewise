@@ -201,12 +201,23 @@ The manufacturing screen now reports bed-band contact separately for every mater
 
 Regressions cover a placed body beside a floating body, cavities, nested material islands in reordered shell buffers, and original face identification. No production controls or defaults change. A single contour benchmark repetition retained 11 accepted results and the known torus Emboss rejection, with zero adapter-owned handles left. Accepted rows serialize the new per-body records; their centered fixtures still carry below-bed advisories even where sloping faces cross the bed band.
 
+## Target-scale workload follow-up
+
+The CLI now accepts `npm run bench:3d -- 3 scale`. This generates a deterministic 100 mm diameter sphere with 100,352 triangles and requests 24 Z-plane contours from −46.7 to 45.3 mm at 4 mm spacing, with the existing 0.6 mm circular tool radius. Fixture generation is outside preparation timing. The scale suite first audits the exact untreated source, then attempts extraction, recipe generation, tool construction and both Boolean operations. It preserves the declared workload, completed-stage measurements, failing stage, elapsed time, structured geometry diagnostics and live handle count on rejection. Existing contour failures also retain completed extraction/tool measurements rather than losing that context. Extraction timing now covers extraction alone; tool-construction timing includes recipe generation (previously included in extraction timing).
+
+This is a target-sized smooth-surface workload, not representative coverage of imported or deformed models. It does not yet test independent groove width/depth, browser cancellation, GPU usage or lower-memory hardware. The scale suite is CLI-only; the browser trial buttons retain their existing workloads.
+
+The current source exhausts the surface-intersection auditor's five-million-visit budget before slicing. No contacts are detected within that budget, but completion is false and the source remains rejected. No treatment or manufacturing time is reported for an operation that never ran. The ten-second final-preparation target is therefore **not met**: an early bounded rejection is not successful preparation. Improving broad-phase intersection work is a prerequisite to measuring this workload's sweep and Boolean costs; raising budgets or skipping validation is not part of this change.
+
+On Apple M3 Max / arm64 / Darwin 24.6.0 with Node v25.5.0 and Manifold 3.5.3, three sequential repetitions rejected at source audit in 791.15, 774.64 and 765.20 ms, each with zero adapter-owned handles remaining. Process peak RSS was 446,176 KiB across the run (Vite, JS and WASM combined, not peak WASM alone). The existing contour suite retained 11 accepted results and the known torus Emboss rejection.
+
 ## Reproduce
 
 ```bash
 npm run test:3d
 npm run bench:3d -- 20
 npm run bench:3d -- 5 contours
+npm run bench:3d -- 3 scale
 npm run build:3d
 npm run dev
 ```
@@ -223,4 +234,4 @@ The browser automation bridge was unavailable during both implementation session
 2. Extend the initial twisted/bent/cavity and degenerate-cut regressions to thin walls, close folds, intersecting tools, generated tunnel sources and representative rejected-source statistics.
 3. Extend thickness sampling with adaptive treatment-region coverage and extend per-body bed-contact screening with support/stability diagnostics, and expand shell/intersection numerical stress testing. Shell containment/orientation now has a bounded implementation. Adjacent and non-adjacent contacts now have a bounded conservative audit; exact/near-degenerate predicate robustness still needs broader stress testing. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output and the contour torus's Emboss overlaps through explicit, measured operations rather than silent repair.
 4. Verify browser cancellation/reinitialization, stale-job handling and source-buffer installation with realistic jobs. Measure peak WASM/JS/GPU memory and lower-memory devices. The internal page recreates its fixed fixtures; it is not the production source lifecycle.
-5. Benchmark representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).
+5. Resolve the target-scale source-audit budget blocker, then benchmark complete preparation on representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).
