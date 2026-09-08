@@ -1,12 +1,11 @@
 import type { ManifoldToplevel } from 'manifold-3d';
-import { deformMesh } from './mesh-deformation';
+import { ThreeDGeometryCache } from './three-d-cache';
 import { createSolidKernel } from './solid-kernel';
-import { extractPlanarSlices } from './slice-geometry';
+import type { extractPlanarSlices } from './slice-geometry';
 import { createRoundedTreatmentRecipe, RoundedToolBudgetError } from './slice-treatment';
 import { PrintTopologyError } from './print-validation';
 import { auditPrintManufacturing } from './print-manufacturing';
 import {
-  scaleThreeDSource,
   placeScaledThreeDSource,
   type ThreeDRequest,
   type ThreeDReply,
@@ -14,9 +13,9 @@ import {
 } from './three-d-project';
 import { threeDSliceField, threeDSliceOverlay } from './three-d-slices';
 
-export function previewThreeD(request: ThreeDRequest) {
+export function previewThreeD(request: ThreeDRequest, cache = new ThreeDGeometryCache()) {
   const { source, project, settings } = request;
-  const base = scaleThreeDSource(deformMesh(source.mesh, settings), source, project);
+  const base = cache.base(request);
   const artifact = placeScaledThreeDSource(base, project);
   const reply: ThreeDReply = {
     id: request.id,
@@ -26,7 +25,7 @@ export function previewThreeD(request: ThreeDRequest) {
   };
   let geometry: ReturnType<typeof extractPlanarSlices> | null = null;
   try {
-    geometry = extractPlanarSlices(base, threeDSliceField(base, settings, project), request.id);
+    geometry = cache.slices(base, threeDSliceField(base, settings, project), source.version);
     reply.slices = threeDSliceOverlay(geometry, project, artifact);
   } catch (error) {
     reply.slices = {
@@ -46,8 +45,9 @@ export function prepareThreeD(
   request: ThreeDRequest,
   module: ManifoldToplevel,
   progress: (message: string) => void = () => {},
+  cache = new ThreeDGeometryCache(),
 ): ThreeDReply {
-  const { base, reply, geometry } = previewThreeD(request);
+  const { base, reply, geometry } = previewThreeD(request, cache);
   const kernel = createSolidKernel(module);
   let approximation: ThreeDPreparation['approximation'] = null;
   try {

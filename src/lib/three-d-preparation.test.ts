@@ -3,6 +3,7 @@ import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { createThreeDProject, type ThreeDRequest } from './three-d-project';
 import { previewThreeD, prepareThreeD } from './three-d-preparation';
 import { threeDSliceField } from './three-d-slices';
+import { ThreeDGeometryCache } from './three-d-cache';
 import { easeLineGap } from './slice-spacing';
 let module: ManifoldToplevel;
 beforeAll(async () => {
@@ -109,5 +110,94 @@ describe('integrated 3D slice and treatment preparation', () => {
     r.settings.lines = 3;
     r.settings.divergence = 10;
     expect(previewThreeD(r).reply.slices?.error).toContain('Divergence');
+  });
+});
+
+describe('worker geometry cache', () => {
+  it('reuses exact geometry for placement and selection and survives reply transfer', () => {
+    const r = request();
+    const cache = new ThreeDGeometryCache();
+    const first = previewThreeD(r, cache);
+    const buffers = [
+      first.reply.artifact!.V.buffer,
+      first.reply.artifact!.T.buffer,
+      first.reply.slices!.positions.buffer,
+      first.reply.slices!.selected.buffer,
+    ];
+    structuredClone(first.reply, { transfer: buffers });
+    r.id++;
+    r.project.rotation = [0, 90, 0];
+    r.project.selection = { mode: 'every', step: 2, offset: 0 };
+    const next = previewThreeD(structuredClone(r), cache);
+    expect(next.base).toBe(first.base);
+    expect(next.geometry).toBe(first.geometry);
+    expect(next.reply.artifact!.dimensions).toEqual([80, 60, 40]);
+    expect(next.reply.slices!.selectedCount).toBe(2);
+    expect(next.reply.artifact!.T.length).toBe(36);
+    expect(cache.retainedBytes).toBeGreaterThan(0);
+    expect(next.reply).toEqual(previewThreeD(r).reply);
+    r.project.pathToleranceMm = 0.05;
+    const prepared = prepareThreeD(r, module, undefined, cache);
+    expect(prepared.preparation?.status).toBe('accepted');
+    expect(prepared).toEqual(prepareThreeD(r, module));
+    expect(previewThreeD(r, cache).geometry).toBe(first.geometry);
+  });
+
+  it('invalidates slices separately, and invalidates the base for size, shape and source edits', () => {
+    const r = request();
+    const cache = new ThreeDGeometryCache();
+    let previous = previewThreeD(r, cache);
+    r.settings.lines = 4;
+    let next = previewThreeD(r, cache);
+    expect(next.base).toBe(previous.base);
+    expect(next.geometry).not.toBe(previous.geometry);
+    previous = next;
+    r.settings.axis = 'spherical';
+    expect(previewThreeD(r, cache).reply.slices?.error).toContain('supports');
+    r.settings.axis = 'up';
+    for (const change of [
+      () => {
+        r.project.longestMm = 100;
+      },
+      () => {
+        r.settings.objectScaleX = 120;
+      },
+      () => {
+        r.source.version++;
+      },
+      () => {
+        r.source.mesh = {
+          ...r.source.mesh,
+          V: Float32Array.from(r.source.mesh.V, (v, i) => (i === 0 ? v + 0.5 : v)),
+        };
+      },
+    ]) {
+      change();
+      next = previewThreeD(r, cache);
+      expect(next.base).not.toBe(previous.base);
+      expect(next.reply).toEqual(previewThreeD(r).reply);
+      previous = next;
+    }
+    r.source.mesh.T = new Uint32Array();
+    expect(() => previewThreeD(r, cache)).toThrow('mesh surface');
+    expect(cache.retainedBytes).toBe(0);
+  });
+
+  it('bounds retained buffers and computes uncached results when the budget is too small', () => {
+    const r = request();
+    const cache = new ThreeDGeometryCache(1);
+    const first = previewThreeD(r, cache);
+    const second = previewThreeD(r, cache);
+    expect(second.base).not.toBe(first.base);
+    expect(second.geometry).not.toBe(first.geometry);
+    expect(second.reply).toEqual(first.reply);
+    expect(cache.retainedBytes).toBe(0);
+    const baseBytes = (r.source.mesh.V.length + r.source.mesh.T.length) * 12;
+    const baseOnly = new ThreeDGeometryCache(baseBytes);
+    const a = previewThreeD(r, baseOnly),
+      b = previewThreeD(r, baseOnly);
+    expect(b.base).toBe(a.base);
+    expect(b.geometry).not.toBe(a.geometry);
+    expect(baseOnly.retainedBytes).toBe(baseBytes);
   });
 });

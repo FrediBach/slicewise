@@ -1,5 +1,8 @@
+import { ThreeDGeometryCache } from './three-d-cache';
 import { previewThreeD, prepareThreeD } from './three-d-preparation';
 import type { ThreeDRequest, ThreeDReply } from './three-d-project';
+
+const geometryCache = new ThreeDGeometryCache();
 
 // Heavy WASM loads only for an explicit preparation action, from the local bundle.
 let kernelModule: Promise<import('manifold-3d').ManifoldToplevel> | null = null;
@@ -22,10 +25,14 @@ self.addEventListener('message', async (event: MessageEvent<ThreeDRequest>) => {
         module.setup();
         return module;
       });
-      reply = prepareThreeD(request, await kernelModule, (progress) =>
-        self.postMessage({ id, sourceVersion: source.version, progress } satisfies ThreeDReply),
+      reply = prepareThreeD(
+        request,
+        await kernelModule,
+        (progress) =>
+          self.postMessage({ id, sourceVersion: source.version, progress } satisfies ThreeDReply),
+        geometryCache,
       );
-    } else reply = previewThreeD(request).reply;
+    } else reply = previewThreeD(request, geometryCache).reply;
     const buffers = new Set<ArrayBuffer>();
     for (const artifact of [reply.artifact, reply.sourceArtifact])
       if (artifact) {
