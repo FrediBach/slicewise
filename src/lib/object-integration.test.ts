@@ -17,9 +17,16 @@ const object = {
   objectEnabled: true,
   objectScaleX: 125,
   objectTaperAmount: 20,
+  objectBulgeAmount: 30,
+  objectBulgeCenter: 40,
+  objectBulgeWidth: 90,
+  objectShearAmount: 20,
+  objectShearDirection: 35,
   objectTwistAngle: 45,
   objectBendAngle: 25,
   objectRotationY: 15,
+  objectRippleAmount: 5,
+  objectNoiseAmount: 3,
 };
 
 it.each([
@@ -103,17 +110,17 @@ it('deforms independently for each X/Y morph instance', () => {
     sil: false,
     morphEnabled: true,
     morphSteps: 2,
-    morphTargets: { objectTwistAngle: 90 },
+    morphTargets: { objectRippleAmount: -5 },
     morphSecondEnabled: true,
     morphStepsY: 2,
-    morphTargets2: { objectScaleX: 150 },
+    morphTargets2: { objectNoiseAmount: 6 },
   };
   const combined = computeContours(mesh, settings, false);
-  const expected = [125, 150].flatMap((objectScaleX) =>
-    [45, 90].flatMap((objectTwistAngle) =>
+  const expected = [3, 6].flatMap((objectNoiseAmount) =>
+    [5, -5].flatMap((objectRippleAmount) =>
       computeContours(
         mesh,
-        { ...settings, morphEnabled: false, objectScaleX, objectTwistAngle },
+        { ...settings, morphEnabled: false, objectNoiseAmount, objectRippleAmount },
         false,
       ).toolpaths.flatMap((group) => group.runs),
     ),
@@ -126,7 +133,7 @@ it('interpolates object parameters in animation and changes actual contour geome
   const descriptors = OBJECT_CONTROLS.map(({ id, min, max }) => ({
     controlId: id,
     settingKey: id,
-    kind: 'continuous' as const,
+    kind: id === 'objectNoiseSeed' ? ('seed' as const) : ('continuous' as const),
     min,
     max,
   }));
@@ -135,9 +142,28 @@ it('interpolates object parameters in animation and changes actual contour geome
   project = addAnimationKeyframe(project, 5000, 'end', descriptors);
   project = updateAnimationKeyframeValue(project, 'end', 'objectBendAngle', 60, descriptors);
   project = updateAnimationKeyframeValue(project, 'end', 'objectScaleZ', 160, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectBulgeAmount', -60, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectBulgeCenter', 80, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectBulgeWidth', 60, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectShearAmount', 80, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectShearDirection', 90, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectRippleAmount', 10, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectRipplePhase', 180, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectNoiseAmount', 8, descriptors);
+  project = updateAnimationKeyframeValue(project, 'end', 'objectNoiseSeed', 42, descriptors);
   const middle = evaluateAnimationSettings(project, 2500, descriptors);
+  expect(middle.objectRippleAmount).toBe(5);
+  expect(middle.objectRipplePhase).toBe(90);
+  expect(middle.objectNoiseAmount).toBe(4);
+  expect(middle.objectNoiseSeed).toBe(1);
+  expect(evaluateAnimationSettings(project, 5000, descriptors).objectNoiseSeed).toBe(42);
   expect(middle.objectBendAngle).toBe(30);
   expect(middle.objectScaleZ).toBe(130);
+  expect(middle.objectBulgeAmount).toBe(-30);
+  expect(middle.objectBulgeCenter).toBe(65);
+  expect(middle.objectBulgeWidth).toBe(80);
+  expect(middle.objectShearAmount).toBe(40);
+  expect(middle.objectShearDirection).toBe(45);
   const initial = computeContours(mesh, settings, false);
   const animated = computeContours(mesh, middle, false);
   expect(animated.toolpaths).not.toEqual(initial.toolpaths);

@@ -4,6 +4,7 @@ import {
   OBJECT_AXES,
   OBJECT_CONTROLS,
   OBJECT_DEFAULTS,
+  OBJECT_DESCRIPTION,
   OBJECT_GROUPS,
   objectHasTransform,
 } from './object-settings';
@@ -1401,7 +1402,14 @@ if (typeof document !== 'undefined') {
   bindPair('tileShuffleSeed', 'tileShuffleSeed');
   for (const { id } of WEAVE_CONTROLS) bindPair(id, id);
   for (const { id } of SLICE_RAY_CONTROLS) bindPair(id, id);
-  for (const { id } of OBJECT_CONTROLS) bindPair(id, id, syncMapControls);
+  for (const { id } of OBJECT_CONTROLS)
+    bindPair(id, id, () => {
+      if (id === 'objectNoiseSeed') {
+        state.objectNoiseSeed = Math.round(state.objectNoiseSeed);
+        $(id).value = $(id + 'N').value = String(state.objectNoiseSeed);
+      }
+      syncMapControls();
+    });
   bindPair('sampleAndHoldSpacing', 'sampleAndHoldSpacing');
   bindPair('sampleAndHoldLength', 'sampleAndHoldLength');
   bindPair('sampleAndHoldMix', 'sampleAndHoldMix');
@@ -2105,20 +2113,15 @@ if (typeof document !== 'undefined') {
       setControlPairDisabled(id, disabled, reason);
       $(id + 'Control').classList.toggle('is-disabled', disabled);
     }
-    for (const id of OBJECT_AXES) {
-      const group =
-        id === 'objectTaperAxis'
-          ? 'objectTaper'
-          : id === 'objectTwistAxis'
-            ? 'objectTwist'
-            : 'objectBend';
-      setSingleControlDisabled(id, !active || !state[group], reason);
-      $(id)
+    for (const { id: group, axis } of OBJECT_GROUPS) {
+      if (!axis) continue;
+      setSingleControlDisabled(axis, !active || !state[group], reason);
+      $(axis)
         .closest('.control-row')
         ?.classList.toggle('is-disabled', !active || !state[group]);
     }
     $('objectStatus').textContent = supported
-      ? 'Stretch → taper → twist → bend → rotate. Axes follow the source model; rotation positions the reshaped object relative to the cutting field.'
+      ? OBJECT_DESCRIPTION
       : 'Object transformations require a triangle mesh. Settings are retained for the next mesh source.';
     syncMapControls();
   }
@@ -3580,7 +3583,17 @@ if (typeof document !== 'undefined') {
     for (const id of OBJECT_AXES) randomizeSelect(id, id, ['x', 'y', 'z']);
     for (const { id, min, max, value } of OBJECT_CONTROLS)
       randomizePair(id, id, () =>
-        value === 100 ? randomInt(70, 140) : randomInt(Math.max(min, -60), Math.min(max, 60)),
+        id === 'objectNoiseSeed'
+          ? randomInt(0, 9999)
+          : id === 'objectRippleAmount'
+            ? randomInt(-10, 10)
+            : id === 'objectNoiseAmount'
+              ? randomInt(0, 10)
+              : id === 'objectBulgeCenter'
+                ? randomInt(25, 75)
+                : value === 100
+                  ? randomInt(70, 140)
+                  : randomInt(Math.max(min, -60), Math.min(max, 60)),
       );
     syncObjectControls();
     randomizePair('az', 'az', () => randomInt(-180, 180));

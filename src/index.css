@@ -1460,6 +1460,10 @@ select {
 .button--outline:hover {
   color: white;
 }
+.button.object-reset-button {
+  width: auto;
+  padding-inline: 14px;
+}
 .button:disabled {
   border-color: #d4d7d2;
   background: #eceeeb;

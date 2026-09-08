@@ -77,11 +77,35 @@ it('binds object controls, history, snapshots, randomization, sources and animat
   change('objectEnabled', true);
   await settle();
   expect(input('objectScaleX')).not.toBeDisabled();
-  for (const { id } of OBJECT_CONTROLS) {
-    change(id + 'N', id.includes('Scale') ? '120' : '25');
+  for (const { id, min, max } of OBJECT_CONTROLS) {
+    const value = Math.max(min, Math.min(max, id.includes('Scale') ? 120 : 25));
+    change(id + 'N', String(value));
     await settle();
-    expect(input(id).value).toBe(id.includes('Scale') ? '120' : '25');
-    expect(latest()[id]).toBe(id.includes('Scale') ? 120 : 25);
+    expect(input(id).value).toBe(String(value));
+    expect(latest()[id]).toBe(value);
+  }
+  expect(input('objectNoiseSeed').step).toBe('1');
+  change('objectNoiseSeedN', '42.7');
+  await settle();
+  expect(latest().objectNoiseSeed).toBe(43);
+  expect(input('objectNoiseSeedN').value).toBe('43');
+  for (const [group, axis, amount, value] of [
+    ['objectBulge', 'objectBulgeAxis', 'objectBulgeAmount', 'x'],
+    ['objectShear', 'objectShearAxis', 'objectShearAmount', 'y'],
+    ['objectRipple', 'objectRippleAxis', 'objectRippleAmount', 'x'],
+  ]) {
+    change(axis, value);
+    await settle();
+    expect(latest()[axis]).toBe(value);
+    change(group, false);
+    await settle();
+    expect(input(axis)).toBeDisabled();
+    expect(input(amount)).toBeDisabled();
+    expect(latest()[amount]).toBe(amount === 'objectRippleAmount' ? 20 : 25);
+    input('undo').click();
+    await settle();
+    expect(input(axis)).not.toBeDisabled();
+    expect(input(amount)).not.toBeDisabled();
   }
   change('objectBendAxis', 'y');
   await settle();
@@ -105,18 +129,47 @@ it('binds object controls, history, snapshots, randomization, sources and animat
   );
   await settle();
   expect(latest().morphTargets.objectTwistAngle).toBe(90);
+  document.dispatchEvent(
+    new CustomEvent('morphchange', {
+      detail: { id: 'objectBulgeAmount', active: true, value: -50, dimension: 1 },
+    }),
+  );
+  document.dispatchEvent(
+    new CustomEvent('morphchange', {
+      detail: { id: 'objectShearAmount', active: true, value: 80, dimension: 2 },
+    }),
+  );
+  await settle();
+  for (const id of ['objectRipplePhase', 'objectNoiseAmount', 'objectNoiseSeed']) {
+    document.dispatchEvent(
+      new CustomEvent('morphchange', { detail: { id, active: true, value: 10, dimension: 1 } }),
+    );
+  }
+  await settle();
   const captured: { snapshot?: { parameters: ContourSettings; randomLocks: string[] } } = {};
   document.dispatchEvent(new CustomEvent('captureparametersnapshot', { detail: captured }));
   expect(captured.snapshot?.parameters.objectBendAxis).toBe('y');
+  expect(captured.snapshot?.parameters.objectBulgeAxis).toBe('x');
+  expect(captured.snapshot?.parameters.objectShearAxis).toBe('y');
+  expect(captured.snapshot?.parameters.morphTargets.objectBulgeAmount).toBe(-50);
+  expect(captured.snapshot?.parameters.morphTargets2.objectShearAmount).toBe(80);
   input('resetObject').click();
   await settle();
   expect(latest()).toMatchObject(OBJECT_DEFAULTS);
   expect(latest().morphTargets).not.toHaveProperty('objectTwistAngle');
+  expect(latest().morphTargets).not.toHaveProperty('objectBulgeAmount');
+  expect(latest().morphTargets2).not.toHaveProperty('objectShearAmount');
+  for (const id of ['objectRipplePhase', 'objectNoiseAmount', 'objectNoiseSeed'])
+    expect(latest().morphTargets).not.toHaveProperty(id);
   input('undo').click();
   await settle();
+  for (const id of ['objectRipplePhase', 'objectNoiseAmount', 'objectNoiseSeed'])
+    expect(latest().morphTargets[id]).toBe(10);
   expect(latest().objectEnabled).toBe(true);
   expect(latest().objectBendAxis).toBe('y');
   expect(latest().morphTargets.objectTwistAngle).toBe(90);
+  expect(latest().morphTargets.objectBulgeAmount).toBe(-50);
+  expect(latest().morphTargets2.objectShearAmount).toBe(80);
   document.dispatchEvent(new CustomEvent('applyparametersnapshot', { detail: captured.snapshot }));
   await settle();
   expect(latest().objectScaleX).toBe(120);
@@ -137,10 +190,14 @@ it('binds object controls, history, snapshots, randomization, sources and animat
   await settle();
   expect(input('objectEnabled')).toBeDisabled();
   expect(input('objectEnabled')).toBeChecked();
+  expect(input('objectBulgeAmount')).toBeDisabled();
+  expect(input('objectShearAxis')).toBeDisabled();
   change('demo', 'knot');
   await settle();
   expect(input('objectEnabled')).not.toBeDisabled();
   expect(input('objectTwistAngle')).not.toBeDisabled();
+  expect(input('objectBulgeAmount')).not.toBeDisabled();
+  expect(input('objectShearAxis')).not.toBeDisabled();
   expect(latest().objectTwistAngle).toBe(25);
   document.dispatchEvent(new CustomEvent('animationmodechange', { detail: { mode: 'animation' } }));
   await settle();
@@ -150,7 +207,14 @@ it('binds object controls, history, snapshots, randomization, sources and animat
   await settle();
   expect(latest().objectTwistAngle).toBe(75);
   expect(latest().morphEnabled).toBe(false);
+  change('objectBulgeAmountN', '-30');
+  change('objectShearAmountN', '80');
+  await settle();
+  expect(latest().objectBulgeAmount).toBe(-30);
+  expect(latest().objectShearAmount).toBe(80);
   document.dispatchEvent(new CustomEvent('animationmodechange', { detail: { mode: 'config' } }));
   await settle();
   expect(latest().objectTwistAngle).toBe(25);
+  expect(latest().objectBulgeAmount).toBe(25);
+  expect(latest().objectShearAmount).toBe(25);
 });

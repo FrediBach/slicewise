@@ -11,7 +11,7 @@ type Point = [number, number, number];
 type Surface = { V: Float32Array; T: Uint32Array };
 const radians = Math.PI / 180;
 const axisIndex = (axis: ObjectAxis): number => (axis === 'x' ? 0 : axis === 'y' ? 1 : 2);
-const refinedSources = new WeakMap<ContourMesh, Surface>();
+const refinedSources = new WeakMap<ContourMesh, Map<number, Surface>>();
 const variants = new WeakMap<ContourMesh, Map<string, ContourMesh>>();
 const MAX_REFINED_TRIANGLES = 250_000;
 const MAX_CACHE_BYTES = 64 * 1024 * 1024;
@@ -28,9 +28,14 @@ function bounds(V: ArrayLike<number>): { min: Point; span: Point } {
 }
 
 /** Split shared edges once. Green triangles keep neighbouring faces conforming. */
-function refineSource(mesh: ContourMesh): Surface {
-  const cached = refinedSources.get(mesh);
-  if (cached) return cached;
+function refineSource(mesh: ContourMesh, resolution: number): Surface {
+  let cache = refinedSources.get(mesh);
+  const cached = cache?.get(resolution);
+  if (cached) {
+    cache!.delete(resolution);
+    cache!.set(resolution, cached);
+    return cached;
+  }
   const { span } = bounds(mesh.V);
   const V = Array.from(mesh.V);
   let T = Array.from(mesh.T);
@@ -46,7 +51,7 @@ function refineSource(mesh: ContourMesh): Surface {
         const d = span[k] > 1e-9 ? (V[a * 3 + k] - V[b * 3 + k]) / span[k] : 0;
         length2 += d * d;
       }
-      if (length2 <= 1 / (16 * 16)) return;
+      if (length2 <= 1 / (resolution * resolution)) return;
       splits.set(key, V.length / 3);
       for (let k = 0; k < 3; k++) V.push((V[a * 3 + k] + V[b * 3 + k]) / 2);
     };
@@ -58,15 +63,28 @@ function refineSource(mesh: ContourMesh): Surface {
     if (!splits.size) {
       const result = { V: Float32Array.from(V), T: Uint32Array.from(T) };
       // Large meshes still render, but do not retain a second large source copy.
-      if (result.V.byteLength + result.T.byteLength <= MAX_CACHE_BYTES / 2)
-        refinedSources.set(mesh, result);
+      let bytes = result.V.byteLength + result.T.byteLength;
+      if (bytes <= MAX_CACHE_BYTES / 2) {
+        if (!cache) {
+          cache = new Map();
+          refinedSources.set(mesh, cache);
+        }
+        for (const surface of cache.values()) bytes += surface.V.byteLength + surface.T.byteLength;
+        cache.set(resolution, result);
+        while (bytes > MAX_CACHE_BYTES / 2 || cache.size > 3) {
+          const oldest = cache.keys().next().value!;
+          const surface = cache.get(oldest)!;
+          bytes -= surface.V.byteLength + surface.T.byteLength;
+          cache.delete(oldest);
+        }
+      }
       return result;
     }
     const next: number[] = [];
     const triangle = (a: number, b: number, c: number): void => {
       if (next.length / 3 >= budget)
         throw new Error(
-          'Object deformation needs too many triangles. Simplify the source mesh or disable twist, taper and bend.',
+          'Object deformation needs too many triangles. Simplify the source mesh, increase the bulge width, ripple wavelength, or organic feature size, or disable nonlinear object transformations.',
         );
       next.push(a, b, c);
     };
@@ -124,6 +142,35 @@ function rotate(V: Float32Array, axis: number, angle: number): void {
   }
 }
 
+/** Seeded C2 value noise; spatial displacement keeps duplicated surface seams together. */
+function organicNoise(x: number, y: number, z: number, seed: number): number {
+  const ix = Math.floor(x),
+    iy = Math.floor(y),
+    iz = Math.floor(z);
+  const fade = (t: number): number => t * t * t * (t * (t * 6 - 15) + 10);
+  const fx = fade(x - ix),
+    fy = fade(y - iy),
+    fz = fade(z - iz);
+  let value = 0;
+  for (let a = 0; a < 2; a++)
+    for (let b = 0; b < 2; b++)
+      for (let c = 0; c < 2; c++) {
+        let h =
+          Math.imul(ix + a, 374761393) ^
+          Math.imul(iy + b, 668265263) ^
+          Math.imul(iz + c, 1442695041) ^
+          Math.imul(seed, 1597334677);
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        h ^= h >>> 16;
+        value +=
+          (((h >>> 0) / 4294967295) * 2 - 1) *
+          (a ? fx : 1 - fx) *
+          (b ? fy : 1 - fy) *
+          (c ? fz : 1 - fz);
+      }
+  return value;
+}
+
 /** Immutable, camera-independent geometry, evaluated separately for each morph instance. */
 export function deformMesh(mesh: ContourMesh, settings: Partial<ObjectSettings>): ContourMesh {
   if (mesh.lineArt || !mesh.V.length || !mesh.T.length || !objectHasTransform(settings))
@@ -131,8 +178,26 @@ export function deformMesh(mesh: ContourMesh, settings: Partial<ObjectSettings>)
   const s = resolveObjectSettings(settings);
   // Ignore retained values of disabled/neutral stages, including inactive morph targets.
   const key = JSON.stringify([
+    s.objectRipple && s.objectRippleAmount
+      ? [
+          s.objectRippleAxis,
+          s.objectRippleAmount,
+          s.objectRippleWavelength,
+          s.objectRippleDirection,
+          s.objectRipplePhase,
+        ]
+      : null,
+    s.objectNoise && s.objectNoiseAmount
+      ? [s.objectNoiseAmount, s.objectNoiseSize, s.objectNoiseSeed]
+      : null,
     s.objectStretch ? [s.objectScaleX, s.objectScaleY, s.objectScaleZ] : [100, 100, 100],
     s.objectTaper && s.objectTaperAmount ? [s.objectTaperAxis, s.objectTaperAmount] : null,
+    s.objectBulge && s.objectBulgeAmount
+      ? [s.objectBulgeAxis, s.objectBulgeAmount, s.objectBulgeCenter, s.objectBulgeWidth]
+      : null,
+    s.objectShear && s.objectShearAmount
+      ? [s.objectShearAxis, s.objectShearAmount, s.objectShearDirection]
+      : null,
     s.objectTwist && s.objectTwistAngle ? [s.objectTwistAxis, s.objectTwistAngle] : null,
     s.objectBend && s.objectBendAngle
       ? [s.objectBendAxis, s.objectBendAngle, s.objectBendDirection]
@@ -147,13 +212,34 @@ export function deformMesh(mesh: ContourMesh, settings: Partial<ObjectSettings>)
     return cached;
   }
   const nonlinear = Boolean(
+    (s.objectRipple && s.objectRippleAmount) ||
+    (s.objectNoise && s.objectNoiseAmount) ||
     (s.objectTaper && s.objectTaperAmount) ||
+    (s.objectBulge && s.objectBulgeAmount) ||
     (s.objectTwist && s.objectTwistAngle) ||
     (s.objectBend && s.objectBendAngle),
   );
-  const source = nonlinear ? refineSource(mesh) : mesh;
+  // Quantized densities reuse topology while amounts, phase, and seed change.
+  const feature = Math.min(
+    s.objectBulge && s.objectBulgeAmount ? s.objectBulgeWidth : 100,
+    s.objectRipple && s.objectRippleAmount ? s.objectRippleWavelength : 100,
+    s.objectNoise && s.objectNoiseAmount ? s.objectNoiseSize : 100,
+  );
+  const resolution = 16 * 2 ** Math.max(0, Math.ceil(Math.log2(50 / feature)));
+  const source = nonlinear ? refineSource(mesh, resolution) : mesh;
   const V = Float32Array.from(source.V);
   const T = source.T instanceof Uint32Array ? source.T : Uint32Array.from(source.T);
+  const N = !nonlinear && mesh.N ? Float32Array.from(mesh.N) : undefined;
+  if (s.objectRotation) {
+    for (const [axis, angle] of [
+      s.objectRotationX,
+      s.objectRotationY,
+      s.objectRotationZ,
+    ].entries()) {
+      rotate(V, axis, angle);
+      if (N) rotate(N, axis, angle);
+    }
+  }
   const scale = s.objectStretch
     ? [s.objectScaleX / 100, s.objectScaleY / 100, s.objectScaleZ / 100]
     : [1, 1, 1];
@@ -169,6 +255,40 @@ export function deformMesh(mesh: ContourMesh, settings: Partial<ObjectSettings>)
         V[i + ((axis + 1) % 3)] *= factor;
         V[i + ((axis + 2) % 3)] *= factor;
       }
+  }
+  if (s.objectBulge && s.objectBulgeAmount) {
+    const axis = axisIndex(s.objectBulgeAxis),
+      u = (axis + 1) % 3,
+      v = (axis + 2) % 3;
+    const { min, span } = bounds(V);
+    if (span[axis] > 1e-9) {
+      const centre = min[axis] + (span[axis] * s.objectBulgeCenter) / 100;
+      const halfWidth = (span[axis] * s.objectBulgeWidth) / 200;
+      for (let i = 0; i < V.length; i += 3) {
+        const distance = (V[i + axis] - centre) / halfWidth;
+        if (Math.abs(distance) >= 1) continue;
+        // Compact C1 profile: both displacement and slope vanish at the band edge.
+        const profile = (1 - distance * distance) ** 2;
+        const factor = 1 + (s.objectBulgeAmount / 100) * profile;
+        V[i + u] *= factor;
+        V[i + v] *= factor;
+      }
+    }
+  }
+  const shear = s.objectShear ? s.objectShearAmount / 100 : 0;
+  const shearAxis = axisIndex(s.objectShearAxis),
+    shearU = (shearAxis + 1) % 3,
+    shearV = (shearAxis + 2) % 3;
+  const shearX = shear * Math.cos(s.objectShearDirection * radians),
+    shearY = shear * Math.sin(s.objectShearDirection * radians);
+  if (shear) {
+    const { min, span } = bounds(V);
+    const centre = min[shearAxis] + span[shearAxis] / 2;
+    for (let i = 0; i < V.length; i += 3) {
+      const along = V[i + shearAxis] - centre;
+      V[i + shearU] += along * shearX;
+      V[i + shearV] += along * shearY;
+    }
   }
   if (s.objectTwist && s.objectTwistAngle) {
     const axis = axisIndex(s.objectTwistAxis),
@@ -211,26 +331,56 @@ export function deformMesh(mesh: ContourMesh, settings: Partial<ObjectSettings>)
       }
     }
   }
-  const N = !nonlinear && mesh.N ? Float32Array.from(mesh.N) : undefined;
+  if (s.objectRipple && s.objectRippleAmount) {
+    const axis = axisIndex(s.objectRippleAxis),
+      u = (axis + 1) % 3,
+      v = (axis + 2) % 3;
+    const { min, span } = bounds(V);
+    const amplitude = (Math.max(...span) * s.objectRippleAmount) / 100;
+    const wavelength = (span[axis] * s.objectRippleWavelength) / 100;
+    const c = Math.cos(s.objectRippleDirection * radians),
+      sn = Math.sin(s.objectRippleDirection * radians);
+    if (wavelength > 1e-9)
+      for (let i = 0; i < V.length; i += 3) {
+        const offset =
+          amplitude *
+          Math.sin(
+            (2 * Math.PI * (V[i + axis] - min[axis])) / wavelength + s.objectRipplePhase * radians,
+          );
+        V[i + u] += offset * c;
+        V[i + v] += offset * sn;
+      }
+  }
+  if (s.objectNoise && s.objectNoiseAmount) {
+    const { span } = bounds(V);
+    const extent = Math.max(...span),
+      size = (extent * s.objectNoiseSize) / 100;
+    const amplitude = (extent * s.objectNoiseAmount) / 100;
+    if (size > 1e-9)
+      for (let i = 0; i < V.length; i += 3) {
+        // Sample all three channels at the original point, including coincident seam vertices.
+        const x = V[i] / size,
+          y = V[i + 1] / size,
+          z = V[i + 2] / size;
+        for (let k = 0; k < 3; k++)
+          V[i + k] += amplitude * organicNoise(x, y, z, s.objectNoiseSeed + k * 10007);
+      }
+  }
   if (N) {
     for (let i = 0; i < N.length; i += 3) {
-      const x = N[i] / scale[0],
+      let x = N[i] / scale[0],
         y = N[i + 1] / scale[1],
         z = N[i + 2] / scale[2];
+      // Inverse transpose of the shear keeps source normals perpendicular to the surface.
+      if (shear) {
+        if (shearAxis === 0) x -= shearX * y + shearY * z;
+        else if (shearAxis === 1) y -= shearX * z + shearY * x;
+        else z -= shearX * x + shearY * y;
+      }
       const length = Math.hypot(x, y, z) || 1;
       N[i] = x / length;
       N[i + 1] = y / length;
       N[i + 2] = z / length;
-    }
-  }
-  if (s.objectRotation) {
-    for (const [axis, angle] of [
-      s.objectRotationX,
-      s.objectRotationY,
-      s.objectRotationZ,
-    ].entries()) {
-      rotate(V, axis, angle);
-      if (N) rotate(N, axis, angle);
     }
   }
   const result: ContourMesh = { ...mesh, V, T, N: N ?? vertexNormals(V, T), terrain: false };
