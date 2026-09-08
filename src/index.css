@@ -1534,19 +1534,20 @@ select {
   background: #dfe2de;
 }
 .topbar {
-  height: 32px;
-  flex: 0 0 32px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  min-height: 32px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
   align-items: center;
-  padding: 0 25px;
+  gap: 6px 20px;
+  padding: 2px 25px;
   border-bottom: 1px solid #c8ccc6;
   background: rgba(229, 232, 227, 0.72);
   backdrop-filter: blur(8px);
 }
 .mode-switch {
-  grid-column: 2;
-  justify-self: center;
+  flex-shrink: 0;
   display: inline-flex;
   padding: 2px;
   border: 1px solid #c3c7c1;
@@ -1569,8 +1570,7 @@ select {
   color: white;
 }
 .workspace-title {
-  grid-column: 1;
-  justify-self: start;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1582,15 +1582,18 @@ select {
   color: #989d97;
 }
 .readout {
-  grid-column: 3;
-  justify-self: end;
+  margin-left: auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 22px;
   color: #878c86;
   font-size: 9px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.readout > span {
+  white-space: nowrap;
 }
 .readout b {
   margin-left: 4px;
@@ -2488,9 +2491,8 @@ button:focus-visible,
     order: 1;
   }
   .topbar {
-    height: 54px;
-    flex-basis: 54px;
-    padding: 0 14px;
+    min-height: 54px;
+    padding: 6px 14px;
   }
   .mode-switch button {
     min-width: 54px;
