@@ -10,6 +10,7 @@ import {
 export class ThreeDRuntime {
   #worker: Worker | null = null;
   #stl: ArrayBuffer | null = null;
+  #threeMf: ArrayBuffer | null = null;
   #id = 0;
   #signature = '';
 
@@ -39,6 +40,7 @@ export class ThreeDRuntime {
     )
       return;
     this.#stl = null;
+    this.#threeMf = null;
     this.#signature = signature;
     if (this.#preparing) this.#terminate();
     this.#input = input;
@@ -85,10 +87,14 @@ export class ThreeDRuntime {
         if (reply.id === this.#id && reply.sourceVersion === this.#sourceVersion) {
           this.#stl =
             this.#preparing && reply.stl && hasExportableGeometry(reply) ? reply.stl : null;
+          this.#threeMf =
+            this.#preparing && reply.threeMf && hasExportableGeometry(reply) ? reply.threeMf : null;
           this.#preparing = false;
           this.state = {
             ...this.state,
             exportAvailable: !!this.#stl,
+            threeMfAvailable: !!this.#threeMf,
+            threeMfError: reply.threeMfError,
             status: reply.artifact || this.state.sourceArtifact ? 'ready' : 'error',
             artifact: reply.artifact ?? this.state.sourceArtifact ?? null,
             sourceArtifact:
@@ -112,6 +118,7 @@ export class ThreeDRuntime {
       worker.addEventListener('error', () => {
         if (worker !== this.#worker) return;
         this.#stl = null;
+        this.#threeMf = null;
         worker.terminate();
         this.#worker = null;
         this.#busy = false;
@@ -120,6 +127,8 @@ export class ThreeDRuntime {
         this.state = {
           ...this.state,
           exportAvailable: false,
+          threeMfAvailable: false,
+          threeMfError: undefined,
           status: this.state.sourceArtifact ? 'ready' : 'error',
           artifact: this.state.sourceArtifact ?? null,
           preparation: { status: 'rejected', message: 'Worker stopped. Prepare again to retry.' },
@@ -169,6 +178,8 @@ export class ThreeDRuntime {
       status: 'ready',
       artifact: this.state.sourceArtifact ?? null,
       exportAvailable: false,
+      threeMfAvailable: false,
+      threeMfError: undefined,
       message: 'Untreated source · preparation cancelled',
       preparation: { status: 'cancelled', message: 'Cancelled. You can prepare again.' },
     };
@@ -181,8 +192,16 @@ export class ThreeDRuntime {
       ? (this.#stl?.slice(0) ?? null)
       : null;
   }
+  exportThreeMf(): ArrayBuffer | null {
+    return this.state.active &&
+      this.state.status === 'ready' &&
+      this.state.preparation?.status === 'accepted'
+      ? (this.#threeMf?.slice(0) ?? null)
+      : null;
+  }
   #terminate(): void {
     this.#stl = null;
+    this.#threeMf = null;
     this.#preparing = false;
     this.#worker?.terminate();
     this.#worker = null;

@@ -1,6 +1,6 @@
 # 3D mode: slice-driven objects for printing
 
-Status: implementation started, 8 September 2026. **Proceed with an internal end-to-end 3D workspace while feasibility refinement continues.** Phase 0 remains open; this is an explicit sequencing decision, not acceptance of the current geometry pipeline or authorization for a public print-ready release. The application now exposes an internal 3D source-inspection workspace; bounded experimental treatment previews are available, with experimental binary STL export for current accepted single-body results. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md) for the implemented spike, measured workloads and known failures.
+Status: implementation started, 8 September 2026. **Proceed with an internal end-to-end 3D workspace while feasibility refinement continues.** Phase 0 remains open; this is an explicit sequencing decision, not acceptance of the current geometry pipeline or authorization for a public print-ready release. The application now exposes an internal 3D source-inspection workspace; bounded experimental treatment previews are available, with experimental 3MF and binary STL export for current accepted single-body results. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md) for the implemented spike, measured workloads and known failures.
 
 ## Workspace milestone implemented
 
@@ -31,6 +31,8 @@ Print setup now exposes rectangular build width, depth and height (1–2000 mm e
 Print inspection now offers Fit build volume alongside object Fit, and identifies each exceeded boundary with its distance in millimeters. Both fitting actions are camera-only; projection changes retain the selected fitting target.
 
 Binary STL interchange now serializes the exact audited placed single-body result in the worker. The runtime gates downloads by current request/source revision and clears retained file bytes on invalidation. Independent Three.js loader tests compare exact coordinates and dimensions, including real Inset/Emboss results. Export stays explicitly experimental: 3MF, external printer-slicer verification, multiple-body export and physical print validation remain open.
+
+3MF Core export now accompanies STL for the current audited single-body artifact. It preserves exact indexed coordinates with explicit millimeter units and a named model resource. Both exports share revision invalidation; format-specific packaging failures remain visible. Package relationships and independent loader round-trips are covered; external printer-slicer validation, multiple bodies, untreated export, persistence and independent surface-normal dimensions remain open.
 
 ## Implementation decision and next-session handoff
 

@@ -1,3 +1,4 @@
+import { serializeThreeMf } from './three-mf';
 import { solidBox } from '../test/fixtures/solid';
 import { auditPrintTopology } from './print-validation';
 import { serializeBinaryStl } from './stl-export';
@@ -92,6 +93,7 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
   expect(workers[0].terminated).toBe(true);
   expect(runtime.state.preparation?.status).toBe('cancelled');
   expect(runtime.exportStl()).toBeNull();
+  expect(runtime.exportThreeMf()).toBeNull();
   workers[0].reply({
     id: first.id,
     sourceVersion: 1,
@@ -100,6 +102,7 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
   });
   expect(runtime.state.preparation?.status).toBe('cancelled');
   expect(runtime.exportStl()).toBeNull();
+  expect(runtime.exportThreeMf()).toBeNull();
   runtime.prepare();
   expect(workers).toHaveLength(2);
   const next = workers[1].requests.at(-1)!;
@@ -109,6 +112,7 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
     artifact,
     sourceArtifact: artifact,
     stl: serializeBinaryStl(solidBox()),
+    threeMf: serializeThreeMf(solidBox(), 'A'),
     preparation: {
       status: 'accepted',
       message: 'accepted',
@@ -118,6 +122,10 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
   });
   expect(runtime.state.preparation?.status).toBe('accepted');
   expect(runtime.state.exportAvailable).toBe(true);
+  expect(runtime.state.threeMfAvailable).toBe(true);
+  const model = runtime.exportThreeMf()!;
+  new Uint8Array(model).fill(0);
+  expect(runtime.exportThreeMf()).toEqual(serializeThreeMf(solidBox(), 'A'));
   const download = runtime.exportStl()!;
   expect(download).toEqual(serializeBinaryStl(solidBox()));
   new Uint8Array(download).fill(0);
@@ -129,6 +137,7 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
   runtime.request({ ...input, project: { ...input.project, radiusMm: 1 } });
   expect(runtime.state.artifact).toBeNull();
   expect(runtime.exportStl()).toBeNull();
+  expect(runtime.exportThreeMf()).toBeNull();
   expect(runtime.state.preparation?.status).toBe('idle');
   workers[1].reply({
     id: workers[1].requests.at(-1)!.id,

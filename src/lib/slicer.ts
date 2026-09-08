@@ -1,6 +1,6 @@
 'use strict';
 
-import { threeDStlFilename } from './three-d-export';
+import { threeDStlFilename, threeDModelFilename } from './three-d-export';
 import { printerPreset } from './three-d-printer-presets';
 import { validBuildVolume } from './three-d-build-volume';
 
@@ -4082,8 +4082,8 @@ if (typeof document !== 'undefined') {
   });
   const threeDRuntime = new ThreeDRuntime((detail) => {
     if (threeDMode) {
-      $('save').disabled = !detail.exportAvailable;
-      $('exportLabel').textContent = 'Export STL (mm)';
+      $('save').disabled = !detail.exportAvailable && !detail.threeMfAvailable;
+      $('exportLabel').textContent = detail.threeMfAvailable ? 'Export 3MF' : 'Export STL (mm)';
     }
     document.dispatchEvent(new CustomEvent('threedstatechange', { detail }));
   });
@@ -4218,22 +4218,32 @@ if (typeof document !== 'undefined') {
       threeDRuntime.prepare();
     }
   });
-  function exportThreeDStl(): void {
+  function exportThreeD(format: 'stl' | '3mf'): void {
     if (!threeDMode) return;
-    const bytes = threeDRuntime.exportStl();
+    const bytes = format === '3mf' ? threeDRuntime.exportThreeMf() : threeDRuntime.exportStl();
     if (!bytes) {
       toast('Prepare a current single-body result before exporting.');
       return;
     }
     const anchor = document.createElement('a');
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'model/stl' }));
+    const url = URL.createObjectURL(
+      new Blob([bytes], { type: format === '3mf' ? 'model/3mf' : 'model/stl' }),
+    );
     anchor.href = url;
-    anchor.download = threeDStlFilename(state.name);
+    anchor.download =
+      format === '3mf' ? threeDModelFilename(state.name) : threeDStlFilename(state.name);
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast('Saved STL · import in millimeters');
+    toast(
+      format === '3mf'
+        ? 'Saved 3MF · millimeter units included'
+        : 'Saved STL · import in millimeters',
+    );
   }
-  document.addEventListener('threedexport', exportThreeDStl);
+  document.addEventListener('threedexport', (event) => {
+    const format = (event as CustomEvent<{ format?: string }>).detail?.format ?? 'stl';
+    if (format === 'stl' || format === '3mf') exportThreeD(format);
+  });
   document.addEventListener('threedcancel', () => {
     if (threeDMode) threeDRuntime.cancel();
   });
@@ -6209,7 +6219,7 @@ if (typeof document !== 'undefined') {
   });
   $('save').addEventListener('click', async () => {
     if (threeDMode) {
-      exportThreeDStl();
+      exportThreeD(threeDRuntime.state.threeMfAvailable ? '3mf' : 'stl');
       return;
     }
     try {

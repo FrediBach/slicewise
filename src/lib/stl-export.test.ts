@@ -2,7 +2,7 @@ import { expect, it } from 'vitest';
 import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { solidBox } from '../test/fixtures/solid';
 import { serializeBinaryStl } from './stl-export';
-import { prepareStlExport } from './three-d-export';
+import { prepareStlExport, prepareThreeMfExport } from './three-d-export';
 import { auditPrintTopology } from './print-validation';
 import type { ThreeDReply } from './three-d-project';
 
@@ -38,6 +38,10 @@ it('rejects invalid serializer inputs and incomplete or multi-body export gates'
     preparation: { status: 'accepted', message: '', bodyCount: 1, checks: report.checks },
   };
   expect(prepareStlExport(reply)).toBeInstanceOf(ArrayBuffer);
+  expect(prepareThreeMfExport(reply, 'Box')).toBeInstanceOf(ArrayBuffer);
+  expect(
+    prepareThreeMfExport({ ...reply, preparation: { ...reply.preparation!, bodyCount: 2 } }, 'Box'),
+  ).toBeUndefined();
   for (const check of Object.keys(report.checks).filter((key) => key !== 'manufacturing')) {
     expect(
       prepareStlExport({

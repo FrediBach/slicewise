@@ -245,16 +245,29 @@ export function ThreeDSurfacePanel({
         and stability remain unchecked.
       </p>
       <p className="gradient-note">
-        Binary STL uses millimeter coordinates. Import as mm in your slicer. Export is available for
-        a current, geometry-checked single body; support, stability and global wall thickness remain
-        unchecked.
+        3MF includes millimeter units and the object name. STL must be imported as mm. Both export
+        the current checked single body. Printer settings, supports and toolpaths are not included.
       </p>
-      <Button
-        disabled={!state.exportAvailable}
-        onClick={() => document.dispatchEvent(new CustomEvent('threedexport'))}
-      >
-        Export STL (mm)
-      </Button>
+      {state.threeMfError && <p role="status">3MF unavailable: {state.threeMfError}</p>}
+      <div className="three-d-prepare-actions">
+        <Button
+          disabled={!state.threeMfAvailable}
+          onClick={() =>
+            document.dispatchEvent(new CustomEvent('threedexport', { detail: { format: '3mf' } }))
+          }
+        >
+          Export 3MF
+        </Button>
+        <Button
+          disabled={!state.exportAvailable}
+          variant="outline"
+          onClick={() =>
+            document.dispatchEvent(new CustomEvent('threedexport', { detail: { format: 'stl' } }))
+          }
+        >
+          Export STL (mm)
+        </Button>
+      </div>
     </Section>
   );
 }

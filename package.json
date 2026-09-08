@@ -21,6 +21,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "fflate": "0.8.3",
     "flo-mat": "^4.1.0",
     "lucide-react": "1.31.0",
     "manifold-3d": "3.5.3",

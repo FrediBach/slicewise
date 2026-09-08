@@ -169,3 +169,32 @@ it.each(['accepted', 'rejected'] as const)(
     expect(screen.getByRole('button', { name: 'Export STL (mm)' })).toBeDisabled();
   },
 );
+
+it('routes each export format once and keeps unavailable formats disabled', () => {
+  const handler = vi.fn();
+  document.addEventListener('threedexport', handler);
+  const project = createThreeDProject('test');
+  const { rerender, unmount } = render(
+    <ThreeDSurfacePanel
+      project={project}
+      state={{ ...initialThreeDState, exportAvailable: true, threeMfAvailable: true }}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Export 3MF' }));
+  expect(handler).toHaveBeenCalledTimes(1);
+  expect(handler.mock.lastCall![0].detail).toEqual({ format: '3mf' });
+  fireEvent.click(screen.getByRole('button', { name: 'Export STL (mm)' }));
+  expect(handler).toHaveBeenCalledTimes(2);
+  expect(handler.mock.lastCall![0].detail).toEqual({ format: 'stl' });
+  rerender(
+    <ThreeDSurfacePanel
+      project={project}
+      state={{ ...initialThreeDState, exportAvailable: true, threeMfError: 'Budget exceeded' }}
+    />,
+  );
+  expect(screen.getByRole('button', { name: 'Export 3MF' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Export STL (mm)' })).toBeEnabled();
+  expect(screen.getByText('3MF unavailable: Budget exceeded')).toBeInTheDocument();
+  unmount();
+  document.removeEventListener('threedexport', handler);
+});

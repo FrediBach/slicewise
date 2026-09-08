@@ -1,3 +1,4 @@
+import { serializeThreeMf } from './three-mf';
 import type { ThreeDReply } from './three-d-project';
 import { serializeBinaryStl } from './stl-export';
 
@@ -32,4 +33,11 @@ export function threeDStlFilename(name: string) {
       .replace(/[^\w-]+/g, '-')
       .replace(/^-|-$/g, '') || 'object';
   return `${base}-3d-mm.stl`;
+}
+
+export function prepareThreeMfExport(reply: ThreeDReply, name: string): ArrayBuffer | undefined {
+  return hasExportableGeometry(reply) ? serializeThreeMf(reply.artifact!, name) : undefined;
+}
+export function threeDModelFilename(name: string) {
+  return threeDStlFilename(name).replace(/\.stl$/, '.model.3mf');
 }

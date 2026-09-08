@@ -76,6 +76,8 @@ export interface ThreeDPreparation {
 }
 export interface ThreeDReply {
   stl?: ArrayBuffer;
+  threeMf?: ArrayBuffer;
+  threeMfError?: string;
   id: number;
   sourceVersion: number;
   progress?: string;
@@ -87,6 +89,8 @@ export interface ThreeDReply {
 }
 export interface ThreeDUiState {
   exportAvailable?: boolean;
+  threeMfAvailable?: boolean;
+  threeMfError?: string;
   active: boolean;
   source: { id: string; name: string; imported: boolean } | null;
   project: ThreeDProject | null;
