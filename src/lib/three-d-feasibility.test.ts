@@ -54,11 +54,11 @@ it('completes the scale source audit and records the rounded-tool budget blocker
   }
 });
 
-it('reports measured opt-in path approximation when the scale tool still exceeds budget', () => {
+it('admits the approximated scale tools but keeps the Boolean/output audit rejection', () => {
   const [row] = runFeasibility(module, 1, 'scale-approximate');
   expect(row).toMatchObject({
     status: 'rejected',
-    failedStage: 'recipe',
+    failedStage: 'boolean-and-output-audit',
     liveHandles: 0,
     approximation: { toleranceMm: 0.05, inputVertices: 15088, outputVertices: 2373 },
   });
@@ -66,4 +66,4 @@ it('reports measured opt-in path approximation when the scale tool still exceeds
     throw new Error('Missing approximation report');
   expect(row.approximation.maximumDeviationMm).toBeLessThanOrEqual(0.05);
   expect(row.approximation.work).toBeLessThanOrEqual(2_000_000);
-});
+}, 30000);

@@ -3,6 +3,8 @@ import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { createThreeDProject, type ThreeDRequest } from './three-d-project';
 import { previewThreeD, prepareThreeD } from './three-d-preparation';
 import { threeDSliceField } from './three-d-slices';
+import { sphereDemo } from './demo-meshes';
+import { weld } from './mesh';
 import { ThreeDGeometryCache } from './three-d-cache';
 import { easeLineGap } from './slice-spacing';
 let module: ManifoldToplevel;
@@ -201,3 +203,25 @@ describe('worker geometry cache', () => {
     expect(baseOnly.retainedBytes).toBe(baseBytes);
   });
 });
+
+it.each(['inset', 'emboss'] as const)(
+  'constructs eight exact cube tools and rejects degenerate faces in the %s result',
+  (treatment) => {
+    const r = request();
+    r.project.treatment = treatment;
+    r.source.mesh = weld(sphereDemo('cube'));
+    r.project.pathToleranceMm = 0;
+    r.settings.lines = 8;
+    const progress: string[] = [];
+    const reply = prepareThreeD(r, module, (message) => progress.push(message));
+    expect(progress).toContain('Constructing circular tools…');
+    expect(reply.preparation?.status).toBe('rejected');
+    expect(progress).toContain('Applying treatment and checking the result…');
+    expect(reply.preparation?.message).toContain('Result failed topology checks');
+    expect(reply.preparation?.issues).toEqual(
+      expect.arrayContaining([expect.objectContaining({ code: 'degenerate-face' })]),
+    );
+    expect(reply.artifact).toEqual(reply.sourceArtifact);
+  },
+  15000,
+);

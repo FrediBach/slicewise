@@ -11,6 +11,7 @@ import {
 import { vertexNormals, weld } from '../mesh';
 import { computeContours } from '../contour-engine';
 import { contourSettings } from '../../test/fixtures/contours';
+import { auditPrintTopology } from '../print-validation';
 import { getMeshTopology } from '../mesh-topology';
 
 describe('procedural demo meshes', () => {
@@ -92,5 +93,14 @@ describe('rounded demo solids', () => {
     }
     expect(waist).toBeGreaterThan(0.3);
     expect(lobe).toBeGreaterThan(waist * 1.2);
+  });
+});
+
+describe('sphere-based demo solid orientation', () => {
+  it.each(['cube', 'ripple', 'diamond'] as const)('audits the outward-facing %s source', (kind) => {
+    const source = weld(sphereDemo(kind, 24, 12));
+    const report = auditPrintTopology(source);
+    expect(report.signedVolumeMm3).toBeGreaterThan(0);
+    expect(report.status).toBe('topology-checked');
   });
 });

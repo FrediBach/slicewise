@@ -170,7 +170,8 @@ export function sphereDemo(
         b = i * segments + ((j + 1) % segments);
       const c = (i + 1) * segments + j,
         d = (i + 1) * segments + ((j + 1) % segments);
-      tris.push(a, b, d, a, d, c);
+      // Latitude runs north to south, so reverse the parametric grid winding.
+      tris.push(a, d, b, a, c, d);
     }
   return { verts: Float64Array.from(verts), tris: Uint32Array.from(tris) };
 }

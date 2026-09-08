@@ -1,3 +1,4 @@
+import { ROUNDED_TOOL_LIMITS } from '../../lib/slice-treatment';
 import { Button } from '../ui/button';
 import { Section } from '../ui/section';
 import { PhysicalNumberInput } from './PhysicalNumberInput';
@@ -150,8 +151,11 @@ export function ThreeDSurfacePanel({
         </select>
       </label>
       <p className="gradient-note">
-        Profile tolerance: 0.05 mm. Preparation is bounded to 250k input/output triangles, 64 tool
-        loops and 2,000 tool-path vertices. Reduce selected slices if a budget is exceeded.
+        Profile tolerance: 0.05 mm. Construction allows {ROUNDED_TOOL_LIMITS.runs} tool loops,{' '}
+        {ROUNDED_TOOL_LIMITS.vertices.toLocaleString('en-US')} path vertices and{' '}
+        {ROUNDED_TOOL_LIMITS.primitiveTriangles.toLocaleString('en-US')} estimated construction
+        triangles. The combined source/tools and final result remain limited to 250,000 triangles.
+        Exact paths follow mesh detail; allowing contour approximation can reduce construction work.
       </p>
       <p className="three-d-slice-status" role="status">
         {state.slices?.error ??

@@ -1,5 +1,9 @@
 import type { Manifold, ManifoldToplevel } from 'manifold-3d';
-import { ROUNDED_TOOL_LIMITS, type RoundedTreatmentRecipe } from './slice-treatment';
+import {
+  checkRoundedToolBudget,
+  roundedToolWorkload,
+  type RoundedTreatmentRecipe,
+} from './slice-treatment';
 import { assertPrintTopology } from './print-validation';
 
 /** Manufacturing coordinates are Z-up millimeters; no normalization or repair. */
@@ -101,12 +105,10 @@ export function createSolidKernel(module: ManifoldToplevel) {
         throw new Error('Invalid rounded tool profile.');
       if (radius === 0) return [];
       const vertices = runs.reduce((sum, run) => sum + run.length / 3, 0);
-      if (
-        runs.length > ROUNDED_TOOL_LIMITS.runs ||
-        vertices > ROUNDED_TOOL_LIMITS.vertices ||
-        vertices * (segments ** 2 + 4) > ROUNDED_TOOL_LIMITS.primitiveTriangles
-      )
-        throw new Error('Rounded tool budget exceeded.');
+      checkRoundedToolBudget(
+        roundedToolWorkload(runs.length, vertices, segments),
+        recipe.approximation,
+      );
       for (const run of runs) {
         if (run.length < 9 || run.length % 3 || !run.every(Number.isFinite))
           throw new Error('Invalid rounded tool path.');
