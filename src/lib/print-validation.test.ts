@@ -38,7 +38,7 @@ describe('independent print topology audit', () => {
       signedVolume: 'passed',
       nonAdjacentIntersections: 'passed',
       selfIntersections: 'passed',
-      shellContainment: 'not-run',
+      shellContainment: 'passed',
       manufacturing: 'not-run',
     });
     expect(report).toEqual(structuredClone(report));
@@ -114,7 +114,8 @@ describe('independent print topology audit', () => {
     expect(report.status).toBe('topology-checked');
     expect(report.signedVolumeMm3).toBe(52_500);
     expect([...report.shellVolumesMm3]).toEqual([60_000, -7_500]);
-    expect(report.checks.shellContainment).toBe('not-run');
+    expect(report.checks.shellContainment).toBe('passed');
+    expect(report.shellContainment?.bodyCount).toBe(1);
     expect(mesh).toEqual(original);
   });
 
@@ -141,7 +142,8 @@ describe('independent print topology audit', () => {
       T: box.T,
     });
     const misplaced = auditPrintTopology(combine(box, misplacedCavity));
-    expect(misplaced.checks.shellContainment).toBe('not-run');
+    expect(misplaced.checks.shellContainment).toBe('failed');
+    expect(misplaced.issues.some((i) => i.code === 'shell-orientation')).toBe(true);
     expect([...misplaced.shellVolumesMm3]).toEqual([60_000, -7_500]);
   });
 
@@ -156,6 +158,7 @@ describe('independent print topology audit', () => {
     expect(report.checks.selfIntersections).toBe('failed');
     expect(report.intersections?.adjacentPairCount).toBeGreaterThan(0);
     expect(report.checks.shellContainment).toBe('not-run');
+    expect(report.shellContainment).toBeNull();
     expect(mesh).toEqual(original);
   });
 

@@ -142,6 +142,7 @@ describe('phase-0 solid kernel', () => {
     const kernel = createSolidKernel(module);
     const result = kernel.run(base, [detached], 'emboss');
     expect(result.measurements.boundaryComponents).toBe(2);
+    expect(result.topology.shellContainment?.bodyCount).toBe(2);
     expect(result.measurements.volumeMm3).toBeCloseTo(120_000, 4);
     expectClosedOriented(result.mesh);
     expect(kernel.liveHandles).toBe(0);
@@ -193,6 +194,7 @@ describe('phase-0 solid kernel', () => {
     const result = kernel.run(base, [cavity], 'inset');
     expectClosedOriented(result.mesh);
     expect(result.measurements.volumeMm3).toBeCloseTo(52_500, 5);
+    expect(result.topology.shellContainment?.bodyCount).toBe(1);
     expect(signedVolume(result.mesh)).toBeCloseTo(52_500, 5);
     expect(result.measurements.boundaryComponents).toBe(2);
     expect(getMeshTopology(result.mesh).componentSizes).toHaveLength(2);
@@ -262,13 +264,43 @@ describe('phase-0 solid kernel', () => {
     expect(mesh).toEqual(original);
   });
 
+  it('classifies a torus hole separately from its solid tube and rejects a cavity in empty space', () => {
+    const torus = fixtures[2].base;
+    const small = fixtures[1].base;
+    const kernel = createSolidKernel(module);
+    for (const { x, inward, bodies } of [
+      { x: 0, inward: false, bodies: 2 },
+      { x: 20, inward: true, bodies: 1 },
+      { x: 0, inward: true, bodies: null },
+    ]) {
+      const T = small.T.slice();
+      if (inward) for (let i = 0; i < T.length; i += 3) [T[i + 1], T[i + 2]] = [T[i + 2], T[i + 1]];
+      const mesh = {
+        V: Float32Array.from([
+          ...torus.V,
+          ...Array.from(small.V, (v, i) => v * 0.01 + (i % 3 === 0 ? x : 0)),
+        ]),
+        T: Uint32Array.from([...torus.T, ...Array.from(T, (v) => v + torus.V.length / 3)]),
+      };
+      const original = structuredClone(mesh);
+      if (bodies === null) {
+        expect(() => kernel.run(mesh, [], 'off')).toThrow(/Source.*shell-orientation/);
+        expect(() => kernel.run(fixtures[1].base, [mesh], 'emboss')).toThrow(
+          /Tool 1.*shell-orientation/,
+        );
+      } else expect(kernel.run(mesh, [], 'off').topology.shellContainment?.bodyCount).toBe(bodies);
+      expect(kernel.liveHandles).toBe(0);
+      expect(mesh).toEqual(original);
+    }
+  });
+
   it('returns explicit unperformed checks and warnings on exact neutral buffers', () => {
     const base = fixtures[1].base;
     const source = { V: new Float32Array([...base.V, 100, 100, 100]), T: base.T };
     const result = createSolidKernel(module).run(source, [], 'off');
     expect(result.mesh).toBe(source);
     expect(result.topology.status).toBe('topology-checked');
-    expect(result.topology.checks.shellContainment).toBe('not-run');
+    expect(result.topology.checks.shellContainment).toBe('passed');
     expect(result.topology.checks.selfIntersections).toBe('passed');
     expect(result.topology.issues[0].code).toBe('unused-vertex');
     expect(result.topology.issues[0].severity).toBe('warning');

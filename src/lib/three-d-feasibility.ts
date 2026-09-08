@@ -17,6 +17,7 @@ function topologySummary(report: PrintTopologyReport) {
           trianglePairs: Array.from(report.intersections.trianglePairs),
         }
       : null,
+    shellContainment: report.shellContainment,
     signedVolumeMm3: report.signedVolumeMm3,
     shellVolumesMm3: Array.from(report.shellVolumesMm3),
     issues: report.issues.map((issue) => ({

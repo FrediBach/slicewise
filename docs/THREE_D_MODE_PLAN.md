@@ -1,6 +1,6 @@
 # 3D mode: slice-driven objects for printing
 
-Status: implementation started, 8 September 2026. The Phase-0 spike includes triangle-derived planar contours, circular capsule sweeps, independent topology audits and bounded surface-contact checks including adjacent faces; the feasibility gate remains open. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md), including detected analytic-torus degeneracies and contour-torus adjacent overlaps. The production application does not yet expose 3D mode. The remaining sections describe the intended implementation.
+Status: implementation started, 8 September 2026. The Phase-0 spike includes triangle-derived planar contours, circular capsule sweeps, independent topology audits and bounded surface-contact checks including adjacent faces, and shell containment/orientation checks; the feasibility gate remains open. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md), including detected analytic-torus degeneracies and contour-torus adjacent overlaps. The production application does not yet expose 3D mode. The remaining sections describe the intended implementation.
 
 Add **3D** beside Config, Animation, and Sequencer. The mode presents the shaped source in a polished Three.js scene, turns selected contours into physical surface features, and exports the resulting solid at an explicit size in millimeters.
 

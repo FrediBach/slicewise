@@ -1,9 +1,13 @@
+import { auditShellContainment, type PrintShellReport } from './print-shells';
 import { auditSurfaceIntersections, type PrintIntersectionReport } from './print-intersections';
 import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
 export type PrintTopologyIssueCode =
   | 'budget'
   | 'surface-contact'
+  | 'shell-orientation'
+  | 'shell-indeterminate'
+  | 'shell-budget'
   | 'intersection-budget'
   | 'invalid-buffer'
   | 'non-finite-vertex'
@@ -44,6 +48,7 @@ export type PrintTopologyReport = {
   checks: Record<Check, CheckState>;
   issues: PrintTopologyIssue[];
   intersections: PrintIntersectionReport | null;
+  shellContainment: PrintShellReport | null;
   signedVolumeMm3: number | null;
   /** Signed boundary shell volumes, not physical body volumes. Cavities stay negative. */
   shellVolumesMm3: Float64Array;
@@ -58,7 +63,7 @@ export const PRINT_TOPOLOGY_LIMITS = {
  * Deterministic, read-only checks on the exact indexed artifact, independent of
  * the Boolean kernel. No welding, winding repair or face removal is performed.
  * Surface contacts are checked conservatively, including adjacent-face overlaps.
- * Shell nesting remains explicitly unperformed.
+ * Shell nesting and orientation are checked after surface contacts pass.
  */
 export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
   const { V, T } = mesh;
@@ -74,6 +79,7 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
     manufacturing: 'not-run',
   };
   let intersections: PrintIntersectionReport | null = null;
+  let shellContainment: PrintShellReport | null = null;
   const issues = new Map<
     PrintTopologyIssueCode,
     { count: number; vertices: number[]; triangles: number[] }
@@ -111,6 +117,7 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
       triangles: Uint32Array.from(issue.triangles),
     })),
     intersections,
+    shellContainment,
     signedVolumeMm3,
     shellVolumesMm3,
   });
@@ -271,6 +278,20 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
     if (intersections.pairCount)
       add('surface-contact', [], Array.from(intersections.trianglePairs), intersections.pairCount);
     if (!intersections.complete) add('intersection-budget');
+  }
+  if (intersections?.status === 'passed') {
+    shellContainment = auditShellContainment(
+      mesh,
+      topology.componentLabels,
+      volumes,
+      intersections.toleranceMm,
+    );
+    checks.shellContainment = shellContainment.status === 'passed' ? 'passed' : 'failed';
+    for (const shell of shellContainment.shells)
+      if (shell.orientationMatchesDepth === false)
+        add('shell-orientation', [shell.sampleVertex], [shell.sampleTriangle]);
+    if (shellContainment.status === 'budget-exceeded') add('shell-budget');
+    if (shellContainment.status === 'indeterminate') add('shell-indeterminate');
   }
   return finish(total, shells);
 }
