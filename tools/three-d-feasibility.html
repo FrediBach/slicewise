@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Slicewise — 3D kernel feasibility</title>
+    <style>
+      body {
+        font: 16px system-ui;
+        max-width: 75rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.5rem 1rem;
+        margin-right: 0.5rem;
+      }
+      pre {
+        overflow: auto;
+        background: #f2f2f2;
+        padding: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>3D kernel feasibility</h1>
+    <p>
+      Internal Phase-0 trial: four fixed millimeter fixtures with rounded tools. Kernel acceptance
+      does not establish print readiness or general profile accuracy.
+    </p>
+    <button id="run">Run fixtures</button>
+    <button id="repeat">Run 20 repetitions</button>
+    <button id="cancel" disabled>Cancel and release worker</button>
+    <p id="status" role="status">Ready. Geometry stays in a local worker.</p>
+    <pre id="results" aria-label="Fixture measurements"></pre>
+    <script type="module" src="/src/dev/three-d-feasibility.ts"></script>
+  </body>
+</html>

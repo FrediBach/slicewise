@@ -9,6 +9,9 @@ npm test                 # run the suite once
 npm run test:watch       # rerun affected tests during development
 npm run test:coverage    # run tests and write coverage/index.html
 npm run doctor           # audit React health; fail on error-severity findings
+npm run test:3d          # internal Phase-0 kernel fixture regressions
+npm run bench:3d -- 20   # 20 repetitions; JSON timings and process memory samples
+npm run build:3d         # separate local WASM/worker developer-page build
 ```
 
 The normal pre-commit verification sequence is:
@@ -33,6 +36,8 @@ The default environment is Node. A component test that needs browser APIs declar
 ```
 
 Prefer Node for geometry and serialization tests: it starts faster and makes accidental DOM dependencies visible.
+
+`solid-kernel.test.ts` exercises the real Manifold WASM kernel, including groove/rib volume direction on four fixtures, deterministic geometry, input immutability, exact neutral buffers, asymmetric millimeter bounds, measured box penetration/protrusion, torus-hole and enclosed-cavity retention, overlapping tools, disconnected bodies, malformed/open input rejection, budgets, and owned-handle cleanup on success/failure/repetition. Boundary shell counts are kept distinct from physical body counts. These checks are not a complete solid or manufacturing validator. The separate browser worker trial, cancellation procedure, benchmark context, and remaining Phase-0 gates are documented in [THREE_D_FEASIBILITY.md](./THREE_D_FEASIBILITY.md).
 
 ## What to test
 

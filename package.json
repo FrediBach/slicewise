@@ -13,12 +13,16 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:3d": "vitest run src/lib/solid-kernel.test.ts",
+    "build:3d": "vite build --config vite.feasibility.config.ts",
+    "bench:3d": "node scripts/three-d-feasibility.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "flo-mat": "^4.1.0",
     "lucide-react": "1.31.0",
+    "manifold-3d": "3.5.3",
     "mediabunny": "^1.55.4",
     "react": "19.2.8",
     "react-dom": "19.2.8",
