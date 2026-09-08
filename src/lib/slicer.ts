@@ -1,5 +1,7 @@
 'use strict';
 
+import { validBuildVolume } from './three-d-build-volume';
+
 import { cameraBasis } from './projection';
 import { selectSliceIndices } from './slice-treatment';
 import { ThreeDRuntime } from './three-d-runtime';
@@ -4189,6 +4191,7 @@ if (typeof document !== 'undefined') {
         /* Retain valid selection. */
       }
     }
+    if (validBuildVolume(patch.buildVolumeMm)) next.buildVolumeMm = [...patch.buildVolumeMm];
     if (typeof patch.onBed === 'boolean') next.onBed = patch.onBed;
     if (typeof patch.sizeConfirmed === 'boolean') next.sizeConfirmed = patch.sizeConfirmed;
     threeDProject = next;

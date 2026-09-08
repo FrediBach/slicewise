@@ -1,6 +1,7 @@
+import { buildVolumeBounds, buildVolumeGrid } from './three-d-build-volume';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { ThreeDArtifact, ThreeDSlices } from './three-d-project';
+import type { ThreeDArtifact, ThreeDSlices, Triple } from './three-d-project';
 export type ReferenceView = 'Fit' | 'Front' | 'Side' | 'Top' | 'Isometric';
 export type SceneStyle = 'Studio' | 'Inspect' | 'Print';
 
@@ -54,9 +55,13 @@ export function createThreeDScene(host: HTMLElement) {
   const fill = new THREE.DirectionalLight('#dfebff', 1.5);
   fill.position.set(160, 120, 100);
   scene.add(fill);
-  const grid = new THREE.GridHelper(220, 22, '#a89e92', '#cdc5bb');
-  grid.rotation.x = Math.PI / 2;
-  grid.position.z = -0.05;
+  const grid = new THREE.LineSegments(
+    new THREE.BufferGeometry().setAttribute(
+      'position',
+      new THREE.BufferAttribute(buildVolumeGrid(), 3),
+    ),
+    new THREE.LineBasicMaterial({ color: '#cdc5bb' }),
+  );
   scene.add(grid);
   const box = new THREE.Box3Helper(
     new THREE.Box3(new THREE.Vector3(-110, -110, 0), new THREE.Vector3(110, 110, 250)),
@@ -120,6 +125,17 @@ export function createThreeDScene(host: HTMLElement) {
   const doubleClick = () => view('Fit');
   host.addEventListener('dblclick', doubleClick);
   return {
+    buildVolume(size?: Triple) {
+      const bounds = buildVolumeBounds(size);
+      box.box.min.set(...bounds.min);
+      box.box.max.set(...bounds.max);
+      grid.geometry.dispose();
+      grid.geometry = new THREE.BufferGeometry().setAttribute(
+        'position',
+        new THREE.BufferAttribute(buildVolumeGrid(size), 3),
+      );
+      draw();
+    },
     setArtifact(artifact: ThreeDArtifact | null) {
       mesh.geometry.dispose();
       mesh.geometry = new THREE.BufferGeometry();

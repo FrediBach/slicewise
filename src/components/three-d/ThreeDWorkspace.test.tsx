@@ -64,6 +64,14 @@ it('keeps signed numeric drafts editable, restores invalid drafts, and follows e
   publish();
   expect(screen.getByRole('spinbutton', { name: 'Nominal width (mm)' })).toHaveValue(1.2);
   expect(screen.getByRole('combobox', { name: 'Profile precision' })).toHaveValue('0.05');
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Build width (mm)' }), {
+    target: { value: '180' },
+  });
+  expect(commands.mock.lastCall![0].detail.buildVolumeMm).toEqual([180, 220, 250]);
+  project.buildVolumeMm = [180, 120, 160];
+  publish();
+  expect(screen.getByRole('spinbutton', { name: 'Build depth (mm)' })).toHaveValue(120);
+  expect(screen.getByRole('spinbutton', { name: 'Build height (mm)' })).toHaveValue(160);
   project.rotation = [0, 0, 0];
   publish();
   expect(rotation).toHaveValue(0);

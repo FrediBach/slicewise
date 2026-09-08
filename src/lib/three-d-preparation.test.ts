@@ -112,6 +112,19 @@ describe('integrated 3D slice and treatment preparation', () => {
       expect(fine.preparation!.volumeMm3).not.toBe(draft.preparation!.volumeMm3);
     },
   );
+  it('screens the chosen build volume without resizing prepared geometry', () => {
+    const r = request();
+    r.project.pathToleranceMm = 0.05;
+    r.project.buildVolumeMm = [100, 100, 100];
+    const large = prepareThreeD(r, module);
+    r.project.buildVolumeMm = [30, 50, 70];
+    const small = prepareThreeD(r, module);
+    expect(large.preparation?.status).toBe('accepted');
+    expect(small.preparation?.status).toBe('accepted');
+    expect(large.preparation?.advisories).not.toContain('outside-build-volume');
+    expect(small.preparation?.advisories).toContain('outside-build-volume');
+    expect(small.artifact).toEqual(large.artifact);
+  });
   it('highlights ordered levels and retains every loop, with empty ranges explicit', () => {
     const r = request();
     r.project.selection = { mode: 'every', step: 2, offset: 1 };

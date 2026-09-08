@@ -1,3 +1,4 @@
+import { DEFAULT_BUILD_VOLUME, fitsBuildVolume } from '../../lib/three-d-build-volume';
 import { PhysicalNumberInput } from './PhysicalNumberInput';
 import { ThreeDSurfacePanel } from './ThreeDSurfacePanel';
 import { useEffect, useRef, useState } from 'react';
@@ -112,7 +113,7 @@ export function ThreeDPanel() {
                 </label>
               ))}
             </div>
-            <p className="three-d-caption">Placement (mm) · centered 220 × 220 × 250 bed</p>
+            <p className="three-d-caption">Placement (mm) · centered build volume</p>
             <div className="three-d-fields">
               {(['X', 'Y', 'Z'] as const).map((axis, i) => (
                 <label key={axis}>
@@ -150,6 +151,42 @@ export function ThreeDPanel() {
           </>
         )}
       </Section>
+      {project && (
+        <Section
+          title="Print setup"
+          description="Rectangular build volume in millimeters."
+          defaultOpen
+        >
+          <div className="three-d-fields">
+            {(['Width', 'Depth', 'Height'] as const).map((label, i) => (
+              <label key={label}>
+                {label} (mm)
+                <PhysicalNumberInput
+                  aria-label={`Build ${label.toLowerCase()} (mm)`}
+                  type="number"
+                  min="1"
+                  max="2000"
+                  step="1"
+                  value={(project.buildVolumeMm ?? DEFAULT_BUILD_VOLUME)[i]}
+                  onChange={(e) => {
+                    const value = e.target.valueAsNumber;
+                    if (!Number.isFinite(value) || value < 1 || value > 2000) return;
+                    const buildVolumeMm = [
+                      ...(project.buildVolumeMm ?? DEFAULT_BUILD_VOLUME),
+                    ] as ThreeDProject['buildVolumeMm'];
+                    buildVolumeMm[i] = value;
+                    edit({ buildVolumeMm });
+                  }}
+                />
+              </label>
+            ))}
+          </div>
+          <p className="gradient-note">
+            Print view and manufacturing checks use this volume. X/Y are centered on the bed; height
+            starts at Z = 0. Changing the volume does not resize the object.
+          </p>
+        </Section>
+      )}
       {project && <ThreeDSurfacePanel state={state} project={project} />}
     </div>
   );
@@ -220,14 +257,10 @@ function Viewport({ state }: { state: ThreeDUiState }) {
     showSlices,
     ready,
   ]);
-  const outside =
-    state.artifact &&
-    (state.artifact.min[0] < -110 ||
-      state.artifact.max[0] > 110 ||
-      state.artifact.min[1] < -110 ||
-      state.artifact.max[1] > 110 ||
-      state.artifact.min[2] < -0.01 ||
-      state.artifact.max[2] > 250);
+  useEffect(() => {
+    adapter.current?.buildVolume(state.project?.buildVolumeMm);
+  }, [state.project?.buildVolumeMm, ready]);
+  const outside = state.artifact && !fitsBuildVolume(state.artifact, state.project?.buildVolumeMm);
   return (
     <section
       className="three-d-workspace"
@@ -326,7 +359,7 @@ function Viewport({ state }: { state: ThreeDUiState }) {
             : 'No current geometry'}
         </span>
         <span>
-          {outside ? 'Outside reference build volume · ' : ''}
+          {outside ? 'Outside build volume · ' : ''}
           {showSource && state.preparation?.status === 'accepted'
             ? 'Untreated source comparison · prepared result retained'
             : state.message}

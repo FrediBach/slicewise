@@ -9,6 +9,7 @@ import {
 } from '../../lib/three-d-project';
 const scene = vi.hoisted(() => ({
   setArtifact: vi.fn(),
+  buildVolume: vi.fn(),
   slices: vi.fn(),
   style: vi.fn(),
   dispose: vi.fn(),
@@ -88,4 +89,17 @@ it('discloses slice extraction failure directly in the viewport', () => {
   expect(
     screen.getByText('Contours unavailable: A slice overlaps a source face.'),
   ).toBeInTheDocument();
+});
+
+it('updates the print volume and outside warning without changing the object', async () => {
+  const value = state();
+  value.artifact!.max = [60, 20, 40];
+  render(<ThreeDWorkspace />);
+  publish(value);
+  await waitFor(() => expect(scene.buildVolume).toHaveBeenCalledWith([220, 220, 250]));
+  expect(screen.queryByText(/Outside build volume/)).not.toBeInTheDocument();
+  publish({ ...value, project: { ...value.project!, buildVolumeMm: [100, 50, 80] } });
+  expect(scene.buildVolume).toHaveBeenLastCalledWith([100, 50, 80]);
+  expect(screen.getByText(/Outside build volume/)).toBeInTheDocument();
+  expect(scene.setArtifact).toHaveBeenLastCalledWith(value.artifact);
 });

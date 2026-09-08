@@ -28,6 +28,7 @@ export interface ThreeDProject {
   rotation: Triple;
   position: Triple;
   onBed: boolean;
+  buildVolumeMm: Triple;
   treatment: SolidOperation;
   radiusMm: number;
   profileToleranceMm: number;
@@ -111,6 +112,7 @@ export function createThreeDProject(sourceId: string): ThreeDProject {
     rotation: [0, 0, 0],
     position: [0, 0, 0],
     onBed: true,
+    buildVolumeMm: [220, 220, 250],
     treatment: 'off',
     radiusMm: 0.6,
     profileToleranceMm: 0.05,

@@ -137,29 +137,37 @@ it('integrates mode exits, shared Object edits, scoped history, source replaceme
   expect(input('axis').value).toBe('up');
   expect(second.requests.at(-1)!.project.viewDirection).toEqual(originalDirection);
   document.dispatchEvent(
-    new CustomEvent('threedprojectchange', { detail: { profileToleranceMm: 0.02 } }),
+    new CustomEvent('threedprojectchange', {
+      detail: { profileToleranceMm: 0.02, buildVolumeMm: [180, 120, 160] },
+    }),
   );
   second.complete();
   await settle();
   second.complete();
   expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.02);
+  expect(second.requests.at(-1)!.project.buildVolumeMm).toEqual([180, 120, 160]);
   input('undo').click();
   second.complete();
   await settle();
   second.complete();
   expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.05);
+  expect(second.requests.at(-1)!.project.buildVolumeMm).toEqual([220, 220, 250]);
   input('redo').click();
   second.complete();
   await settle();
   second.complete();
   expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.02);
+  expect(second.requests.at(-1)!.project.buildVolumeMm).toEqual([180, 120, 160]);
   document.dispatchEvent(
-    new CustomEvent('threedprojectchange', { detail: { profileToleranceMm: -1 } }),
+    new CustomEvent('threedprojectchange', {
+      detail: { profileToleranceMm: -1, buildVolumeMm: [-1, 100, 100] },
+    }),
   );
   second.complete();
   await settle();
   second.complete();
   expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.02);
+  expect(second.requests.at(-1)!.project.buildVolumeMm).toEqual([180, 120, 160]);
   mode('sequencer');
   expect(second.terminated).toBe(true);
   expect(document.body).toHaveClass('sequencer-mode');

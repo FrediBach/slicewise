@@ -1,3 +1,4 @@
+import { buildVolumeBounds } from './three-d-build-volume';
 import { cleanGeneratedSolid, type SolidCleanup } from './generated-solid-cleanup';
 import type { ManifoldToplevel } from 'manifold-3d';
 import { ThreeDGeometryCache } from './three-d-cache';
@@ -89,7 +90,7 @@ export function prepareThreeD(
     const artifact = { ...placed, ...cleaned.mesh };
     progress('Checking the placed artifact and screening manufacturing advisories…');
     const screen = auditPrintManufacturing(artifact, {
-      buildVolume: { min: [-110, -110, 0], max: [110, 110, 250] },
+      buildVolume: buildVolumeBounds(request.project.buildVolumeMm),
       bedToleranceMm: 0.05,
       overhangFromVerticalDeg: 45,
     });
