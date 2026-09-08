@@ -23,7 +23,7 @@ export function EffectsPanel() {
     <Section
       title="Effects"
       description="Layer texture, colour, fills, and annotations."
-      badge="06"
+      badge="07"
     >
       <FieldGroup title="Post-processing">
         <EffectAccordion title="Slice explode">

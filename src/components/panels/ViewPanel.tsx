@@ -6,7 +6,7 @@ export function ViewPanel() {
     <Section
       title="View"
       description="Frame the model and set its projection on the page."
-      badge="02"
+      badge="03"
     >
       <FieldGroup title="Orientation">
         <ValueControl id="az" label="Azimuth" min="-180" max="180" step="0.1" value="35" unit="°" />

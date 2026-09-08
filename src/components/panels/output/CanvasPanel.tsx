@@ -13,7 +13,7 @@ export function CanvasPanel() {
     <Section
       title="Canvas"
       description="Define the physical sheet, margins, and clipping boundary."
-      badge="05"
+      badge="06"
     >
       <FieldGroup title="Artboard">
         <SelectControl

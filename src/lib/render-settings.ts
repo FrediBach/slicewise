@@ -1,3 +1,4 @@
+import { OBJECT_AXES, OBJECT_CONTROLS, OBJECT_GROUPS } from './object-settings';
 import { SLICE_RAY_CONTROLS } from './slice-rays-settings';
 import { WEAVE_CONTROLS } from './contour-weave-settings';
 import { MAP_CONTROLS } from './map-settings';
@@ -16,6 +17,10 @@ export type RenderSettingsSource = Omit<ContourSettings, 'documentTitle' | 'supp
  * check makes additions to ContourSettings deliberate at this boundary.
  */
 export const renderSettingKeys = [
+  'objectEnabled',
+  ...OBJECT_GROUPS.map(({ id }) => id),
+  ...OBJECT_AXES,
+  ...OBJECT_CONTROLS.map(({ id }) => id),
   'az',
   'el',
   'roll',

@@ -1,5 +1,13 @@
 'use strict';
 
+import {
+  OBJECT_AXES,
+  OBJECT_CONTROLS,
+  OBJECT_DEFAULTS,
+  OBJECT_GROUPS,
+  objectHasTransform,
+} from './object-settings';
+
 import { SLICE_RAY_CONTROLS, SLICE_RAY_DEFAULTS, sliceRaysSupported } from './slice-rays-settings';
 
 import {
@@ -397,6 +405,7 @@ const state: AppState = {
   tileShuffleSeed: 4,
   ...WEAVE_DEFAULTS,
   ...SLICE_RAY_DEFAULTS,
+  ...OBJECT_DEFAULTS,
   sampleAndHold: false,
   sampleAndHoldAxis: 'y',
   sampleAndHoldSpacing: 2,
@@ -902,6 +911,7 @@ if (typeof document !== 'undefined') {
     const offsets = mesh.lineArt?.offsets.slice();
     const transfer = [V.buffer, T.buffer, N.buffer];
     if (offsets) transfer.push(offsets.buffer);
+    syncObjectControls();
     renderWorker.postMessage(
       {
         type: 'mesh',
@@ -1391,6 +1401,7 @@ if (typeof document !== 'undefined') {
   bindPair('tileShuffleSeed', 'tileShuffleSeed');
   for (const { id } of WEAVE_CONTROLS) bindPair(id, id);
   for (const { id } of SLICE_RAY_CONTROLS) bindPair(id, id);
+  for (const { id } of OBJECT_CONTROLS) bindPair(id, id, syncMapControls);
   bindPair('sampleAndHoldSpacing', 'sampleAndHoldSpacing');
   bindPair('sampleAndHoldLength', 'sampleAndHoldLength');
   bindPair('sampleAndHoldMix', 'sampleAndHoldMix');
@@ -2077,6 +2088,65 @@ if (typeof document !== 'undefined') {
     syncEaseCenter();
     redraw(false);
   });
+  function syncObjectControls(): void {
+    const supported = !state.mesh?.lineArt;
+    const active = supported && state.objectEnabled;
+    const reason = supported
+      ? 'Enable object transformations and this transformation to edit it.'
+      : 'Object transformations require a triangle mesh. Extruded SVG artwork is supported.';
+    setSingleControlDisabled('objectEnabled', !supported, reason);
+    $('objectEnabled').closest('.checkbox-control')?.classList.toggle('is-disabled', !supported);
+    for (const { id } of OBJECT_GROUPS) {
+      setSingleControlDisabled(id, !active, reason);
+      $(id).closest('.checkbox-control')?.classList.toggle('is-disabled', !active);
+    }
+    for (const { id, group } of OBJECT_CONTROLS) {
+      const disabled = !active || !state[group];
+      setControlPairDisabled(id, disabled, reason);
+      $(id + 'Control').classList.toggle('is-disabled', disabled);
+    }
+    for (const id of OBJECT_AXES) {
+      const group =
+        id === 'objectTaperAxis'
+          ? 'objectTaper'
+          : id === 'objectTwistAxis'
+            ? 'objectTwist'
+            : 'objectBend';
+      setSingleControlDisabled(id, !active || !state[group], reason);
+      $(id)
+        .closest('.control-row')
+        ?.classList.toggle('is-disabled', !active || !state[group]);
+    }
+    $('objectStatus').textContent = supported
+      ? 'Stretch → taper → twist → bend → rotate. Axes follow the source model; rotation positions the reshaped object relative to the cutting field.'
+      : 'Object transformations require a triangle mesh. Settings are retained for the next mesh source.';
+    syncMapControls();
+  }
+  for (const id of ['objectEnabled', ...OBJECT_GROUPS.map(({ id }) => id)] as const)
+    $(id).addEventListener('change', (event) => {
+      state[id] = inputTarget(event).checked;
+      syncObjectControls();
+      redraw(false);
+    });
+  for (const id of OBJECT_AXES)
+    $(id).addEventListener('change', (event) => {
+      const value = inputTarget(event).value;
+      state[id] = value === 'x' || value === 'y' ? value : 'z';
+      redraw(false);
+    });
+  $('resetObject').addEventListener('click', () => {
+    commitParameterHistory();
+    const snapshot = cloneParameterSnapshot();
+    Object.assign(snapshot, OBJECT_DEFAULTS);
+    for (const { id } of OBJECT_CONTROLS) {
+      delete snapshot.morphTargets[id];
+      delete snapshot.morphTargets2[id];
+    }
+    restoreParameterSnapshot(snapshot);
+    commitParameterHistory();
+    toast('Object transformations reset');
+  });
+  syncObjectControls();
   function syncSliceRayControls(): void {
     const supported = !state.mesh?.lineArt && sliceRaysSupported(state);
     const reason = supported
@@ -2460,12 +2530,13 @@ if (typeof document !== 'undefined') {
     for (const { id } of MAP_CONTROLS) {
       const needsTerrain = id === 'mapRoads' || id === 'mapRivers';
       const enabled =
-        state.topographicMap && (!needsTerrain || (state.source === 'terrain' && !state.upY));
+        state.topographicMap &&
+        (!needsTerrain || (state.source === 'terrain' && !state.upY && !objectHasTransform(state)));
       setControlPairDisabled(
         id,
         !enabled,
         needsTerrain && state.topographicMap
-          ? 'Select Generative terrain with Z up to generate terrain-following routes.'
+          ? 'Use Generative terrain with Z up and neutral object transformations for terrain-following routes.'
           : 'Turn on Topographic map to edit this parameter.',
       );
       $(id + 'Control').classList.toggle('is-disabled', !enabled);
@@ -3105,6 +3176,7 @@ if (typeof document !== 'undefined') {
     ['tileShuffleSeed', 'tileShuffleSeed'],
     ...WEAVE_CONTROLS.map(({ id }) => [id, id] as const),
     ...SLICE_RAY_CONTROLS.map(({ id }) => [id, id] as const),
+    ...OBJECT_CONTROLS.map(({ id }) => [id, id] as const),
     ['sampleAndHoldSpacing', 'sampleAndHoldSpacing'],
     ['sampleAndHoldLength', 'sampleAndHoldLength'],
     ['sampleAndHoldMix', 'sampleAndHoldMix'],
@@ -3149,6 +3221,7 @@ if (typeof document !== 'undefined') {
     ['morphStepsY', 'morphStepsY'],
   ];
   const historySelects: Array<keyof ContourSettings> = [
+    ...OBJECT_AXES,
     'projectionWarpMode',
     'gapEase',
     'axis',
@@ -3177,6 +3250,8 @@ if (typeof document !== 'undefined') {
     'vectorZoom4Corner',
   ];
   const historyChecks: Array<keyof ContourSettings> = [
+    'objectEnabled',
+    ...OBJECT_GROUPS.map(({ id }) => id),
     'spiral',
     'sliceLfo',
     'sliceLfoModulation',
@@ -3280,6 +3355,7 @@ if (typeof document !== 'undefined') {
     $('pw').value = String(state.pw);
     $('ph').value = String(state.ph);
     syncPaperPreset();
+    syncObjectControls();
     syncSliceFieldControls();
     $('gradientEditor').classList.toggle('enabled', state.gradientEnabled);
     $('lineIndexColorEditor').classList.toggle('enabled', state.lineIndexColorEnabled);
@@ -3499,6 +3575,14 @@ if (typeof document !== 'undefined') {
     }
     randomizePair('tilingDepth', 'tilingDepth', () => randomInt(2, 5));
     randomizePair('tilingDiskScale', 'tilingDiskScale', () => randomInt(72, 100));
+    randomizeCheckbox('objectEnabled', 'objectEnabled', 0.35);
+    for (const { id } of OBJECT_GROUPS) randomizeCheckbox(id, id, 0.8);
+    for (const id of OBJECT_AXES) randomizeSelect(id, id, ['x', 'y', 'z']);
+    for (const { id, min, max, value } of OBJECT_CONTROLS)
+      randomizePair(id, id, () =>
+        value === 100 ? randomInt(70, 140) : randomInt(Math.max(min, -60), Math.min(max, 60)),
+      );
+    syncObjectControls();
     randomizePair('az', 'az', () => randomInt(-180, 180));
     randomizePair('el', 'el', () => randomInt(-70, 70));
     randomizePair('rl', 'roll', () => randomInt(-35, 35));

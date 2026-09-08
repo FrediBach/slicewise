@@ -13,7 +13,7 @@ export function AppearancePanel() {
     <Section
       title="Appearance"
       description="Set the contour weight, inks, and colour treatment."
-      badge="04"
+      badge="05"
     >
       <FieldGroup title="Line style">
         <ValueControl

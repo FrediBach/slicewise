@@ -95,6 +95,8 @@ Coverage currently measures the focused core under active test:
 - `terrain-routes.ts`
 - `map-settings.ts`
 - `mesh.ts`
+- `mesh-deformation.ts`
+- `object-settings.ts`
 - `mesh-curvature.ts`
 - `mesh-geodesics.ts`
 - `mesh-topology.ts`
@@ -159,3 +161,5 @@ The HTML report is generated under `coverage/` and is ignored by Git.
 `slice-ray-surface.test.ts` verifies source-normal interpolation and face fallback, open contours, local field tangents, singular-direction rejection, translated fade gaps under explosion, and actual ray output for spherical/cylindrical fields, all geodesic modes, curvature, divergence, and LFO modulation. The non-Euclidean compatibility matrix enables rays through projection warps, morphs, clipping, effects, and both G-code profiles. Runtime ray tests cover the expanded field availability and retained unsupported modes.
 
 Origin-driven ray regressions check spherical and cylindrical source positions inside and on either side of a surface, reject entry crossings, verify alignment away from the origin, and confirm the same propagation direction in exported contour toolpaths.
+
+`mesh-deformation.test.ts` verifies exact neutral behavior, immutable source data, transform ordering and normals, taper/twist/bend geometry, shared-edge closure and manifold topology on all axes, bounded cache eviction, finite extreme/flat input, and source capabilities. `object-integration.test.ts` compares every slice-field mode against an explicitly deformed mesh, including visibility, silhouettes, rays and both G-code origins. It also covers nonlinear projection, weave, LFO, spiral, per-instance X/Y morphs, and animated geometry. `object-runtime.test.tsx` exercises all numeric bindings, axis changes, toggles, reset/undo, snapshots, locks and group randomization, line-art source switching, and animation editing/restoration.

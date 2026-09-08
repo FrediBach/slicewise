@@ -1,3 +1,4 @@
+import { resolveObjectSettings } from './object-settings';
 import { resolveSliceRaySettings } from './slice-rays-settings';
 import { resolveWeatherColors } from './weather-bands';
 import { LEGACY_WEAVE_KEYS, resolveWeaveSettings } from './contour-weave-settings';
@@ -28,7 +29,7 @@ const projectionWarpModes = [
 /** Normalize old or incomplete saved settings without mutating stored data. */
 export function normalizeParameterSnapshot(snapshot: ContourSettings): ContourSettings {
   const restored = structuredClone(snapshot);
-  Object.assign(restored, resolveSliceRaySettings(snapshot));
+  Object.assign(restored, resolveSliceRaySettings(snapshot), resolveObjectSettings(snapshot));
   restored.weatherBands = snapshot.weatherBands === true;
   Object.assign(restored, resolveWeatherColors(snapshot));
   Object.assign(restored, resolveMapSettings(snapshot), resolveWeaveSettings(snapshot));

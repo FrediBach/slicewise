@@ -8,7 +8,7 @@ export function ContoursPanel() {
     <Section
       title="Contours"
       description="Shape the slice density, spacing, and path construction."
-      badge="03"
+      badge="04"
       defaultOpen
     >
       <FieldGroup title="Density & finish">

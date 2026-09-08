@@ -20,7 +20,7 @@ export function ExportPanel() {
       id="exportSection"
       title="Export"
       description="Choose the final format and configure plotter motion."
-      badge="08"
+      badge="09"
     >
       <FieldGroup title="Export format">
         <SelectControl

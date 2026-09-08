@@ -6,7 +6,7 @@ export function MorphPanel() {
     <Section
       title="Morph"
       description="Interpolate selected parameters into layered variations."
-      badge="07"
+      badge="08"
     >
       <FieldGroup title="Parameter interpolation">
         <Checkbox id="morphEnabled">Enable morph instances</Checkbox>

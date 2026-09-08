@@ -5,6 +5,7 @@ import { RandomLockActions } from './components/controls/FormControls';
 import { SourcePanel } from './components/panels/SourcePanel';
 import { SnapshotsPanel } from './components/panels/SnapshotsPanel';
 import { MorphPanel } from './components/panels/MorphPanel';
+import { ObjectPanel } from './components/panels/ObjectPanel';
 import { ViewPanel } from './components/panels/ViewPanel';
 import { ContoursPanel } from './components/panels/ContoursPanel';
 import {
@@ -58,6 +59,7 @@ export default function App() {
 
           <SnapshotsPanel />
           <SourcePanel />
+          <ObjectPanel />
           <ViewPanel />
           <ContoursPanel />
           <AppearancePanel />

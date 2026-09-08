@@ -1,5 +1,8 @@
 'use strict';
 
+import { deformMesh } from './mesh-deformation';
+import type { ObjectSettings } from './object-settings';
+
 import { createSliceRays } from './slice-rays';
 import { createSliceNormalCollector, createSurfaceSliceRays } from './slice-ray-surface';
 import {
@@ -132,6 +135,7 @@ export interface LineIndexColor {
 
 export interface ContourSettings
   extends
+    Partial<ObjectSettings>,
     Partial<MapSettings>,
     Partial<SliceRaySettings>,
     Partial<ContourWeaveSettings>,
@@ -2822,6 +2826,7 @@ function computeContourInstance(
 ): InternalContourResult {
   if (mesh.lineArt) return computeLineArtInstance(mesh, settings, quick);
   const t0 = performance.now();
+  mesh = deformMesh(mesh, settings);
   const W = settings.pw,
     H = settings.ph;
   const vectorZooms = resolveVectorZooms(settings, W, H, settings.margin);

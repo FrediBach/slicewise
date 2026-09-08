@@ -3,6 +3,7 @@ import { contourSettings, makeContourMesh } from '../test/fixtures/contours';
 import { computeContours, type ContourMesh, type ContourSettings } from './contour-engine';
 import { generateGCode } from './gcode';
 import { generateHyperbolicTiling } from './hyperbolic-tiling';
+import { OBJECT_DEFAULTS } from './object-settings';
 
 const finiteOutput = (value: string): boolean => !/(?:NaN|undefined|Infinity)/.test(value);
 
@@ -33,6 +34,13 @@ function assertBothPlotterProfiles(
 
 const hardeningSettings = {
   ...contourSettings,
+  ...OBJECT_DEFAULTS,
+  objectEnabled: true,
+  objectScaleX: 115,
+  objectTaperAmount: 10,
+  objectTwistAngle: 25,
+  objectBendAngle: 15,
+  objectRotationX: 10,
   az: -28,
   el: 38,
   roll: 17,
