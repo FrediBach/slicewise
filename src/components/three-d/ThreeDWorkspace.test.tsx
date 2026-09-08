@@ -39,6 +39,31 @@ it('keeps signed numeric drafts editable, restores invalid drafts, and follows e
     target: { value: '0' },
   });
   expect(commands.mock.lastCall![0].detail.resultWeldToleranceMm).toBe(0);
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Nominal width (mm)' }), {
+    target: { value: '2.4' },
+  });
+  expect(commands.mock.lastCall![0].detail.radiusMm).toBe(1.2);
+  project.radiusMm = 1.2;
+  project.treatment = 'inset';
+  publish();
+  expect(screen.getByRole('spinbutton', { name: 'Circular tool radius (mm)' })).toHaveValue(1.2);
+  expect(
+    screen.getByRole('img', { name: /nominal width 2.4 mm, depth 1.2 mm/ }),
+  ).toBeInTheDocument();
+  project.treatment = 'emboss';
+  publish();
+  expect(
+    screen.getByRole('img', { name: /nominal width 2.4 mm, height 1.2 mm/ }),
+  ).toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: 'Profile precision' }), {
+    target: { value: '0.02' },
+  });
+  expect(commands.mock.lastCall![0].detail.profileToleranceMm).toBe(0.02);
+  project.radiusMm = 0.6;
+  project.profileToleranceMm = 0.05;
+  publish();
+  expect(screen.getByRole('spinbutton', { name: 'Nominal width (mm)' })).toHaveValue(1.2);
+  expect(screen.getByRole('combobox', { name: 'Profile precision' })).toHaveValue('0.05');
   project.rotation = [0, 0, 0];
   publish();
   expect(rotation).toHaveValue(0);

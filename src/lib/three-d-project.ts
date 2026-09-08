@@ -30,6 +30,7 @@ export interface ThreeDProject {
   onBed: boolean;
   treatment: SolidOperation;
   radiusMm: number;
+  profileToleranceMm: number;
   pathToleranceMm: number;
   resultWeldToleranceMm: number;
   selection: SliceSelection;
@@ -112,6 +113,7 @@ export function createThreeDProject(sourceId: string): ThreeDProject {
     onBed: true,
     treatment: 'off',
     radiusMm: 0.6,
+    profileToleranceMm: 0.05,
     pathToleranceMm: 0,
     resultWeldToleranceMm: 0.00001,
     selection: { mode: 'all' },

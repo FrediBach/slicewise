@@ -4178,6 +4178,8 @@ if (typeof document !== 'undefined') {
       next.radiusMm = patch.radiusMm!;
     if ([0, 0.00001].includes(patch.resultWeldToleranceMm!))
       next.resultWeldToleranceMm = patch.resultWeldToleranceMm!;
+    if ([0.1, 0.05, 0.02].includes(patch.profileToleranceMm!))
+      next.profileToleranceMm = patch.profileToleranceMm!;
     if ([0, 0.05].includes(patch.pathToleranceMm!)) next.pathToleranceMm = patch.pathToleranceMm!;
     if (patch.selection) {
       try {

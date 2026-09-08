@@ -136,6 +136,30 @@ it('integrates mode exits, shared Object edits, scoped history, source replaceme
   second.complete();
   expect(input('axis').value).toBe('up');
   expect(second.requests.at(-1)!.project.viewDirection).toEqual(originalDirection);
+  document.dispatchEvent(
+    new CustomEvent('threedprojectchange', { detail: { profileToleranceMm: 0.02 } }),
+  );
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.02);
+  input('undo').click();
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.05);
+  input('redo').click();
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.02);
+  document.dispatchEvent(
+    new CustomEvent('threedprojectchange', { detail: { profileToleranceMm: -1 } }),
+  );
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.02);
   mode('sequencer');
   expect(second.terminated).toBe(true);
   expect(document.body).toHaveClass('sequencer-mode');

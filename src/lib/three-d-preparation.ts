@@ -70,7 +70,7 @@ export function prepareThreeD(
       geometry,
       request.project.selection,
       request.project.radiusMm,
-      0.05,
+      request.project.profileToleranceMm ?? 0.05,
       request.project.pathToleranceMm,
     );
     approximation = recipe.approximation;

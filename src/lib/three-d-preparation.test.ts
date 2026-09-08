@@ -96,6 +96,22 @@ describe('integrated 3D slice and treatment preparation', () => {
     if (operation === 'inset') expect(reply.preparation!.volumeMm3).toBeLessThan(40 * 60 * 80);
     else expect(reply.preparation!.volumeMm3).toBeGreaterThan(40 * 60 * 80);
   });
+  it.each(['inset', 'emboss'] as const)(
+    'uses selected profile precision for %s geometry',
+    (treatment) => {
+      const r = request();
+      r.project.treatment = treatment;
+      r.project.pathToleranceMm = 0.05;
+      r.project.profileToleranceMm = 0.1;
+      const draft = prepareThreeD(r, module);
+      r.project.profileToleranceMm = 0.02;
+      const fine = prepareThreeD(r, module);
+      expect(draft.preparation?.status).toBe('accepted');
+      expect(fine.preparation?.status).toBe('accepted');
+      expect(fine.artifact!.T.length).toBeGreaterThan(draft.artifact!.T.length);
+      expect(fine.preparation!.volumeMm3).not.toBe(draft.preparation!.volumeMm3);
+    },
+  );
   it('highlights ordered levels and retains every loop, with empty ranges explicit', () => {
     const r = request();
     r.project.selection = { mode: 'every', step: 2, offset: 1 };

@@ -1,3 +1,4 @@
+import { ThreeDTreatmentProfile } from './ThreeDTreatmentProfile';
 import { ROUNDED_TOOL_LIMITS } from '../../lib/slice-treatment';
 import { Button } from '../ui/button';
 import { Section } from '../ui/section';
@@ -44,24 +45,7 @@ export function ThreeDSurfacePanel({
           <option value="emboss">Emboss · experimental</option>
         </select>
       </label>
-      <label className="three-d-field">
-        Circular tool radius (mm)
-        <PhysicalNumberInput
-          type="number"
-          min="0"
-          max="10"
-          step="0.1"
-          value={project.radiusMm}
-          onChange={(e) => {
-            const v = e.target.valueAsNumber;
-            if (Number.isFinite(v) && v >= 0 && v <= 10) edit({ radiusMm: v });
-          }}
-        />
-      </label>
-      <p className="gradient-note">
-        Width and penetration are coupled by the circular tool. Surface-normal depth and width are
-        not guaranteed on arbitrary surfaces. Zero radius leaves the source unchanged.
-      </p>
+      <ThreeDTreatmentProfile project={project} />
       <label className="three-d-field">
         Slice selection
         <select
@@ -166,7 +150,7 @@ export function ThreeDSurfacePanel({
         selected tolerance and reported below; the result is fully checked afterward.
       </p>
       <p className="gradient-note">
-        Profile tolerance: 0.05 mm. Construction allows {ROUNDED_TOOL_LIMITS.runs} tool loops,{' '}
+        Construction allows {ROUNDED_TOOL_LIMITS.runs} tool loops,{' '}
         {ROUNDED_TOOL_LIMITS.vertices.toLocaleString('en-US')} path vertices and{' '}
         {ROUNDED_TOOL_LIMITS.primitiveTriangles.toLocaleString('en-US')} estimated construction
         triangles. The combined source/tools and final result remain limited to 500,000 triangles.

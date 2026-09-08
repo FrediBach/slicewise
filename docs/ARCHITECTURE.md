@@ -256,3 +256,5 @@ For changes to controls or bindings, also exercise upload, demo switching, orbit
 ### Weather-map styling
 
 `weather-bands.ts` supplies shared colour-control defaults, validates the three colour anchors, blends the eleven-step diverging palette, and serializes closed-loop SVG fills without DOM access. Both mesh and line-art composition collect finished, clipped contour runs before annotation gaps, sort intact loops by descending projected area, and place opaque fills underneath the normal strokes. Open fragments are never implicitly closed. The standard colour-group pipeline supplies matching contour colours to G-code; the fill polygons are SVG-only. The optional `weatherBands` worker setting defaults to false when migrating older snapshots.
+
+`ThreeDTreatmentProfile` presents synchronized nominal width/radius controls, an ideal flat-surface cross-section and profile precision. Width maps to the existing project radius; `profileToleranceMm` travels with project revisions/history and is consumed by the rounded recipe builder, with a 0.05 mm fallback for older session projects. Neither control changes drawing settings.

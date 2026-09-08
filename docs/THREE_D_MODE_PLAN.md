@@ -24,6 +24,8 @@ Next: refine the captured geometry/profile failures and measure long-session res
 
 Divergence now shares Config’s fan-plane calculation with the strict 3D extractor. Preview contours and experimental Inset/Emboss support per-slice normals, while selection order, gap easing, frozen View depth and geometry audits remain in effect. Regression tests cover all supported planar fields from 1° to 160° and audited divergent treatments; a browser check confirms eight visible rounded-cube contours at 40°.
 
+Treatment controls now expose nominal width alongside the coupled circular radius and an ideal flat-surface cross-section. Profile precision offers Draft (0.10 mm), Standard (0.05 mm) and Fine (0.02 mm), with revision invalidation and undo/redo. This improves control of the existing circular tool; independent surface-normal width/depth remains open.
+
 ## Implementation decision and next-session handoff
 
 Continue the integrated 3D workspace rather than spending another iteration solely extending isolated geometry benchmarks. Build the parts that are useful independently of the final treatment algorithm, then use the integrated workflow to prioritize geometry refinement. Keep construction behind the kernel/tool adapter so changing sweep strategy or kernel does not require rebuilding the workspace.

@@ -2832,3 +2832,18 @@ body.three-d-mode .topbar {
     top: 178px;
   }
 }
+
+.three-d-profile {
+  margin: 8px 0;
+  padding: 12px 8px 8px;
+  border: 1px solid #d8d4ce;
+}
+.three-d-profile svg {
+  display: block;
+  width: 100%;
+  max-height: 150px;
+}
+.three-d-profile figcaption {
+  font-size: 10px;
+  text-align: center;
+}
