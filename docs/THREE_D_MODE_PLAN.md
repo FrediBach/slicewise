@@ -1,6 +1,6 @@
 # 3D mode: slice-driven objects for printing
 
-Status: implementation started, 8 September 2026. **Proceed with an internal end-to-end 3D workspace while feasibility refinement continues.** Phase 0 remains open; this is an explicit sequencing decision, not acceptance of the current geometry pipeline or authorization for a public print-ready release. The application now exposes an internal 3D source-inspection workspace; bounded experimental treatment previews are available, while export remains unavailable. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md) for the implemented spike, measured workloads and known failures.
+Status: implementation started, 8 September 2026. **Proceed with an internal end-to-end 3D workspace while feasibility refinement continues.** Phase 0 remains open; this is an explicit sequencing decision, not acceptance of the current geometry pipeline or authorization for a public print-ready release. The application now exposes an internal 3D source-inspection workspace; bounded experimental treatment previews are available, with experimental binary STL export for current accepted single-body results. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md) for the implemented spike, measured workloads and known failures.
 
 ## Workspace milestone implemented
 
@@ -29,6 +29,8 @@ Treatment controls now expose nominal width alongside the coupled circular radiu
 Print setup now exposes rectangular build width, depth and height (1–2000 mm each, default 220 × 220 × 250). The Print scene and manufacturing audit share centered bounds; dimension edits participate in history and invalidate preparation without scaling the object. Printer profiles and reload persistence remain open.
 
 Print inspection now offers Fit build volume alongside object Fit, and identifies each exceeded boundary with its distance in millimeters. Both fitting actions are camera-only; projection changes retain the selected fitting target.
+
+Binary STL interchange now serializes the exact audited placed single-body result in the worker. The runtime gates downloads by current request/source revision and clears retained file bytes on invalidation. Independent Three.js loader tests compare exact coordinates and dimensions, including real Inset/Emboss results. Export stays explicitly experimental: 3MF, external printer-slicer verification, multiple-body export and physical print validation remain open.
 
 ## Implementation decision and next-session handoff
 

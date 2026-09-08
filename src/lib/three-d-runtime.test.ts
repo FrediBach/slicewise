@@ -1,3 +1,6 @@
+import { solidBox } from '../test/fixtures/solid';
+import { auditPrintTopology } from './print-validation';
+import { serializeBinaryStl } from './stl-export';
 import { expect, it } from 'vitest';
 import { ThreeDRuntime } from './three-d-runtime';
 import { createThreeDProject, type ThreeDRequest, type ThreeDReply } from './three-d-project';
@@ -88,6 +91,7 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
   runtime.cancel();
   expect(workers[0].terminated).toBe(true);
   expect(runtime.state.preparation?.status).toBe('cancelled');
+  expect(runtime.exportStl()).toBeNull();
   workers[0].reply({
     id: first.id,
     sourceVersion: 1,
@@ -95,6 +99,7 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
     preparation: { status: 'accepted', message: 'late' },
   });
   expect(runtime.state.preparation?.status).toBe('cancelled');
+  expect(runtime.exportStl()).toBeNull();
   runtime.prepare();
   expect(workers).toHaveLength(2);
   const next = workers[1].requests.at(-1)!;
@@ -103,15 +108,27 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
     sourceVersion: 1,
     artifact,
     sourceArtifact: artifact,
-    preparation: { status: 'accepted', message: 'accepted' },
+    stl: serializeBinaryStl(solidBox()),
+    preparation: {
+      status: 'accepted',
+      message: 'accepted',
+      bodyCount: 1,
+      checks: auditPrintTopology(solidBox()).checks,
+    },
   });
   expect(runtime.state.preparation?.status).toBe('accepted');
+  expect(runtime.state.exportAvailable).toBe(true);
+  const download = runtime.exportStl()!;
+  expect(download).toEqual(serializeBinaryStl(solidBox()));
+  new Uint8Array(download).fill(0);
+  expect(runtime.exportStl()).toEqual(serializeBinaryStl(solidBox()));
   const calls = workers[1].requests.length;
   runtime.request(input);
   expect(workers[1].requests).toHaveLength(calls);
   expect(runtime.state.preparation?.status).toBe('accepted');
   runtime.request({ ...input, project: { ...input.project, radiusMm: 1 } });
   expect(runtime.state.artifact).toBeNull();
+  expect(runtime.exportStl()).toBeNull();
   expect(runtime.state.preparation?.status).toBe('idle');
   workers[1].reply({
     id: workers[1].requests.at(-1)!.id,

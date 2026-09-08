@@ -84,7 +84,7 @@ it('keeps signed numeric drafts editable, restores invalid drafts, and follows e
   project.rotation = [0, 0, 0];
   publish();
   expect(rotation).toHaveValue(0);
-  expect(screen.getByRole('button', { name: '3D export unavailable' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Export STL (mm)' })).toBeDisabled();
   unmount();
   document.removeEventListener('threedprojectchange', commands);
 });
@@ -126,7 +126,7 @@ it('gates preparation on current slices and size and exposes cancellation withou
   expect(screen.getByRole('button', { name: 'Prepare treatment' })).toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
   expect(cancel).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole('button', { name: '3D export unavailable' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Export STL (mm)' })).toBeDisabled();
   unmount();
   document.removeEventListener('threedprepare', prepare);
   document.removeEventListener('threedcancel', cancel);
@@ -166,6 +166,6 @@ it.each(['accepted', 'rejected'] as const)(
     expect(
       screen.getByText(/Result: 8 vertices merged, 16 zero-area faces removed/),
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '3D export unavailable' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Export STL (mm)' })).toBeDisabled();
   },
 );

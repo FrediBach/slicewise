@@ -1,3 +1,4 @@
+import { prepareStlExport } from './three-d-export';
 import { ThreeDGeometryCache } from './three-d-cache';
 import { previewThreeD, prepareThreeD } from './three-d-preparation';
 import type { ThreeDRequest, ThreeDReply } from './three-d-project';
@@ -33,7 +34,9 @@ self.addEventListener('message', async (event: MessageEvent<ThreeDRequest>) => {
         geometryCache,
       );
     } else reply = previewThreeD(request, geometryCache).reply;
+    if (request.purpose === 'prepare') reply.stl = prepareStlExport(reply);
     const buffers = new Set<ArrayBuffer>();
+    if (reply.stl) buffers.add(reply.stl);
     for (const artifact of [reply.artifact, reply.sourceArtifact])
       if (artifact) {
         buffers.add(artifact.V.buffer as ArrayBuffer);

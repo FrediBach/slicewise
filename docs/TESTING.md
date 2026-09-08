@@ -232,3 +232,7 @@ Build-volume tests cover asymmetric centered bounds, exact boundary inclusion, b
 Print inspection regressions cover independent six-boundary overrun distances, exact boundary inclusion, and Fit versus Fit build volume event routing. Browser checks exercise both projections and confirm camera-only actions leave source/project geometry unchanged.
 
 Printer preset controls are tested for event binding and external state updates. Runtime tests cover authoritative catalog dimensions, manual edits switching to Custom, undo restoration, unknown IDs and Custom retaining dimensions.
+
+Binary STL tests parse the output with the independent Three.js STLLoader and compare every ordered vertex, winding and asymmetric translated bounds. Actual Inset/Emboss preparations round-trip exact placed vertices. Export-gate tests reject incomplete geometry checks, multiple bodies and rejected results; runtime tests cover detached downloads and invalidation. Browser checks cover local downloads and compare file coordinates with the current prepared artifact. External printer-slicer imports and physical prints remain release validation work.
+
+Hot-update export regression: instrument document registration for `threedexport`, change `slicer.ts` under the Vite dev server, and verify a page reload leaves exactly one registration. Prepare a result after the reload and assert one Export click emits exactly one browser download. This reproduced two registrations before the runtime HMR boundary and one afterward.

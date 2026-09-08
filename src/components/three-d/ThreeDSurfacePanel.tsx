@@ -26,7 +26,7 @@ export function ThreeDSurfacePanel({
   return (
     <Section
       title="Surface treatment"
-      description="Experimental circular grooves and ribs. Export remains unavailable."
+      description="Experimental circular grooves and ribs."
       defaultOpen
     >
       <p className="gradient-note">
@@ -244,7 +244,17 @@ export function ThreeDSurfacePanel({
         Completed geometry audits do not establish print readiness. Global wall thickness, support
         and stability remain unchecked.
       </p>
-      <Button disabled>3D export unavailable</Button>
+      <p className="gradient-note">
+        Binary STL uses millimeter coordinates. Import as mm in your slicer. Export is available for
+        a current, geometry-checked single body; support, stability and global wall thickness remain
+        unchecked.
+      </p>
+      <Button
+        disabled={!state.exportAvailable}
+        onClick={() => document.dispatchEvent(new CustomEvent('threedexport'))}
+      >
+        Export STL (mm)
+      </Button>
     </Section>
   );
 }

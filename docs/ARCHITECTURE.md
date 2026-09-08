@@ -264,3 +264,7 @@ For changes to controls or bindings, also exercise upload, demo switching, orbit
 Print-volume fitting in the scene uses the configured bounds independently of the object fitting sphere, and retains that target when changing projection. Boundary overrun measurements remain DOM-free in `three-d-build-volume.ts`; they report the current artifact, including during source comparison.
 
 `three-d-printer-presets.ts` contains a static manufacturer build-volume catalog. Runtime preset selection resolves IDs against that catalog and copies dimensions into the project. Manual volume edits clear the optional `printerPresetId`; Custom preserves dimensions. No remote requests or printer connections are made by the application.
+
+`stl-export.ts` serializes bounded triangle buffers without transformation or coordinate movement. `three-d-export.ts` requires accepted single-body geometry and all eight geometry checks before serialization. The worker serializes the exact audited placed artifact and transfers STL bytes with its revision-associated reply. The runtime privately retains only the current accepted file (up to 25 MB), exposes detached download copies and clears it on invalidation, cancellation, error or exit. `slicer.ts` routes panel/main Export actions to local Blob downloads. No source or geometry is uploaded.
+
+During development, `slicer.ts` forms a full-page reload boundary for Vite hot updates. Its imperative document listeners and workers are page-owned; React Fast Refresh must not leave an older runtime active alongside a new one.

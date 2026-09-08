@@ -1,5 +1,6 @@
 'use strict';
 
+import { threeDStlFilename } from './three-d-export';
 import { printerPreset } from './three-d-printer-presets';
 import { validBuildVolume } from './three-d-build-volume';
 
@@ -4080,6 +4081,10 @@ if (typeof document !== 'undefined') {
     limit: 100,
   });
   const threeDRuntime = new ThreeDRuntime((detail) => {
+    if (threeDMode) {
+      $('save').disabled = !detail.exportAvailable;
+      $('exportLabel').textContent = 'Export STL (mm)';
+    }
     document.dispatchEvent(new CustomEvent('threedstatechange', { detail }));
   });
   function commitThreeDHistory(): void {
@@ -4149,7 +4154,7 @@ if (typeof document !== 'undefined') {
     threeDMode = true;
     document.body.classList.add('three-d-mode');
     $('save').disabled = true;
-    $('exportLabel').textContent = '3D export unavailable';
+    $('exportLabel').textContent = 'Export STL (mm)';
     refreshThreeD();
     publishAnimationState();
   }
@@ -4213,6 +4218,22 @@ if (typeof document !== 'undefined') {
       threeDRuntime.prepare();
     }
   });
+  function exportThreeDStl(): void {
+    if (!threeDMode) return;
+    const bytes = threeDRuntime.exportStl();
+    if (!bytes) {
+      toast('Prepare a current single-body result before exporting.');
+      return;
+    }
+    const anchor = document.createElement('a');
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'model/stl' }));
+    anchor.href = url;
+    anchor.download = threeDStlFilename(state.name);
+    anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast('Saved STL · import in millimeters');
+  }
+  document.addEventListener('threedexport', exportThreeDStl);
   document.addEventListener('threedcancel', () => {
     if (threeDMode) threeDRuntime.cancel();
   });
@@ -6187,7 +6208,10 @@ if (typeof document !== 'undefined') {
     }
   });
   $('save').addEventListener('click', async () => {
-    if (threeDMode) return;
+    if (threeDMode) {
+      exportThreeDStl();
+      return;
+    }
     try {
       await waitForCurrentRender();
       if (threeDMode) return;
@@ -6230,4 +6254,10 @@ if (typeof document !== 'undefined') {
   commitParameterHistory();
   loadDemo('knot', false);
   window.addEventListener('resize', () => redraw(true));
+}
+
+// This imperative runtime owns document listeners and workers for the page lifetime.
+// React Fast Refresh cannot replace those subscriptions; reload at this boundary.
+if (import.meta.hot) {
+  import.meta.hot.accept(() => window.location.reload());
 }

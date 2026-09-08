@@ -1,3 +1,4 @@
+import { hasExportableGeometry } from './three-d-export';
 import {
   initialThreeDState,
   type ThreeDRequest,
@@ -8,6 +9,7 @@ import {
 /** Coalesces edits, owns worker lifetime, and never displays replies from an old revision. */
 export class ThreeDRuntime {
   #worker: Worker | null = null;
+  #stl: ArrayBuffer | null = null;
   #id = 0;
   #signature = '';
 
@@ -36,6 +38,7 @@ export class ThreeDRuntime {
       this.state.status !== 'error'
     )
       return;
+    this.#stl = null;
     this.#signature = signature;
     if (this.#preparing) this.#terminate();
     this.#input = input;
@@ -80,9 +83,12 @@ export class ThreeDRuntime {
         }
         this.#busy = false;
         if (reply.id === this.#id && reply.sourceVersion === this.#sourceVersion) {
+          this.#stl =
+            this.#preparing && reply.stl && hasExportableGeometry(reply) ? reply.stl : null;
           this.#preparing = false;
           this.state = {
             ...this.state,
+            exportAvailable: !!this.#stl,
             status: reply.artifact || this.state.sourceArtifact ? 'ready' : 'error',
             artifact: reply.artifact ?? this.state.sourceArtifact ?? null,
             sourceArtifact:
@@ -105,6 +111,7 @@ export class ThreeDRuntime {
       });
       worker.addEventListener('error', () => {
         if (worker !== this.#worker) return;
+        this.#stl = null;
         worker.terminate();
         this.#worker = null;
         this.#busy = false;
@@ -112,6 +119,7 @@ export class ThreeDRuntime {
         this.#preparing = false;
         this.state = {
           ...this.state,
+          exportAvailable: false,
           status: this.state.sourceArtifact ? 'ready' : 'error',
           artifact: this.state.sourceArtifact ?? null,
           preparation: { status: 'rejected', message: 'Worker stopped. Prepare again to retry.' },
@@ -160,12 +168,21 @@ export class ThreeDRuntime {
       ...this.state,
       status: 'ready',
       artifact: this.state.sourceArtifact ?? null,
+      exportAvailable: false,
       message: 'Untreated source · preparation cancelled',
       preparation: { status: 'cancelled', message: 'Cancelled. You can prepare again.' },
     };
     this.publish(this.state);
   }
+  exportStl(): ArrayBuffer | null {
+    return this.state.active &&
+      this.state.status === 'ready' &&
+      this.state.preparation?.status === 'accepted'
+      ? (this.#stl?.slice(0) ?? null)
+      : null;
+  }
   #terminate(): void {
+    this.#stl = null;
     this.#preparing = false;
     this.#worker?.terminate();
     this.#worker = null;

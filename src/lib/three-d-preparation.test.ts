@@ -1,3 +1,5 @@
+import { prepareStlExport } from './three-d-export';
+import { STLLoader } from 'three/addons/loaders/STLLoader.js';
 import { auditPrintTopology } from './print-validation';
 import { beforeAll, describe, expect, it } from 'vitest';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
@@ -157,6 +159,15 @@ describe('integrated 3D slice and treatment preparation', () => {
       if (operation === 'inset') expect(reply.preparation!.volumeMm3).toBeLessThan(40 * 60 * 80);
       else expect(reply.preparation!.volumeMm3).toBeGreaterThan(40 * 60 * 80);
       expect(reply.artifact!.min[2]).toBe(0);
+      const exported = new STLLoader().parse(prepareStlExport(reply)!);
+      const positions = exported.getAttribute('position').array;
+      expect(positions.length).toBe(reply.artifact!.T.length * 3);
+      for (let i = 0; i < positions.length; i++)
+        expect(positions[i]).toBe(
+          reply.artifact!.V[reply.artifact!.T[Math.floor(i / 3)] * 3 + (i % 3)],
+        );
+      exported.dispose();
+
       expect(r).toEqual(before);
       expect(reply.sourceArtifact!.T).toEqual(r.source.mesh.T);
     },

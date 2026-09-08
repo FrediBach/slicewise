@@ -75,6 +75,7 @@ export interface ThreeDPreparation {
   cleanup?: import('./generated-solid-cleanup').SolidCleanup[];
 }
 export interface ThreeDReply {
+  stl?: ArrayBuffer;
   id: number;
   sourceVersion: number;
   progress?: string;
@@ -85,6 +86,7 @@ export interface ThreeDReply {
   error?: string;
 }
 export interface ThreeDUiState {
+  exportAvailable?: boolean;
   active: boolean;
   source: { id: string; name: string; imported: boolean } | null;
   project: ThreeDProject | null;
