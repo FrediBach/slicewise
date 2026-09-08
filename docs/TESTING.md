@@ -46,7 +46,9 @@ Prefer Node for geometry and serialization tests: it starts faster and makes acc
 
 `print-shells.test.ts` covers cavity preservation, nested solid islands, wrongly oriented nested/disconnected shells, multiple cavities and bodies, reordered shells, bounding-box false positives, translated geometry, unused vertices, prerequisite failures, numerical uncertainty and work/shell/triangle caps. Kernel tests distinguish a body in a torus hole from a cavity inside its tube, reject an inward shell in empty space as a source or tool, and verify body counts and handle cleanup.
 
-`print-manufacturing.test.ts` covers placed/floating/below-bed boxes, exact build-volume limits, overhang angle conventions, clipped sloping faces, cavity ceilings, multiple bodies, full counts with bounded face samples, unused vertices, detached settings, mutated geometry and invalid assumptions. A clean screen still declares thickness/stability unperformed and does not set the full manufacturing check to passed.
+`print-manufacturing.test.ts` covers placed/floating/below-bed boxes, exact build-volume limits, overhang angle conventions, clipped sloping faces, cavity ceilings, multiple bodies, full counts with bounded face samples, unused vertices, detached settings, mutated geometry and invalid assumptions. Thickness remains unperformed unless explicitly configured; stability and the full manufacturing check remain unperformed. Optional thin-plate integration verifies estimate advisories and detached priority settings.
+
+`print-thickness.test.ts` covers known box dimensions, thin plates, translation, cavity boundaries, disconnected bodies, deterministic priority sampling, bounded work with discarded partial rays, ambiguous edge/near-origin hits and invalid settings. These tests verify sampled normal chords, not a guarantee of global wall thickness or structural strength.
 
 `slice-geometry.test.ts` covers exact triangle/barycentric alignment, plane normalization, run/level ordering, buffer isolation, compatibility with generic unsmoothed drawing intersections, cuts through vertices/edges, coincident but topologically separate surfaces, open paths, branching/coplanar failures and budgets. The shared drawing chaining routine is guarded by the full contour integration suite. `slice-treatment.test.ts` checks deterministic All/range/every-N selections, zero/open/budget cases, detached recipes, real capsule geometry, independent line/triangle feature measurements, tilted and deformed surfaces, multiple torus runs and native-failure cleanup. `src/dev/three-d-feasibility.test.ts` exercises suite routing, stale replies, cancellation, error recovery and page-exit cleanup with a mock worker; real-browser WASM responsiveness still needs manual verification.
 
@@ -111,6 +113,7 @@ Coverage currently measures the focused core under active test:
 - `terrain-routes.ts`
 - `map-settings.ts`
 - `mesh.ts`
+- `print-thickness.ts`
 - `print-manufacturing.ts`
 - `print-shells.ts`
 - `print-intersections.ts`

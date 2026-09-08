@@ -1,6 +1,6 @@
 # 3D mode: Phase-0 feasibility record
 
-Status: Phase-0 kernel and validation spike implemented through initial manufacturing screening, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
+Status: Phase-0 kernel and validation spike implemented through manufacturing screening and bounded thickness estimates, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
 
 ## Implemented
 
@@ -17,7 +17,7 @@ Status: Phase-0 kernel and validation spike implemented through initial manufact
 
 - `print-shells.ts` classifies nesting after closed-manifold and surface-contact checks pass. It validates alternating outward/inward orientation and reports physical body count separately from boundary shell count. Ambiguity and budget exhaustion reject the artifact and leave body count unavailable.
 
-- `print-manufacturing.ts` provides an initial advisory screen with explicit build bounds, bed tolerance and overhang angle. It reports physical placement, a near-bed projected-area estimate, overhang area/face samples and body count, leaving thickness and stability unperformed. It never changes or automatically places the artifact.
+- `print-manufacturing.ts` provides an initial advisory screen with explicit build bounds, bed tolerance and overhang angle. It reports physical placement, a near-bed projected-area estimate, overhang area/face samples and body count, with optional bounded thickness estimates and stability still unperformed. It never changes or automatically places the artifact.
 
 The [Manifold API](https://manifoldcad.org/docs/jsapi/classes/manifold.Manifold.html) requires explicit deletion and oriented manifold imports. Its import may collapse degenerate triangles or unnecessary vertices. This adapter does not add welding, hole filling, winding correction or other repair. Kernel acceptance and positive signed volume are insufficient evidence of geometric or printing validity.
 
@@ -179,6 +179,20 @@ Nine new regressions cover analytic dimensions and area, floating/below-bed plac
 
 Manufacturing-screen verification: all 817 tests across 105 files pass, including 83 focused 3D tests. Formatting, lint, typecheck and both builds pass. React Doctor retains five pre-existing warnings. The developer build retains its Manifold `node:module` externalization warning; native browser loading and cancellation remain unverified.
 
+## Bounded thickness-sampling follow-up
+
+The manufacturing screen can now run an optional inward-normal ray from each selected triangle. The fixed sample barycentrics are `[1/2, 1/3, 1/6]`; centroid samples were avoided because opposite face diagonals produced many exact ties even on an ordinary box. The geometric face normal points the ray into material, including correctly oriented cavity shells. The first boundary hit determines a **normal chord estimate**. This is neither the nearest opposing-surface distance nor a guarantee of global minimum wall thickness or strength.
+
+The screen freshly audits geometry before sampling. Source faces alone are excluded from their rays; cavity walls and adjacent faces remain candidates. First hits on triangle edges, grazing/coplanar candidates, near-origin hits, missing exits or non-exiting orientations are unresolved, rather than skipped to measure a farther surface. A partially scanned ray is discarded when the work budget expires. Thus a ray cannot claim a complete nearest-hit result from only part of the mesh.
+
+Limits are 256 samples, 250,000 triangles and two million triangle visits. Precomputation of face areas/bounds is bounded by the triangle cap; each sampled ray scans candidate bounds under the visit budget. Caller-supplied priority output face IDs reserve sample slots, must be unique and must all fit. Remaining slots use deterministic triangle-index strata. This selection is not adaptive or area weighted. The report retains every selected sample's position, face ID, opposite face when available, estimate or unresolved reason, measured minimum, below-threshold count and work. `resolvedTriangleAreaFraction` refers to faces having one resolved point, not the fraction of surface whose thickness has been established.
+
+Sampling is optional in the library and remains `not-run` when omitted or geometry is rejected. The developer trial explicitly requests 64 samples and a 1 mm review threshold; these are recorded trial assumptions, not printer recommendations. Short resolved chords add `thin-samples`; unresolved rays add `thickness-unresolved`. These advisories do not reject accepted geometry. Stability and the full manufacturing check remain unperformed.
+
+Nine new regressions cover exact box chord lengths, a 0.1 mm plate, translation, cavity boundaries, separate bodies, priority retention, uncertainty, incomplete work and manufacturing integration. A single contour repetition retained 11 accepted results and the known torus Emboss rejection, with zero adapter-owned handles left. All 64 requested rays resolved for each accepted contour result; the maximum query work was 1,310,080 visits. Some inset and raised-feature samples returned short chords below the trial threshold. These can occur near groove lips and sharp features and must not be presented as proof of globally thin structural walls. No adaptive coverage or treatment-region completeness is claimed; priority IDs still need integration with production output provenance.
+
+Thickness-sampling verification: all 92 focused 3D tests pass. The full run passed 825 of 826 tests, with a five-second timeout in the unrelated `OutputPanel.test.tsx` file; its isolated rerun passed all 13 tests without changing the timeout. Formatting, lint, typecheck and both builds pass. React Doctor retains five pre-existing warnings. The developer build retains its Manifold `node:module` externalization warning; native browser loading and cancellation remain unverified.
+
 ## Reproduce
 
 ```bash
@@ -199,6 +213,6 @@ The browser automation bridge was unavailable during both implementation session
 
 1. Extend the triangle-derived circular sweeps to stable surface-normal frames with independent profile width/depth, and measure sharp corners and curved/deformed surfaces at a declared tolerance. The new path contract is not yet integrated with shared Config controls or physical sizing.
 2. Extend the initial twisted/bent/cavity and degenerate-cut regressions to thin walls, close folds, intersecting tools, generated tunnel sources and representative rejected-source statistics.
-3. Extend the initial manufacturing screen with bounded thickness sampling and support/stability diagnostics, and expand shell/intersection numerical stress testing. Shell containment/orientation now has a bounded implementation. Adjacent and non-adjacent contacts now have a bounded conservative audit; exact/near-degenerate predicate robustness still needs broader stress testing. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output and the contour torus's Emboss overlaps through explicit, measured operations rather than silent repair.
+3. Extend thickness sampling with adaptive treatment-region coverage and add support/stability diagnostics, and expand shell/intersection numerical stress testing. Shell containment/orientation now has a bounded implementation. Adjacent and non-adjacent contacts now have a bounded conservative audit; exact/near-degenerate predicate robustness still needs broader stress testing. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output and the contour torus's Emboss overlaps through explicit, measured operations rather than silent repair.
 4. Verify browser cancellation/reinitialization, stale-job handling and source-buffer installation with realistic jobs. Measure peak WASM/JS/GPU memory and lower-memory devices. The internal page recreates its fixed fixtures; it is not the production source lifecycle.
 5. Benchmark representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).

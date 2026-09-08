@@ -37,6 +37,7 @@ function screenForFeasibility(mesh: SolidMesh) {
     buildVolume: { min: [-100, -100, 0], max: [100, 100, 200] },
     bedToleranceMm: 0.05,
     overhangFromVerticalDeg: 45,
+    thickness: { maxSamples: 64, minimumMm: 1 },
   });
   return {
     manufacturingMs: performance.now() - start,

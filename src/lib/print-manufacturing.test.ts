@@ -169,6 +169,32 @@ describe('initial manufacturing screen', () => {
     expect(auditPrintManufacturing(mesh, settings).unavailableReason).toBe('geometry-rejected');
   });
 
+  it('runs optional thickness estimates with advisories while retaining incomplete manufacturing status', () => {
+    const box = placedBox();
+    const mesh = { ...box, V: Float64Array.from(box.V, (v, i) => (i % 3 === 2 ? v * 0.002 : v)) };
+    const options = {
+      ...settings,
+      thickness: { maxSamples: 12, minimumMm: 1, priorityTriangles: [0, 1] },
+    };
+    const report = auditPrintManufacturing(mesh, options);
+    expect(report.status).toBe('screened');
+    expect(report.thickness).not.toBe('not-run');
+    if (report.thickness === 'not-run') throw new Error('Expected sampling report');
+    expect(report.thickness.minimumMeasuredMm).toBeCloseTo(0.1, 10);
+    expect(report.advisories).toContain('thin-samples');
+    expect(report.geometry.checks.manufacturing).toBe('not-run');
+    expect(report.stability).toBe('not-run');
+    options.thickness.priorityTriangles[0] = 2;
+    expect(report.settings.thickness?.priorityTriangles).toEqual([0, 1]);
+    expect(auditPrintManufacturing(foldedOctahedron(), options).thickness).toBe('not-run');
+    expect(() =>
+      auditPrintManufacturing(mesh, {
+        ...options,
+        thickness: { maxSamples: 1, minimumMm: 1, priorityTriangles: [0, 1] },
+      }),
+    ).toThrow('Priority');
+  });
+
   it('rejects malformed build bounds and invalid diagnostic assumptions', () => {
     for (const bedToleranceMm of [-1, NaN, Infinity, 2])
       expect(() => auditPrintManufacturing(placedBox(), { ...settings, bedToleranceMm })).toThrow(

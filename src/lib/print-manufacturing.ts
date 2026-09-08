@@ -1,3 +1,9 @@
+import {
+  samplePrintThickness,
+  validateThicknessSettings,
+  type PrintThicknessSettings,
+  type PrintThicknessReport,
+} from './print-thickness';
 import { auditPrintTopology, type PrintTopologyReport } from './print-validation';
 import type { TopologyMesh } from './mesh-topology';
 
@@ -9,17 +15,25 @@ export type PrintManufacturingSettings = {
   bedToleranceMm: number;
   /** Maximum downward surface tilt from vertical: 0 = vertical, 90 = underside. */
   overhangFromVerticalDeg: number;
+  /** Optional finite normal-chord sampling; never a global wall-thickness proof. */
+  thickness?: PrintThicknessSettings;
 };
 export const PRINT_MANUFACTURING_SAMPLES = 32;
 export type PrintManufacturingAdvisory =
-  'outside-build-volume' | 'below-bed' | 'no-near-bed-area' | 'multiple-bodies' | 'overhangs';
+  | 'outside-build-volume'
+  | 'below-bed'
+  | 'no-near-bed-area'
+  | 'multiple-bodies'
+  | 'overhangs'
+  | 'thin-samples'
+  | 'thickness-unresolved';
 export type PrintManufacturingReport = {
-  /** Screened does not mean print-ready; thickness and stability are not checked. */
+  /** Screened does not mean print-ready; thickness is sampled and stability is not checked. */
   status: 'screened' | 'unavailable';
   unavailableReason: 'geometry-rejected' | 'measurement-range' | null;
   settings: PrintManufacturingSettings;
   geometry: PrintTopologyReport;
-  thickness: 'not-run';
+  thickness: 'not-run' | PrintThicknessReport;
   stability: 'not-run';
   advisories: PrintManufacturingAdvisory[];
   measurements: {
@@ -73,7 +87,8 @@ function polygonArea(polygon: Vec[], projected: boolean) {
  * rather than trusting a report that could belong to an older mesh revision.
  * Geometry errors make measurements unavailable; manufacturing advisories do
  * not reject otherwise accepted geometry. All triangles are visited, with work
- * bounded by the geometry auditor's input limits. No thickness rays run yet.
+ * bounded by the geometry auditor's input limits. Optional thickness rays have
+ * their own sample/work budgets and can leave unresolved regions.
  */
 export function auditPrintManufacturing(
   mesh: TopologyMesh,
@@ -99,10 +114,19 @@ export function auditPrintManufacturing(
     settings.overhangFromVerticalDeg > 90
   )
     throw new Error('Overhang threshold must be between 0 and 90 degrees from vertical.');
+  if (settings.thickness) validateThicknessSettings(settings.thickness, mesh.T.length / 3);
   const detachedSettings: PrintManufacturingSettings = {
     buildVolume: { min: [...min], max: [...max] },
     bedToleranceMm: settings.bedToleranceMm,
     overhangFromVerticalDeg: settings.overhangFromVerticalDeg,
+    ...(settings.thickness
+      ? {
+          thickness: {
+            ...settings.thickness,
+            priorityTriangles: [...(settings.thickness.priorityTriangles ?? [])],
+          },
+        }
+      : {}),
   };
   const geometry = auditPrintTopology(mesh);
   const report: PrintManufacturingReport = {
@@ -167,6 +191,15 @@ export function auditPrintManufacturing(
   if (nearBedProjectedAreaMm2 === 0) report.advisories.push('no-near-bed-area');
   if (bodyCount > 1) report.advisories.push('multiple-bodies');
   if (overhangTriangleCount) report.advisories.push('overhangs');
+  if (settings.thickness) {
+    report.thickness = samplePrintThickness(
+      mesh,
+      settings.thickness,
+      geometry.intersections!.toleranceMm,
+    );
+    if (report.thickness.belowMinimumCount) report.advisories.push('thin-samples');
+    if (report.thickness.status !== 'sampled') report.advisories.push('thickness-unresolved');
+  }
   report.status = 'screened';
   report.unavailableReason = null;
   report.measurements = {
