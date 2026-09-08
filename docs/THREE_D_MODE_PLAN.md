@@ -1,6 +1,43 @@
 # 3D mode: slice-driven objects for printing
 
-Status: implementation started, 8 September 2026. The Phase-0 spike includes triangle-derived planar contours, circular capsule sweeps, independent topology audits and bounded surface-contact checks including adjacent faces, shell containment/orientation checks, and an initial manufacturing advisory screen with bounded thickness estimates and per-body bed-contact measurements; the feasibility gate remains open. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md), including detected analytic-torus degeneracies, contour-torus adjacent overlaps, and the 100k-triangle workload’s rounded-tool recipe budget blocker after successful source validation and measured opt-in path approximation. A separate indexed planar miter-sweep trial fits the tool budget but currently fails final-output contact/budget checks. The production application does not yet expose 3D mode. The remaining sections describe the intended implementation.
+Status: implementation started, 8 September 2026. **Proceed with an internal end-to-end 3D workspace while feasibility refinement continues.** Phase 0 remains open; this is an explicit sequencing decision, not acceptance of the current geometry pipeline or authorization for a public print-ready release. The production application does not yet expose 3D mode. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md) for the implemented spike, measured workloads and known failures.
+
+## Implementation decision and next-session handoff
+
+The next session should begin actual 3D-mode implementation, rather than spending another iteration solely extending isolated geometry benchmarks. Build the parts that are useful independently of the final treatment algorithm, then use the integrated workflow to prioritize geometry refinement. Keep construction behind the kernel/tool adapter so changing sweep strategy or kernel does not require rebuilding the workspace.
+
+### Current feasibility assessment
+
+| Area                                                    | Assessment                                                                |
+| ------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Viewport, navigation, source display and mode switching | High confidence; largely independent of unresolved solid operations       |
+| Explicit physical sizing, orientation and bed placement | High confidence; useful next implementation work                          |
+| Treatments on simpler, well-behaved models              | Demonstrated on limited fixtures; not general input support               |
+| Reliable treatments on complex models                   | Still uncertain; correctness and resource limits both remain open         |
+| General print-ready export                              | Not ready; completed validation and interchange verification are required |
+
+The spike now validates the 100,352-triangle source and extracts all 24 requested contours. Optional 0.05 mm path approximation reduces 15,088 contour vertices to 2,373, but the capsule representation still exceeds its construction budget. A separate indexed planar miter sweep produces 24 audited tools totaling 75,936 triangles within the aggregate input budget. Its final Inset result reports 57 contacts before audit-budget exhaustion; Emboss exhausts the audit budget without a detected contact. These incomplete results are rejected. Known analytic-torus degeneracies and contour-torus Emboss overlaps also remain unresolved.
+
+This is evidence for pursuing the product prototype, not evidence that the remaining work is merely optimization. Contact reports need investigation, and tolerance, feature fidelity and supported input limits still need validation. Real-browser WASM loading, cancellation/restart and memory behavior remain unverified. The last completed implementation verification had 840 passing tests, successful formatting/lint/typecheck and both builds, with five pre-existing Doctor warnings; these checks do not establish print readiness.
+
+### Implementation order
+
+1. **Shared foundations and an internal workspace.** Introduce the typed mode/project and source contracts, then build the viewport, physical dimensions, orientation, bed placement and untreated source inspection. Reuse the shaped source and Object controls; preserve existing drawing, animation and sequencer behavior.
+2. **Bounded treatment previews.** Connect the worker and kernel adapter with explicit supported operations and budgets. Distinguish the current accepted solid from pending, approximate or rejected results. A previous accepted solid may remain visible for comparison, but must be labeled stale when source/settings change and must not be exported as the current result.
+3. **Preparation and export gates.** Enable user export only when all required geometry checks complete successfully for the exact artifact/revision being exported, and the file writer passes the interchange checks below. Current `topology-checked` and manufacturing `screened` labels are insufficient as public print-readiness claims. An internal serialization smoke test is not a production export action. Show manufacturing advisories separately; do not imply support, stability or global thickness checks have run when they have not.
+4. **Refinement driven by the integrated workflow.** Prioritize captured geometry failures, source replacement/stale jobs, browser cancellation and memory, and representative user models. Keep benchmark regressions, but do not make every remaining isolated Phase-0 optimization a prerequisite for implementing the workspace.
+
+### Start here in the next session
+
+Read `docs/ARCHITECTURE.md`, `docs/PARAMETERS.md`, `docs/TESTING.md`, this plan and the latest sections of `docs/THREE_D_FEASIBILITY.md`. Inspect the existing workspace-mode controls and `src/lib/slicer.ts` source/deformation ownership before choosing the exact integration boundary.
+
+The first implementation milestone is an internal **3D** entry showing the current shaped source in a lazily loaded Three.js viewport, backed by explicit source identity and physical-transform state. Include fit/reference views and geometry-neutral camera navigation. Establish millimeter sizing and orientation/bed placement on the same authoritative geometry; do not use display offsets or normalized drawing coordinates as implicit export units. Source changes and mode exit must release/rebind resources correctly. Keep source content local.
+
+Complete this milestone through the existing application flow, with focused mode/source/transform tests and a real-browser interaction check when available. Then connect treatment preparation and diagnostics. Do not present unsupported treatments or incomplete checks as successful preparation, and do not add a working public export action merely to make the initial workspace look complete.
+
+The adapter, contour extraction, validation, manufacturing diagnostics, approximation and experimental sweeps already exist in `src/lib/`; the separate developer trial remains available for regressions. Reuse these boundaries rather than embedding native kernel handles or construction logic in React/scene state. Independent surface-normal width/depth, general join semantics, comprehensive source coverage and the release criteria below remain future work.
+
+**Release boundary:** proceed now with an internal usable prototype. Defer a public “printable 3D mode” claim until the correctness, browser lifecycle/resource, export and physical-print gates are met.
 
 Add **3D** beside Config, Animation, and Sequencer. The mode presents the shaped source in a polished Three.js scene, turns selected contours into physical surface features, and exports the resulting solid at an explicit size in millimeters.
 
@@ -321,7 +358,7 @@ Suggested performance targets on a documented reference laptop: smooth orbit of 
 | 5. Release hardening        | Persistence, migrations, accessibility, resource/error handling, browser verification | Full regression checks plus representative physical print results; document supported limits and unresolved cases       |
 | 6. Creative expansion       | Curved/intrinsic fields, terraces, inlays, lattices, stacked slices                   | Separate geometry and manufacturing gates for each feature family                                                       |
 
-Phases 0–2 produce an internal usable prototype. The first public creative printing release includes phases 0–5; export reliability is part of its scope. Re-estimate implementation effort after phase 0, since the principal uncertainty is robust treatment geometry on difficult source surfaces.
+Under the sequencing decision above, phases 1–2 may proceed while unresolved Phase-0 geometry and resource work continues. The internal prototype does not require declaring Phase 0 complete. Its workspace can land before treatments and public export are ready. The first public creative printing release still requires the applicable gates across phases 0–5; export reliability remains part of its scope. Re-estimate treatment and release effort from integrated-workflow evidence, since robust geometry on difficult source surfaces remains the principal uncertainty.
 
 ## 9. Verification and release criteria
 
@@ -361,4 +398,4 @@ Defaults in this plan allow work to start without blocking on every product choi
 - 3MF preferred, binary STL available from the first public release.
 - Automatic diagnostics, visible constructive fixes, and no silent destructive repair.
 
-Phase 0 must resolve profile construction at sharp corners, tolerance accounting across deformation/sweeps/simplification, source validity rejection rates, and sustainable browser memory limits. Those results determine the precise supported input envelope and any adjustments to the first-release defaults.
+Before public release, feasibility work must resolve profile construction at sharp corners, tolerance accounting across deformation/sweeps/simplification, source validity rejection rates, and sustainable browser memory limits. These are release gates, not a blanket blocker on the internal workspace implementation authorized above. Those results determine the precise supported input envelope and any adjustments to the first-release defaults.
