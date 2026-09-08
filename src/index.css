@@ -2578,3 +2578,181 @@ button:focus-visible,
   font-weight: 600;
   color: var(--ink);
 }
+
+/* Internal physical-object workspace; shared runtime controls stay mounted. */
+body.three-d-mode .drawing-only,
+body.three-d-mode #bedwrap,
+body.three-d-mode .readout,
+body.three-d-mode .workspace-title,
+body.three-d-mode .actions .action-buttons,
+body.three-d-mode #randomize,
+body.three-d-mode .actions > .lock-actions,
+body.three-d-mode .morph-toggle {
+  display: none;
+}
+body.three-d-mode .topbar {
+  display: flex;
+  justify-content: center;
+}
+.three-d-workspace {
+  position: relative;
+  flex: 1;
+  min-height: 480px;
+  overflow: hidden;
+  background: #e8e4df;
+}
+.three-d-canvas {
+  position: absolute;
+  inset: 0;
+}
+.three-d-canvas canvas {
+  display: block;
+  touch-action: none;
+}
+.three-d-toolbar {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 18px;
+  right: 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.three-d-toolbar > div {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.three-d-toolbar button {
+  background: #faf8f4e8;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+.three-d-toolbar button[aria-pressed='true'] {
+  background: #292c2b;
+  color: white;
+}
+.three-d-scene-label {
+  position: absolute;
+  pointer-events: none;
+  top: 100px;
+  left: 24px;
+  display: grid;
+  gap: 6px;
+  color: #57514c;
+  font-size: 12px;
+}
+.three-d-scene-label span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+.three-d-status {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 14px 20px;
+  background: #faf8f4ed;
+  color: #615b53;
+  font-size: 11px;
+}
+.three-d-message {
+  position: absolute;
+  top: 45%;
+  left: 10%;
+  right: 10%;
+  text-align: center;
+  padding: 20px;
+  background: #faf8f4e8;
+  border-radius: 8px;
+}
+.three-d-field {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0;
+  font-size: 12px;
+}
+.three-d-fields {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.three-d-fields label {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  font-size: 11px;
+}
+.three-d-fields input,
+.three-d-field input,
+.three-d-field select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #d8d4ce;
+  border-radius: 5px;
+  background: #faf9f6;
+  color: #292c2b;
+}
+.three-d-caption {
+  margin: 20px 0 10px;
+  font-size: 11px;
+}
+.three-d-notice {
+  padding: 12px;
+  background: #eee6d8;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.three-d-notice p {
+  margin: 0 0 10px;
+}
+.three-d-dimensions {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.three-d-toolbar .button,
+.three-d-panel .button {
+  width: auto;
+  padding-inline: 12px;
+}
+.three-d-field input,
+.three-d-field select,
+.three-d-fields input {
+  height: 34px;
+}
+@media (max-width: 900px) {
+  body.three-d-mode .workspace {
+    height: max(62dvh, 600px);
+  }
+  .three-d-workspace {
+    min-height: 0;
+  }
+}
+@media (max-width: 600px) {
+  .three-d-toolbar {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+  .three-d-toolbar .button {
+    font-size: 10px;
+    padding-inline: 8px;
+    height: 32px;
+  }
+  .three-d-scene-label {
+    top: 150px;
+    left: 16px;
+  }
+  .three-d-status {
+    font-size: 10px;
+    padding: 10px 12px;
+  }
+}

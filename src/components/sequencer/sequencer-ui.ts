@@ -1,4 +1,5 @@
-export type WorkspaceMode = 'config' | 'animation' | 'sequencer';
+import type { WorkspaceMode } from '../../lib/three-d-project';
+export type { WorkspaceMode } from '../../lib/three-d-project';
 
 export interface SequencerUiStep {
   index: number;

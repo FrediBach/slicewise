@@ -1,3 +1,4 @@
+import { ThreeDPanel, ThreeDWorkspace } from './components/three-d/ThreeDWorkspace';
 import { useEffect } from 'react';
 import { Clipboard, Dices, Download, Redo2, Rotate3d, Undo2 } from 'lucide-react';
 import { Button } from './components/ui/button';
@@ -57,16 +58,21 @@ export default function App() {
             <p>Move from source geometry to precise, plotter-ready output one stage at a time.</p>
           </div>
 
-          <SnapshotsPanel />
+          <div className="drawing-only">
+            <SnapshotsPanel />
+          </div>
           <SourcePanel />
           <ObjectPanel />
-          <ViewPanel />
-          <ContoursPanel />
-          <AppearancePanel />
-          <CanvasPanel />
-          <EffectsPanel />
-          <MorphPanel />
-          <ExportPanel />
+          <ThreeDPanel />
+          <div className="drawing-only">
+            <ViewPanel />
+            <ContoursPanel />
+            <AppearancePanel />
+            <CanvasPanel />
+            <EffectsPanel />
+            <MorphPanel />
+            <ExportPanel />
+          </div>
         </div>
 
         <footer className="actions">
@@ -157,6 +163,7 @@ export default function App() {
           </div>
           <div className="toast" id="toast" />
         </div>
+        <ThreeDWorkspace />
         <AnimationTimeline />
         <SequencerWorkspace />
       </main>

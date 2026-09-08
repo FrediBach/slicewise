@@ -1,5 +1,15 @@
 'use strict';
 
+import { ThreeDRuntime } from './three-d-runtime';
+import {
+  createThreeDProject,
+  sourceIdentity,
+  type ThreeDProject,
+  type ThreeDSource,
+  type WorkspaceMode,
+  type SourceNormalization,
+} from './three-d-project';
+
 import {
   OBJECT_AXES,
   OBJECT_CONTROLS,
@@ -768,6 +778,10 @@ if (typeof document !== 'undefined') {
       quality === 'quick' ? previewDetail(previewPerformance) : undefined,
     );
     if (prepared.history === 'record') scheduleParameterHistory();
+    if (threeDMode && prepared.purpose === 'config') {
+      refreshThreeD();
+      return null;
+    }
     if (!state.mesh) return null;
     if (prepared.purpose === 'config' && prepared.quality === 'exact' && sequencerMode) {
       sequencerAwaitingExact = true;
@@ -3299,13 +3313,17 @@ if (typeof document !== 'undefined') {
     return structuredClone(settingsSnapshot());
   }
   function updateHistoryButtons(): void {
-    const { canUndo, canRedo } = parameterHistory.status;
+    const { canUndo, canRedo } = threeDMode ? threeDHistory.status : parameterHistory.status;
     $('undo').disabled = !canUndo;
     $('redo').disabled = !canRedo;
   }
   function commitParameterHistory(): void {
     clearTimeout(parameterHistoryTimer);
     if (restoringParameters) return;
+    if (threeDMode) {
+      commitThreeDHistory();
+      return;
+    }
     if (parameterHistory.commit(cloneParameterSnapshot())) updateHistoryButtons();
   }
   function scheduleParameterHistory(): void {
@@ -3407,6 +3425,16 @@ if (typeof document !== 'undefined') {
     updateHistoryButtons();
   }
   function moveParameterHistory(offset: number): void {
+    if (threeDMode) {
+      commitThreeDHistory();
+      const snapshot = threeDHistory.move(offset);
+      if (!snapshot) return;
+      threeDProject = snapshot.project;
+      restoreParameterSnapshot(snapshot.settings);
+      refreshThreeD();
+      updateHistoryButtons();
+      return;
+    }
     commitParameterHistory();
     const snapshot = parameterHistory.move(offset);
     if (!snapshot) return;
@@ -4038,6 +4066,119 @@ if (typeof document !== 'undefined') {
     ),
   );
   const animationLockedControls = new Map<LockableControl, { disabled: boolean; title: string }>();
+  let threeDMode = false;
+  let threeDProject: ThreeDProject | null = null;
+  let threeDSource: ThreeDSource | null = null;
+  let threeDMesh: ContourMesh | null = null;
+  const threeDProjects = new Map<string, ThreeDProject>();
+  let threeDHistory = new ParameterHistory<{ project: ThreeDProject; settings: ContourSettings }>({
+    limit: 100,
+  });
+  const threeDRuntime = new ThreeDRuntime((detail) => {
+    document.dispatchEvent(new CustomEvent('threedstatechange', { detail }));
+  });
+  function commitThreeDHistory(): void {
+    clearTimeout(parameterHistoryTimer);
+    if (!threeDProject || restoringParameters) return;
+    threeDHistory.commit({ project: threeDProject, settings: cloneParameterSnapshot() });
+    updateHistoryButtons();
+  }
+  function rememberThreeDProject(): void {
+    if (!threeDProject) return;
+    threeDProjects.delete(threeDProject.sourceId);
+    threeDProjects.set(threeDProject.sourceId, structuredClone(threeDProject));
+    if (threeDProjects.size > 12) threeDProjects.delete(threeDProjects.keys().next().value!);
+  }
+  function refreshThreeD(): void {
+    if (!threeDMode || !state.mesh) return;
+    if (threeDMesh !== state.mesh) {
+      rememberThreeDProject();
+      const normalization = (state.mesh as ContourMesh & { normalization?: SourceNormalization })
+        .normalization;
+      const imported = state.source === 'upload' && !state.svgSource && !!normalization;
+      const id = `${sourceIdentity(state.mesh, normalization)}-${imported}-${state.upY}`;
+      threeDSource = {
+        id,
+        version: meshVersion,
+        name: state.name,
+        mesh: state.mesh,
+        normalization,
+        imported,
+        upY: state.upY,
+      };
+      threeDMesh = state.mesh;
+      threeDProject = structuredClone(threeDProjects.get(id) ?? createThreeDProject(id));
+      threeDHistory = new ParameterHistory({ limit: 100 });
+      commitThreeDHistory();
+    }
+    if (threeDSource && threeDProject)
+      threeDRuntime.request({
+        source: threeDSource,
+        project: threeDProject,
+        settings: settingsSnapshot(),
+      });
+  }
+  function leaveThreeDMode(): void {
+    if (!threeDMode) return;
+    commitThreeDHistory();
+    rememberThreeDProject();
+    threeDMode = false;
+    threeDRuntime.stop();
+    threeDMesh = null;
+    threeDSource = null;
+    document.body.classList.remove('three-d-mode');
+    $('save').disabled = false;
+    $('exportLabel').textContent = state.exportFormat === 'gcode' ? 'Export G-code' : 'Export SVG';
+    commitParameterHistory();
+    updateHistoryButtons();
+    redraw(false);
+  }
+  function enterThreeDMode(): void {
+    if (threeDMode || animationExporting) return;
+    animationModeTransition++;
+    leaveAnimationMode();
+    leaveSequencerMode();
+    commitParameterHistory();
+    threeDMode = true;
+    document.body.classList.add('three-d-mode');
+    $('save').disabled = true;
+    $('exportLabel').textContent = '3D export unavailable';
+    refreshThreeD();
+    publishAnimationState();
+  }
+  document.addEventListener('threedstaterequest', () =>
+    document.dispatchEvent(new CustomEvent('threedstatechange', { detail: threeDRuntime.state })),
+  );
+  document.addEventListener('threedprojectchange', (event) => {
+    if (!threeDMode || !threeDProject) return;
+    const patch = (event as CustomEvent<Partial<ThreeDProject>>).detail;
+    // Whitelist editable values; identity and version are runtime-owned.
+    const next = structuredClone(threeDProject);
+    if (['longest', 'mm', 'cm', 'in'].includes(patch.sizeMode ?? ''))
+      next.sizeMode = patch.sizeMode!;
+    if (Number.isFinite(patch.longestMm) && patch.longestMm! >= 0.1 && patch.longestMm! <= 2000)
+      next.longestMm = patch.longestMm!;
+    for (const key of ['rotation', 'position'] as const) {
+      const values = patch[key],
+        limit = key === 'rotation' ? 180 : 2000;
+      if (
+        Array.isArray(values) &&
+        values.length === 3 &&
+        values.every((n) => Number.isFinite(n) && Math.abs(n) <= limit)
+      )
+        next[key] = [...values];
+    }
+    if (typeof patch.onBed === 'boolean') next.onBed = patch.onBed;
+    if (typeof patch.sizeConfirmed === 'boolean') next.sizeConfirmed = patch.sizeConfirmed;
+    threeDProject = next;
+    refreshThreeD();
+    scheduleParameterHistory();
+  });
+  window.addEventListener('pagehide', () => threeDRuntime.stop());
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) refreshThreeD();
+  });
+
   let sequencerMode = false;
   let sequencerProject: SequencerProject = createSequencerProject();
   let sequencerSource: ContourSequenceSource | null = null;
@@ -4086,7 +4227,8 @@ if (typeof document !== 'undefined') {
   let animationSaveChain = Promise.resolve();
   let animationSaveFailed = false;
 
-  function sequencerModeName(): 'config' | 'animation' | 'sequencer' {
+  function sequencerModeName(): WorkspaceMode {
+    if (threeDMode) return '3d';
     return sequencerMode ? 'sequencer' : animationMode ? 'animation' : 'config';
   }
 
@@ -5191,7 +5333,12 @@ if (typeof document !== 'undefined') {
 
   document.addEventListener('animationmodechange', (event) => {
     const mode = (event as CustomEvent<{ mode?: string }>).detail?.mode;
-    if (mode === 'animation') void enterAnimationMode();
+    if (animationExporting) return;
+    if (!['3d', 'config', 'animation', 'sequencer'].includes(mode ?? '')) return;
+    if (mode !== '3d') leaveThreeDMode();
+    if (mode !== 'animation') animationModeTransition++;
+    if (mode === '3d') enterThreeDMode();
+    else if (mode === 'animation') void enterAnimationMode();
     else if (mode === 'sequencer') enterSequencerMode();
     else if (mode === 'config') {
       animationModeTransition++;
@@ -5757,6 +5904,7 @@ if (typeof document !== 'undefined') {
     if (!connection?.connected || serialStreaming) return;
     try {
       await waitForCurrentRender();
+      if (threeDMode) return;
       const exported = createCurrentExport(state);
       if (exported.extension !== 'gcode') throw new Error('Select G-code before sending.');
       const preflight = createGCodeExportPreflight(state);
@@ -5967,8 +6115,10 @@ if (typeof document !== 'undefined') {
     }
   });
   $('save').addEventListener('click', async () => {
+    if (threeDMode) return;
     try {
       await waitForCurrentRender();
+      if (threeDMode) return;
       const exported = createCurrentExport(state);
       if (!exported.content) return;
       const blob = new Blob([exported.content], { type: exported.type });
@@ -5983,8 +6133,10 @@ if (typeof document !== 'undefined') {
     }
   });
   $('copy').addEventListener('click', async () => {
+    if (threeDMode) return;
     try {
       await waitForCurrentRender();
+      if (threeDMode) return;
       const exported = createCurrentExport(state);
       await navigator.clipboard.writeText(exported.content);
       toast(exported.extension === 'svg' ? 'SVG markup copied' : 'G-code copied');

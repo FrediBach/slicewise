@@ -1,5 +1,7 @@
 'use strict';
 
+import type { SourceNormalization } from './three-d-project';
+
 export type RawMesh = {
   /** Slice the authored triangle surface without normal-based reconstruction. */
   preserveSurface?: boolean;
@@ -14,6 +16,7 @@ export type ParsedMesh = {
 };
 
 export type NormalizedMesh = {
+  normalization?: SourceNormalization;
   preserveSurface?: boolean;
   V: Float32Array;
   T: Uint32Array;
@@ -306,7 +309,17 @@ function weld(raw: RawMesh): NormalizedMesh {
   }
   const r = Math.sqrt(r2) || 1;
   for (let i = 0; i < V.length; i++) V[i] /= r;
-  return { V, T: t2.subarray(0, n), ...(raw.preserveSurface ? { preserveSurface: true } : {}) };
+  return {
+    V,
+    T: t2.subarray(0, n),
+    normalization: {
+      center: [cx, cy, cz],
+      rawMin: [minx, miny, minz],
+      rawMax: [maxx, maxy, maxz],
+      radius: r,
+    },
+    ...(raw.preserveSurface ? { preserveSurface: true } : {}),
+  };
 }
 
 function vertexNormals(V: Float32Array, T: Uint32Array): Float32Array {

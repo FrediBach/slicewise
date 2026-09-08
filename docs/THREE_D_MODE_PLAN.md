@@ -1,10 +1,16 @@
 # 3D mode: slice-driven objects for printing
 
-Status: implementation started, 8 September 2026. **Proceed with an internal end-to-end 3D workspace while feasibility refinement continues.** Phase 0 remains open; this is an explicit sequencing decision, not acceptance of the current geometry pipeline or authorization for a public print-ready release. The production application does not yet expose 3D mode. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md) for the implemented spike, measured workloads and known failures.
+Status: implementation started, 8 September 2026. **Proceed with an internal end-to-end 3D workspace while feasibility refinement continues.** Phase 0 remains open; this is an explicit sequencing decision, not acceptance of the current geometry pipeline or authorization for a public print-ready release. The application now exposes an internal 3D source-inspection workspace; treatments and export remain unavailable. See [feasibility progress and measurements](./THREE_D_FEASIBILITY.md) for the implemented spike, measured workloads and known failures.
+
+## Workspace milestone implemented
+
+The first integrated milestone now adds the 3D entry, lazy Three.js source viewport, reference views, orbit/pan/zoom, perspective/orthographic cameras, Studio/Inspect/Print display, explicit millimeter sizing and imported raw-unit selection, print rotation and bed placement. It uses shared Object deformation in a dedicated worker, preserves normalization provenance, scopes undo/redo, remembers bounded per-source session settings, rejects stale jobs and releases worker/GPU resources on exit. The UI labels the untreated source and keeps preparation/export unavailable.
+
+Next: connect supported slice-field capture, contour overlays, bounded treatment preparation and diagnostics through the existing adapter. Preserve exact source/project revision association and reject incomplete validation. Independent width/depth, general surface-normal frames, file interchange, persistence and release validation remain open. The reference build volume is currently fixed and scene settings are not persisted. This milestone does not close Phase 0 or claim all Phase-1/2 gates complete. See [workspace verification](./TESTING.md) for the completed browser checks, 848 passing tests with an explicit timeout allowance, and remaining verification limits.
 
 ## Implementation decision and next-session handoff
 
-The next session should begin actual 3D-mode implementation, rather than spending another iteration solely extending isolated geometry benchmarks. Build the parts that are useful independently of the final treatment algorithm, then use the integrated workflow to prioritize geometry refinement. Keep construction behind the kernel/tool adapter so changing sweep strategy or kernel does not require rebuilding the workspace.
+Continue the integrated 3D workspace rather than spending another iteration solely extending isolated geometry benchmarks. Build the parts that are useful independently of the final treatment algorithm, then use the integrated workflow to prioritize geometry refinement. Keep construction behind the kernel/tool adapter so changing sweep strategy or kernel does not require rebuilding the workspace.
 
 ### Current feasibility assessment
 
@@ -27,7 +33,7 @@ This is evidence for pursuing the product prototype, not evidence that the remai
 3. **Preparation and export gates.** Enable user export only when all required geometry checks complete successfully for the exact artifact/revision being exported, and the file writer passes the interchange checks below. Current `topology-checked` and manufacturing `screened` labels are insufficient as public print-readiness claims. An internal serialization smoke test is not a production export action. Show manufacturing advisories separately; do not imply support, stability or global thickness checks have run when they have not.
 4. **Refinement driven by the integrated workflow.** Prioritize captured geometry failures, source replacement/stale jobs, browser cancellation and memory, and representative user models. Keep benchmark regressions, but do not make every remaining isolated Phase-0 optimization a prerequisite for implementing the workspace.
 
-### Start here in the next session
+### Initial milestone scope (implemented; retained for context)
 
 Read `docs/ARCHITECTURE.md`, `docs/PARAMETERS.md`, `docs/TESTING.md`, this plan and the latest sections of `docs/THREE_D_FEASIBILITY.md`. Inspect the existing workspace-mode controls and `src/lib/slicer.ts` source/deformation ownership before choosing the exact integration boundary.
 

@@ -6,7 +6,7 @@ Select controls show a short information banner for the active option. The banne
 
 ## Workspace modes
 
-The top workspace switch offers Config, Animation, and Sequencer. Sequencer keeps the contour controls editable and turns the latest exact contour result into a deterministic phrase. Quick interaction previews never replace the musical source. If an exact result arrives during playback, its lane grids appear immediately and the sounding phrase changes at the next unscheduled global bar.
+The top workspace switch offers Config, Animation, Sequencer, and the internal **3D** prototype. Sequencer keeps the contour controls editable and turns the latest exact contour result into a deterministic phrase. Quick interaction previews never replace the musical source. If an exact result arrives during playback, its lane grids appear immediately and the sounding phrase changes at the next unscheduled global bar.
 
 The Sequencer transport provides play/pause, return to start, a bar/beat readout, and tempo from **40–240 BPM** (default **110**). Space toggles playback, Home returns to the start, and Left/Right move by one sixteenth-note transport step when focus is not in a form control. Web Audio is created only by the Play gesture and is closed on leaving Sequencer mode.
 
@@ -21,6 +21,26 @@ Melodic sound design supports sine, triangle, sawtooth, and square/pulse wavefor
 The per-lane Variation control offers **No variation**, **Accent**, **Octave** (melodic lanes), **Articulation**, and **Ratchet**. A target uses its own contour-mapped, stateless probability condition rather than reusing the lane's trigger probability. Accent raises velocity, Octave transposes by an octave, Articulation shortens the note or drum decay, and Ratchet emits two to four evenly spaced repetitions. A small amber marker identifies expression in the deterministic cycle preview. Repeat/evolve behavior, playback, seeking, and MIDI export all resolve from the same project seed, lane, cycle, step, and target coordinates.
 
 Sequencer edits autosave the versioned musical project to browser-local storage; source meshes, artwork, and contour descriptors are not stored. Older projects migrate with their contour presets intact, expression disabled where it was previously unavailable, and distinct default contour routes. MIDI export requires the current exact shape and an explicit duration of **1, 2, 4, 8, 16, or 32 bars** (default **4**). The format-1 file contains a tempo/time-signature conductor track, one track per lane, melodic program assignments, and General MIDI channel-10 percussion. Muting, soloing, rational lane timing, swing, seeded trigger probability, and seeded expression use the same event compiler as live playback.
+
+## 3D workspace (internal prototype)
+
+3D displays one current Config mesh after the shared Object transformations. Drawing-only controls stay mounted but hidden; their values are retained. Entering from Animation restores its frozen Config settings, and leaving Sequencer stops audio. Line-art sources show an unsupported-source message; open mesh surfaces may be inspected without being declared solids.
+
+| Control                              | Default / range                        | Behavior                                                                                                                                                                   |
+| ------------------------------------ | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sizing                               | Longest dimension, 100 mm; 0.1–2000 mm | Uniformly scales the shaped source before print orientation. A new source requests confirmation; Object edits retain the selected longest dimension.                       |
+| Imported coordinate units            | Explicit mm / cm / inches              | Available for STL/OBJ/PLY. Restores the parser's normalization scale; unit scaling stays fixed through Object edits. SVG and generated sources require a chosen dimension. |
+| Print rotation X / Y / Z             | 0°; −180–180°                          | Applied in X → Y → Z order about the shaped bounding-box center. Separate from Object rotation and the inspection camera.                                                  |
+| Bed position X / Y / Z               | 0 mm; −2000–2000 mm                    | X/Y offsets from the centered bed; Z is clearance above the rotated object's lowest point.                                                                                 |
+| Center & place on bed                | Action                                 | Resets offsets to zero and puts the lowest vertex at Z = 0. This does not establish stable bed contact.                                                                    |
+| Reference bed                        | 220 × 220 × 250 mm                     | Print view shows a centered reference build volume, a 10 mm grid and an outside-volume advisory. Machine configuration comes later.                                        |
+| Studio / Inspect / Print             | Studio                                 | Matte clay, wireframe inspection, or reference build volume. Display only.                                                                                                 |
+| Fit / Front / Side / Top / Isometric | Isometric                              | Camera-only navigation; drag orbits, right-drag pans, wheel zooms, double-click fits.                                                                                      |
+| Projection                           | Perspective / orthographic             | Changes camera projection only.                                                                                                                                            |
+
+Dimensions report the current oriented millimeter surface. Source changes and edits clear the previous surface while work is pending; failed work shows no current geometry. Source association retains up to 12 small physical-setting projects for this browser session, excluding geometry. Replacement starts a new mode history; identical source content can recover its previous size. Source association is not an export-validation fingerprint. Reload persistence is not implemented.
+
+Undo/Redo in 3D includes physical and shared Object edits; leaving commits final shared edits as one Config history transaction. The initial sizing choice, physical transforms and inspection camera never change the drawing mesh. Treatment is Off; slice overlays, prepared solid diagnostics and all 3D export actions remain unavailable. The workspace has not run solid validity, thickness, support or stability checks.
 
 ## Source model
 

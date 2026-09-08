@@ -6,6 +6,7 @@ import {
   type AnimationExportSettings,
 } from '../../lib/animation-project';
 import { formatAnimationExportElapsed } from '../../lib/animation-video-export';
+import type { WorkspaceMode } from '../../lib/three-d-project';
 import { AnimationExportAction } from './AnimationExportAction';
 
 type AnimationUiKeyframe = {
@@ -14,7 +15,7 @@ type AnimationUiKeyframe = {
   easingToNext: AnimationEasing;
 };
 type AnimationUiState = {
-  mode: 'config' | 'animation' | 'sequencer';
+  mode: WorkspaceMode;
   durationMs: number;
   fps: number;
   loopPreview: boolean;
@@ -112,7 +113,7 @@ export function AnimationModeSwitch() {
   const state = useAnimationUiState();
   return (
     <div className="mode-switch" aria-label="Workspace mode">
-      {(['config', 'animation', 'sequencer'] as const).map((mode) => (
+      {(['config', 'animation', 'sequencer', '3d'] as const).map((mode) => (
         <button
           type="button"
           key={mode}
@@ -123,7 +124,13 @@ export function AnimationModeSwitch() {
             document.dispatchEvent(new CustomEvent('animationmodechange', { detail: { mode } }))
           }
         >
-          {mode === 'config' ? 'Config' : mode === 'animation' ? 'Animation' : 'Sequencer'}
+          {mode === 'config'
+            ? 'Config'
+            : mode === 'animation'
+              ? 'Animation'
+              : mode === '3d'
+                ? '3D'
+                : 'Sequencer'}
         </button>
       ))}
     </div>
