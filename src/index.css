@@ -2790,6 +2790,7 @@ body.three-d-mode .topbar {
 }
 .three-d-inspection-tools .button {
   background: #faf8f4e8;
+  color: #292c2b;
 }
 .three-d-inspection-tools .button[aria-pressed='true'] {
   background: #292c2b;

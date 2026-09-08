@@ -1,6 +1,7 @@
 import { expect, it } from 'vitest';
 import {
   buildVolumeBounds,
+  buildVolumeOverruns,
   buildVolumeGrid,
   fitsBuildVolume,
   validBuildVolume,
@@ -30,4 +31,15 @@ it('rejects malformed dimensions and retains the default for earlier session pro
   ])
     expect(validBuildVolume(size)).toBe(false);
   expect(() => buildVolumeGrid([0, 100, 100])).toThrow(/build dimensions/);
+});
+
+it('reports each exceeded boundary independently, including offsets and below-bed geometry', () => {
+  expect(buildVolumeOverruns({ min: [-60, -30, -2], max: [55, 35, 101] }, [100, 60, 100])).toEqual([
+    { boundary: 'X−', mm: 10 },
+    { boundary: 'X+', mm: 5 },
+    { boundary: 'Y+', mm: 5 },
+    { boundary: 'Z−', mm: 2 },
+    { boundary: 'Z+', mm: 1 },
+  ]);
+  expect(buildVolumeOverruns(buildVolumeBounds())).toEqual([]);
 });

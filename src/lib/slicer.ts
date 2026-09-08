@@ -1,5 +1,6 @@
 'use strict';
 
+import { printerPreset } from './three-d-printer-presets';
 import { validBuildVolume } from './three-d-build-volume';
 
 import { cameraBasis } from './projection';
@@ -4191,7 +4192,15 @@ if (typeof document !== 'undefined') {
         /* Retain valid selection. */
       }
     }
-    if (validBuildVolume(patch.buildVolumeMm)) next.buildVolumeMm = [...patch.buildVolumeMm];
+    if (validBuildVolume(patch.buildVolumeMm)) {
+      next.buildVolumeMm = [...patch.buildVolumeMm];
+      delete next.printerPresetId;
+    }
+    const preset = printerPreset(patch.printerPresetId);
+    if (preset) {
+      next.buildVolumeMm = [...preset.size];
+      next.printerPresetId = preset.id;
+    } else if (patch.printerPresetId === 'custom') delete next.printerPresetId;
     if (typeof patch.onBed === 'boolean') next.onBed = patch.onBed;
     if (typeof patch.sizeConfirmed === 'boolean') next.sizeConfirmed = patch.sizeConfirmed;
     threeDProject = next;

@@ -2,7 +2,7 @@ import { buildVolumeBounds, buildVolumeGrid } from './three-d-build-volume';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { ThreeDArtifact, ThreeDSlices, Triple } from './three-d-project';
-export type ReferenceView = 'Fit' | 'Front' | 'Side' | 'Top' | 'Isometric';
+export type ReferenceView = 'Fit' | 'Fit build volume' | 'Front' | 'Side' | 'Top' | 'Isometric';
 export type SceneStyle = 'Studio' | 'Inspect' | 'Print';
 
 /** Display-only adapter. Physical placement is already baked into the artifact. */
@@ -71,6 +71,8 @@ export function createThreeDScene(host: HTMLElement) {
   scene.add(box);
   const center = new THREE.Vector3(0, 0, 50);
   let radius = 75,
+    frameRadius = 75,
+    fittingVolume = false,
     initialized = false,
     width = 1,
     height = 1,
@@ -84,7 +86,7 @@ export function createThreeDScene(host: HTMLElement) {
     renderer.setSize(width, height);
     perspective.aspect = width / height;
     perspective.updateProjectionMatrix();
-    const half = (radius * 1.35) / Math.min(1, width / height);
+    const half = (frameRadius * 1.35) / Math.min(1, width / height);
     orthographic.left = (-half * width) / height;
     orthographic.right = (half * width) / height;
     orthographic.top = half;
@@ -93,8 +95,11 @@ export function createThreeDScene(host: HTMLElement) {
     draw();
   };
   const view = (name: ReferenceView) => {
+    fittingVolume = name === 'Fit build volume';
+    const target = fittingVolume ? box.box.getCenter(new THREE.Vector3()) : center;
+    frameRadius = fittingVolume ? box.box.getSize(new THREE.Vector3()).length() / 2 : radius;
     const direction =
-      name === 'Fit'
+      name === 'Fit' || fittingVolume
         ? camera.position.clone().sub(controls.target).normalize()
         : new THREE.Vector3(
             ...((name === 'Front'
@@ -109,9 +114,11 @@ export function createThreeDScene(host: HTMLElement) {
     const halfFov = Math.atan(
       Math.tan(THREE.MathUtils.degToRad(17.5)) * Math.min(1, width / height),
     );
-    camera.position.copy(center).addScaledVector(direction, (radius / Math.sin(halfFov)) * 1.15);
-    controls.target.copy(center);
-    camera.lookAt(center);
+    camera.position
+      .copy(target)
+      .addScaledVector(direction, (frameRadius / Math.sin(halfFov)) * 1.15);
+    controls.target.copy(target);
+    camera.lookAt(target);
     orthographic.zoom = 1;
     orthographic.updateProjectionMatrix();
     resize();
@@ -148,6 +155,7 @@ export function createThreeDScene(host: HTMLElement) {
         const sphere = mesh.geometry.boundingSphere!;
         center.copy(sphere.center);
         radius = Math.max(0.1, sphere.radius);
+        if (!fittingVolume) frameRadius = radius;
         if (!initialized) {
           initialized = true;
           view('Isometric');
@@ -185,7 +193,7 @@ export function createThreeDScene(host: HTMLElement) {
       next.quaternion.copy(camera.quaternion);
       camera = next;
       controls.object = camera;
-      view('Fit');
+      view(fittingVolume ? 'Fit build volume' : 'Fit');
     },
     dispose() {
       disposed = true;

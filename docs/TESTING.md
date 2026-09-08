@@ -228,3 +228,7 @@ The 3D contour-visibility follow-up adds viewport-adapter tests for restoring hi
 Treatment control regressions cover width/radius synchronization, Inset/Emboss cross-section labels, precision events and external state updates. Runtime tests verify precision reaches worker requests, rejects invalid values and survives undo/redo; real-kernel tests verify Draft and Fine produce different audited Inset/Emboss meshes.
 
 Build-volume tests cover asymmetric centered bounds, exact boundary inclusion, below-bed/outside rejection, invalid sizes and bounded grids. Component/runtime tests cover dimension bindings, viewport warnings, worker requests and undo/redo. A real treatment regression changes printer dimensions and verifies unchanged artifact buffers with updated manufacturing advisories.
+
+Print inspection regressions cover independent six-boundary overrun distances, exact boundary inclusion, and Fit versus Fit build volume event routing. Browser checks exercise both projections and confirm camera-only actions leave source/project geometry unchanged.
+
+Printer preset controls are tested for event binding and external state updates. Runtime tests cover authoritative catalog dimensions, manual edits switching to Custom, undo restoration, unknown IDs and Custom retaining dimensions.

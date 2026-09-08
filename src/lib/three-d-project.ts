@@ -29,6 +29,7 @@ export interface ThreeDProject {
   position: Triple;
   onBed: boolean;
   buildVolumeMm: Triple;
+  printerPresetId?: string;
   treatment: SolidOperation;
   radiusMm: number;
   profileToleranceMm: number;

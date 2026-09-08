@@ -23,6 +23,17 @@ export function fitsBuildVolume(artifact: Pick<ThreeDArtifact, 'min' | 'max'>, s
   return min.every((v, i) => artifact.min[i] >= v && artifact.max[i] <= max[i]);
 }
 
+/** Distances beyond each of the six printer boundaries; exact boundary contact fits. */
+export function buildVolumeOverruns(artifact: Pick<ThreeDArtifact, 'min' | 'max'>, size?: Triple) {
+  const { min, max } = buildVolumeBounds(size);
+  return (['X', 'Y', 'Z'] as const)
+    .flatMap((axis, i) => [
+      { boundary: `${axis}−`, mm: Math.max(0, min[i] - artifact.min[i]) },
+      { boundary: `${axis}+`, mm: Math.max(0, artifact.max[i] - max[i]) },
+    ])
+    .filter(({ mm }) => mm > 0);
+}
+
 /** Rectangular 10 mm grid, bounded to 402 interior lines plus four borders. */
 export function buildVolumeGrid(size: Triple = DEFAULT_BUILD_VOLUME) {
   const { min, max } = buildVolumeBounds(size);

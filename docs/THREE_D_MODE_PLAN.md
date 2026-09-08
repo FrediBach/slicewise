@@ -28,6 +28,8 @@ Treatment controls now expose nominal width alongside the coupled circular radiu
 
 Print setup now exposes rectangular build width, depth and height (1–2000 mm each, default 220 × 220 × 250). The Print scene and manufacturing audit share centered bounds; dimension edits participate in history and invalidate preparation without scaling the object. Printer profiles and reload persistence remain open.
 
+Print inspection now offers Fit build volume alongside object Fit, and identifies each exceeded boundary with its distance in millimeters. Both fitting actions are camera-only; projection changes retain the selected fitting target.
+
 ## Implementation decision and next-session handoff
 
 Continue the integrated 3D workspace rather than spending another iteration solely extending isolated geometry benchmarks. Build the parts that are useful independently of the final treatment algorithm, then use the integrated workflow to prioritize geometry refinement. Keep construction behind the kernel/tool adapter so changing sweep strategy or kernel does not require rebuilding the workspace.

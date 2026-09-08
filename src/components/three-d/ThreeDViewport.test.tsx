@@ -100,6 +100,11 @@ it('updates the print volume and outside warning without changing the object', a
   expect(screen.queryByText(/Outside build volume/)).not.toBeInTheDocument();
   publish({ ...value, project: { ...value.project!, buildVolumeMm: [100, 50, 80] } });
   expect(scene.buildVolume).toHaveBeenLastCalledWith([100, 50, 80]);
-  expect(screen.getByText(/Outside build volume/)).toBeInTheDocument();
+  expect(screen.getByText(/Outside build volume: X\+ 10.00 mm/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Print' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Fit build volume' }));
+  expect(scene.view).toHaveBeenLastCalledWith('Fit build volume');
+  fireEvent.click(screen.getByRole('button', { name: 'Fit' }));
+  expect(scene.view).toHaveBeenLastCalledWith('Fit');
   expect(scene.setArtifact).toHaveBeenLastCalledWith(value.artifact);
 });

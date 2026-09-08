@@ -260,3 +260,7 @@ For changes to controls or bindings, also exercise upload, demo switching, orbit
 `ThreeDTreatmentProfile` presents synchronized nominal width/radius controls, an ideal flat-surface cross-section and profile precision. Width maps to the existing project radius; `profileToleranceMm` travels with project revisions/history and is consumed by the rounded recipe builder, with a 0.05 mm fallback for older session projects. Neither control changes drawing settings.
 
 `three-d-build-volume.ts` validates rectangular printer dimensions and provides centered bounds for both the scene and manufacturing audit, plus a bounded 10 mm bed grid. `buildVolumeMm` travels with the per-source project and history; editing it invalidates the prepared artifact while cached source and contour geometry remain reusable. Viewport fitting remains focused on the object.
+
+Print-volume fitting in the scene uses the configured bounds independently of the object fitting sphere, and retains that target when changing projection. Boundary overrun measurements remain DOM-free in `three-d-build-volume.ts`; they report the current artifact, including during source comparison.
+
+`three-d-printer-presets.ts` contains a static manufacturer build-volume catalog. Runtime preset selection resolves IDs against that catalog and copies dimensions into the project. Manual volume edits clear the optional `printerPresetId`; Custom preserves dimensions. No remote requests or printer connections are made by the application.

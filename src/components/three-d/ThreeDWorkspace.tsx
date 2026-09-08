@@ -1,4 +1,5 @@
-import { DEFAULT_BUILD_VOLUME, fitsBuildVolume } from '../../lib/three-d-build-volume';
+import { PRINTER_PRESETS, printerPreset } from '../../lib/three-d-printer-presets';
+import { DEFAULT_BUILD_VOLUME, buildVolumeOverruns } from '../../lib/three-d-build-volume';
 import { PhysicalNumberInput } from './PhysicalNumberInput';
 import { ThreeDSurfacePanel } from './ThreeDSurfacePanel';
 import { useEffect, useRef, useState } from 'react';
@@ -157,6 +158,29 @@ export function ThreeDPanel() {
           description="Rectangular build volume in millimeters."
           defaultOpen
         >
+          <label className="three-d-field">
+            Printer preset
+            <select
+              aria-label="Printer preset"
+              value={printerPreset(project.printerPresetId)?.id ?? 'custom'}
+              onChange={(e) => edit({ printerPresetId: e.target.value })}
+            >
+              <option value="custom">Custom</option>
+              {['Bambu Lab', 'Prusa', 'Creality'].map((brand) => (
+                <optgroup label={brand} key={brand}>
+                  {PRINTER_PRESETS.filter((p) => p.brand === brand).map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} · {p.size.join(' × ')} mm
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <p className="gradient-note">
+            Nominal build volumes. Printer-specific exclusion zones and slicer margins are not
+            included. Edit dimensions for a custom volume.
+          </p>
           <div className="three-d-fields">
             {(['Width', 'Depth', 'Height'] as const).map((label, i) => (
               <label key={label}>
@@ -260,7 +284,9 @@ function Viewport({ state }: { state: ThreeDUiState }) {
   useEffect(() => {
     adapter.current?.buildVolume(state.project?.buildVolumeMm);
   }, [state.project?.buildVolumeMm, ready]);
-  const outside = state.artifact && !fitsBuildVolume(state.artifact, state.project?.buildVolumeMm);
+  const overruns = state.artifact
+    ? buildVolumeOverruns(state.artifact, state.project?.buildVolumeMm)
+    : [];
   return (
     <section
       className="three-d-workspace"
@@ -309,6 +335,16 @@ function Viewport({ state }: { state: ThreeDUiState }) {
         </div>
       </div>
       <div className="three-d-inspection-tools">
+        {style === 'Print' && (
+          <Button
+            disabled={!ready}
+            variant="outline"
+            onClick={() => adapter.current?.view('Fit build volume')}
+          >
+            Fit build volume
+          </Button>
+        )}
+
         <Button
           variant="outline"
           aria-pressed={showSlices}
@@ -359,7 +395,9 @@ function Viewport({ state }: { state: ThreeDUiState }) {
             : 'No current geometry'}
         </span>
         <span>
-          {outside ? 'Outside build volume · ' : ''}
+          {overruns.length
+            ? `Outside build volume: ${overruns.map(({ boundary, mm }) => `${boundary} ${mm < 0.01 ? '<0.01' : mm.toFixed(2)} mm`).join(', ')} · `
+            : ''}
           {showSource && state.preparation?.status === 'accepted'
             ? 'Untreated source comparison · prepared result retained'
             : state.message}

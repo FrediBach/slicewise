@@ -168,6 +168,46 @@ it('integrates mode exits, shared Object edits, scoped history, source replaceme
   second.complete();
   expect(second.requests.at(-1)!.project.profileToleranceMm).toBe(0.02);
   expect(second.requests.at(-1)!.project.buildVolumeMm).toEqual([180, 120, 160]);
+  document.dispatchEvent(
+    new CustomEvent('threedprojectchange', { detail: { printerPresetId: 'prusa-mk4s' } }),
+  );
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project).toMatchObject({
+    printerPresetId: 'prusa-mk4s',
+    buildVolumeMm: [250, 210, 220],
+  });
+  document.dispatchEvent(
+    new CustomEvent('threedprojectchange', { detail: { buildVolumeMm: [200, 210, 220] } }),
+  );
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project.printerPresetId).toBeUndefined();
+  input('undo').click();
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project).toMatchObject({
+    printerPresetId: 'prusa-mk4s',
+    buildVolumeMm: [250, 210, 220],
+  });
+  document.dispatchEvent(
+    new CustomEvent('threedprojectchange', { detail: { printerPresetId: 'unknown-printer' } }),
+  );
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project.printerPresetId).toBe('prusa-mk4s');
+  document.dispatchEvent(
+    new CustomEvent('threedprojectchange', { detail: { printerPresetId: 'custom' } }),
+  );
+  second.complete();
+  await settle();
+  second.complete();
+  expect(second.requests.at(-1)!.project.printerPresetId).toBeUndefined();
+  expect(second.requests.at(-1)!.project.buildVolumeMm).toEqual([250, 210, 220]);
   mode('sequencer');
   expect(second.terminated).toBe(true);
   expect(document.body).toHaveClass('sequencer-mode');

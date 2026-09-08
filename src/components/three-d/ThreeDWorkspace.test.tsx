@@ -72,6 +72,15 @@ it('keeps signed numeric drafts editable, restores invalid drafts, and follows e
   publish();
   expect(screen.getByRole('spinbutton', { name: 'Build depth (mm)' })).toHaveValue(120);
   expect(screen.getByRole('spinbutton', { name: 'Build height (mm)' })).toHaveValue(160);
+  const printer = screen.getByRole('combobox', { name: 'Printer preset' });
+  expect(printer).toHaveValue('custom');
+  fireEvent.change(printer, { target: { value: 'bambu-p1s' } });
+  expect(commands.mock.lastCall![0].detail).toEqual({ printerPresetId: 'bambu-p1s' });
+  project.printerPresetId = 'bambu-p1s';
+  project.buildVolumeMm = [256, 256, 256];
+  publish();
+  expect(printer).toHaveValue('bambu-p1s');
+  expect(screen.getByRole('spinbutton', { name: 'Build width (mm)' })).toHaveValue(256);
   project.rotation = [0, 0, 0];
   publish();
   expect(rotation).toHaveValue(0);

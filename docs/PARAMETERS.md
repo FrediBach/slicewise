@@ -585,3 +585,23 @@ For **Spherical wavefront**, rays travel in straight lines **away from Origin X/
 For modulated slicing fields, straight rays leave along the local tangent of the cutting surface, oriented outward using the mesh normal. For geodesic and curvature fields, which have no cutting surface outside the mesh, rays leave along the outward surface normal perpendicular to the contour. These modes also accept open contours. Normals use source vertex normals, or triangle winding for authored faces and meshes without normals. Closed meshes with reversed winding are corrected for the exit test; open surfaces retain their authored normal direction. Singular or ambiguous directions emit no ray. These are local straight-ray effects: they do not bend along curved cutting surfaces or perform mesh collision tracing; hidden-line removal hides occluded portions. All fade dashes share their root's explosion offset. A zero amount or length emits no rays. Very complex sections reduce ray count to bound intersection work. Fading uses physical gaps rather than opacity, and plotter path optimization preserves those gaps.
 
 Available for Height, View depth, Model width, Model depth, Custom plane angle, Spherical wavefront, Cylindrical wavefront, all Geodesic modes, and Mesh curvature on mesh sources. Divergence and slice-plane modulation are supported. Continuous spiral, Contour Weave, SVG cutting paths, and line-art sources disable the controls and bypass generation without discarding the saved ray settings. The toggle and numeric values participate in undo/redo, named snapshots, randomization/locks, and worker render snapshots; numeric values also support morphs and animation. Ray decoration does not affect sequencer contour measurements.
+
+In Print view, **Fit build volume** frames the entire configured printer volume without changing object geometry or print placement. **Fit** continues to frame the object. Switching projection retains the most recent fitting target. Out-of-volume notices list the excess in millimeters at each boundary (X−/X+, Y−/Y+, Z−/Z+); Z− means below the bed.
+
+### Printer build-volume presets
+
+The **Printer preset** dropdown in Print setup starts at **Custom**. Presets fill width, depth and height together; manual dimension edits switch back to Custom. Selecting Custom preserves dimensions. Preset identity and dimensions participate in 3D undo/redo and per-source session settings. These are nominal rectangular envelopes; printer exclusion zones and slicer margins are not modeled.
+
+Manufacturer specifications checked 8 September 2026 (width × depth × height, mm):
+
+| Printer             | Build volume    | Source                                                                                                                    |
+| ------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Bambu Lab A1 mini   | 180 × 180 × 180 | [Bambu Lab](https://us.store.bambulab.com/products/a1-mini)                                                               |
+| Bambu Lab A1        | 256 × 256 × 256 | [Bambu Lab guide](https://cdn1.bambulab.com/documentation/quick-start-a75adcb1d5d5e/Quick%20Start%20Guide%20for%20A1.pdf) |
+| Bambu Lab P1S       | 256 × 256 × 256 | [Bambu Lab P1 series](https://bambulab.com/en-us/p1p)                                                                     |
+| Bambu Lab X1 Carbon | 256 × 256 × 256 | [Bambu Lab](https://us.store.bambulab.com/products/x1-carbon)                                                             |
+| Prusa MINI+         | 180 × 180 × 180 | [Prusa product specifications](https://www.prusa3d.com/cs/produkt/original-prusa-mini/)                                   |
+| Prusa MK4S          | 250 × 210 × 220 | [Prusa specifications](https://help.prusa3d.com/article/faq-frequently-asked-questions_1932)                              |
+| Prusa CORE One      | 250 × 220 × 270 | [Prusa specifications](https://help.prusa3d.com/article/faq-frequently-asked-questions_1932)                              |
+| Prusa XL            | 360 × 360 × 360 | [Prusa specifications](https://help.prusa3d.com/article/faq-frequently-asked-questions_1932)                              |
+| Creality K1C        | 220 × 220 × 250 | [Creality specifications](https://www.creality.com/resources/k1c-is-coming)                                               |
