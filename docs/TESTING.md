@@ -113,6 +113,7 @@ Coverage currently measures the focused core under active test:
 - `terrain-routes.ts`
 - `map-settings.ts`
 - `mesh.ts`
+- `contour-approximation.ts`
 - `print-thickness.ts`
 - `print-manufacturing.ts`
 - `print-shells.ts`
@@ -193,3 +194,5 @@ Origin-driven ray regressions check spherical and cylindrical source positions i
 `three-d-feasibility.test.ts` in `src/lib/` verifies the deterministic 100,352-triangle, 24-slice scale fixture and completed source intersection auditing followed by rounded-tool recipe budget rejection across repetitions, including stage diagnostics, JSON serialization and zero remaining adapter handles. It asserts no machine-specific timing threshold. The scale workload is available through `npm run bench:3d -- 3 scale`; an early rejection does not satisfy the final-preparation performance target.
 
 The intersection suite also compares BVH traversal counts and sampled face pairs against exhaustive two-face contact queries across reordered groups, with exact and just-insufficient work-budget checks. The optimized traversal keeps all narrow predicates and rejection tolerances unchanged.
+
+`contour-approximation.test.ts` independently measures circular-path deviation, checks retained concave corners, detached deterministic buffers, rigid transforms, and input/collapse/work-budget rejection. Recipe integration verifies explicit opt-in, unchanged exact defaults, and real-kernel groove/rib dimensions after collinear subdivision removal. The scale-approximate feasibility test records the measured 0.05 mm reduction and retained recipe-budget rejection.

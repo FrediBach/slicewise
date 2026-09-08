@@ -104,6 +104,35 @@ describe('slice selection and rounded capsule recipes', () => {
     expect(createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0).runs).toEqual([]);
   });
 
+  it('approximates only when requested and keeps straight-face tool dimensions', () => {
+    const box = solidBox();
+    const geometry = extractPlanarSlices(box, { ...field, levels: [0] }, 0);
+    const original = structuredClone(geometry);
+    const exact = createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0.6);
+    const approximate = createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0.6, 0.05, 0.01);
+    expect(exact.approximation).toBeNull();
+    expect(approximate.approximation).toMatchObject({
+      toleranceMm: 0.01,
+      maximumDeviationMm: 0,
+      inputVertices: 8,
+      outputVertices: 4,
+    });
+    expect(geometry).toEqual(original);
+    const kernel = createSolidKernel(module);
+    const tools = kernel.createRoundedTools(approximate);
+    for (const operation of ['inset', 'emboss'] as const) {
+      const result = kernel.run(box, tools, operation);
+      expect(positiveSurfaceX(result.mesh, 0, 0)).toBeCloseTo(
+        operation === 'inset' ? 19.4 : 20.6,
+        4,
+      );
+    }
+    expect(kernel.liveHandles).toBe(0);
+    expect(() => createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0.6, 0.05, -1)).toThrow(
+      'Path approximation',
+    );
+  });
+
   it('rejects open paths and impossible profile/complexity requests', () => {
     const box = solidBox();
     const geometry = extractPlanarSlices({ ...box, T: box.T.slice(0, -6) }, field, 0);

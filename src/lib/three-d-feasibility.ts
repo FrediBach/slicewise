@@ -4,7 +4,7 @@ import { createSolidKernel, type SolidMesh } from './solid-kernel';
 import { deformMesh } from './mesh-deformation';
 import { vertexNormals } from './mesh';
 import { extractPlanarSlices, type PlanarSliceField } from './slice-geometry';
-import { createRoundedTreatmentRecipe } from './slice-treatment';
+import { createRoundedTreatmentRecipe, RoundedToolBudgetError } from './slice-treatment';
 import { PrintTopologyError, type PrintTopologyReport } from './print-validation';
 import { auditPrintManufacturing } from './print-manufacturing';
 
@@ -57,6 +57,7 @@ function screenForFeasibility(mesh: SolidMesh) {
 function failureSummary(error: unknown) {
   return {
     status: 'rejected',
+    ...(error instanceof RoundedToolBudgetError ? { approximation: error.approximation } : {}),
     message: error instanceof Error ? error.message : String(error),
     ...(error instanceof PrintTopologyError ? { topology: topologySummary(error.report) } : {}),
   };
@@ -188,11 +189,11 @@ export function createScaleFeasibilityFixtures(module: ManifoldToplevel) {
 export function runFeasibility(
   module: ManifoldToplevel,
   repeats = 1,
-  suite: 'analytic' | 'contours' | 'scale' = 'analytic',
+  suite: 'analytic' | 'contours' | 'scale' | 'scale-approximate' = 'analytic',
 ) {
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20)
     throw new Error('Choose 1–20 feasibility repetitions.');
-  if (suite === 'contours' || suite === 'scale')
+  if (suite === 'contours' || suite === 'scale' || suite === 'scale-approximate')
     return runContourFeasibility(module, repeats, suite);
   if (suite !== 'analytic') throw new Error('Unknown feasibility suite.');
   const kernel = createSolidKernel(module);
@@ -235,13 +236,12 @@ export function runFeasibility(
 function runContourFeasibility(
   module: ManifoldToplevel,
   repeats: number,
-  suite: 'contours' | 'scale',
+  suite: 'contours' | 'scale' | 'scale-approximate',
 ) {
   const kernel = createSolidKernel(module);
-  const fixtures =
-    suite === 'scale'
-      ? createScaleFeasibilityFixtures(module)
-      : createContourFeasibilityFixtures(module);
+  const fixtures = suite.startsWith('scale')
+    ? createScaleFeasibilityFixtures(module)
+    : createContourFeasibilityFixtures(module);
   const rows = [];
   for (let repetition = 0; repetition < repeats; repetition++) {
     for (const fixture of fixtures) {
@@ -253,7 +253,7 @@ function runContourFeasibility(
         requestedSlices: fixture.field.levels.length,
       };
       try {
-        if (suite === 'scale') {
+        if (suite.startsWith('scale')) {
           const source = kernel.run(fixture.base, [], 'off');
           progress.sourceIntersectionWork = source.topology.intersections!.work;
           progress.sourceAuditMs = performance.now() - start;
@@ -273,7 +273,13 @@ function runContourFeasibility(
         );
         stage = 'recipe';
         const toolStart = performance.now();
-        const recipe = createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0.6);
+        const recipe = createRoundedTreatmentRecipe(
+          geometry,
+          { mode: 'all' },
+          0.6,
+          0.05,
+          suite === 'scale-approximate' ? 0.05 : 0,
+        );
         stage = 'tool-construction';
         const tools = kernel.createRoundedTools(recipe);
         const toolConstructionMs = performance.now() - toolStart;
@@ -295,6 +301,7 @@ function runContourFeasibility(
               inputWarnings: inputWarnings(result.inputTopology),
               ...workload,
               ...progress,
+              approximation: recipe.approximation,
               extractionMs,
               toolConstructionMs,
               booleanMs: performance.now() - operationStart,

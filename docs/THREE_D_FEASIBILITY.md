@@ -221,6 +221,16 @@ A new regression compares the BVH's full contact counts and sampled original pai
 
 Three sequential runs on the same M3 Max / Node v25.5.0 reference environment completed source auditing in 1,046.98, 994.89 and 991.41 ms, each using 2,840,139 intersection work units. Extraction took 340.998, 319.005 and 329.391 ms; recipe rejection occurred after 1,388.29, 1,314.01 and 1,320.91 ms total. All adapter handle counts returned to zero. Process peak RSS was 450,656 KiB across all repetitions (combined Vite/JS/WASM). These complete-audit timings cannot be interpreted as a speed comparison with the previous incomplete audits.
 
+## Explicit contour-approximation follow-up
+
+`contour-approximation.ts` adds opt-in closed-polyline approximation. It preserves the first vertex, splits at the farthest vertex, and recursively replaces each arc only when every original arc vertex lies within the declared distance of its chord. Distance to a segment is convex along each original edge, so this bounds the intervening edge points too; continuous projection across the arc gives the reverse chord-to-arc bound. The implementation uses floating-point measurements, not exact predicates. It returns retained original vertex IDs, detached points, measured maximum deviation and work. It rejects collapsing loops, nonfinite measurements and exhausted work instead of returning partial paths. Limits are 200,000 input vertices per loop and two million distance queries shared across the selected recipe.
+
+The recipe's optional fifth argument is the path tolerance in millimeters; zero retains the existing exact path behavior. This is separate from the fourth argument's circular-profile tolerance. The source mesh and extracted contours are unchanged. Summary metadata records input/output vertex counts, measured maximum deviation and work, including on a tool-budget rejection. The approximation is a path-distance estimate, not a promise of identical groove depth, sharp-feature behavior, loop topology or clearance between nearby surfaces. Constructed tools and outputs must still undergo their existing independent audits. No production controls change.
+
+`npm run bench:3d -- 1 scale-approximate` explicitly requests 0.05 mm path tolerance alongside the existing 0.05 mm profile tolerance and 0.6 mm capsule radius. It reduces the 24 paths from 15,088 to 2,373 vertices, with maximum measured deviation 0.04990734 mm and 110,738 distance queries. This still exceeds the 2,000-vertex limit and the conservative primitive budget: 2,373 × (16² + 4) = 616,980 triangle allowance versus 250,000. The operation therefore remains rejected at recipe generation, with zero adapter-owned handles left. The exact `scale` suite remains available for comparison. Tolerances are not increased automatically to fit a budget.
+
+Regressions measure circle deviation independently, preserve concave corners and original indices, check deterministic detached output, rigid transforms, collapse/input/work rejection, opt-in recipe behavior, and real-kernel box groove/rib dimensions after removing collinear contour subdivisions. The remaining scale blocker calls for a more efficient tool representation or a separately declared accuracy tradeoff; approximation at this tolerance alone does not resolve it.
+
 ## Reproduce
 
 ```bash
@@ -228,6 +238,7 @@ npm run test:3d
 npm run bench:3d -- 20
 npm run bench:3d -- 5 contours
 npm run bench:3d -- 3 scale
+npm run bench:3d -- 1 scale-approximate
 npm run build:3d
 npm run dev
 ```

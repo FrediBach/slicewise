@@ -1,3 +1,4 @@
+import { approximateClosedContour, CONTOUR_APPROXIMATION_LIMITS } from './contour-approximation';
 import type { extractPlanarSlices } from './slice-geometry';
 
 export type SliceSelection =
@@ -31,7 +32,23 @@ export function selectSliceIndices(count: number, selection: SliceSelection): nu
   return all.filter((i) => i % selection.step === offset);
 }
 
+export type PathApproximationSummary = {
+  toleranceMm: number;
+  maximumDeviationMm: number;
+  inputVertices: number;
+  outputVertices: number;
+  work: number;
+};
+export class RoundedToolBudgetError extends Error {
+  constructor(public readonly approximation: PathApproximationSummary | null) {
+    super(
+      'Rounded tool budget exceeded. Reduce selected slices, mesh detail, or profile precision.',
+    );
+    this.name = 'RoundedToolBudgetError';
+  }
+}
 export type RoundedTreatmentRecipe = {
+  approximation: PathApproximationSummary | null;
   sourceRevision: number;
   /** Capsule radius; nominal width and penetration/protrusion remain coupled. */
   radiusMm: number;
@@ -57,11 +74,24 @@ export function createRoundedTreatmentRecipe(
   selection: SliceSelection,
   radiusMm: number,
   profileToleranceMm = 0.05,
+  pathToleranceMm = 0,
 ): RoundedTreatmentRecipe {
   if (!Number.isFinite(radiusMm) || radiusMm < 0 || radiusMm > 10)
     throw new Error('Choose a circular tool radius from 0 to 10 mm.');
   if (!Number.isFinite(profileToleranceMm) || profileToleranceMm <= 0)
     throw new Error('Choose a positive finite profile tolerance.');
+  if (!Number.isFinite(pathToleranceMm) || pathToleranceMm < 0)
+    throw new Error('Path approximation tolerance must be finite and nonnegative.');
+  const approximation: PathApproximationSummary | null =
+    pathToleranceMm > 0
+      ? {
+          toleranceMm: pathToleranceMm,
+          maximumDeviationMm: 0,
+          inputVertices: 0,
+          outputVertices: 0,
+          work: 0,
+        }
+      : null;
   const selectedSlices = selectSliceIndices(geometry.slices.length, selection);
   const circularSegments =
     radiusMm === 0
@@ -85,25 +115,50 @@ export function createRoundedTreatmentRecipe(
           end = slice.runOffsets[run + 1] - 1;
         const count = end - start;
         if (count < 3) throw new Error(`Design slice ${index} has a degenerate contour.`);
-        vertices += count;
-        // A sphere has at most N²/4 + 2 vertices; a two-sphere convex hull has at most N² + 4 triangles.
         if (
           runs.length >= ROUNDED_TOOL_LIMITS.runs ||
-          vertices > ROUNDED_TOOL_LIMITS.vertices ||
-          vertices * (circularSegments ** 2 + 4) > ROUNDED_TOOL_LIMITS.primitiveTriangles
+          (!approximation &&
+            (vertices + count > ROUNDED_TOOL_LIMITS.vertices ||
+              (vertices + count) * (circularSegments ** 2 + 4) >
+                ROUNDED_TOOL_LIMITS.primitiveTriangles))
         )
-          throw new Error(
-            'Rounded tool budget exceeded. Reduce selected slices, mesh detail, or profile precision.',
-          );
+          throw new RoundedToolBudgetError(approximation);
         const points = new Float64Array(count * 3);
         for (let i = 0; i < count; i++) {
           const point = slice.runPoints[start + i];
           points.set(slice.points.subarray(point * 3, point * 3 + 3), i * 3);
         }
-        runs.push(points);
+        let output: Float64Array = points;
+        if (approximation) {
+          const simplified = approximateClosedContour(
+            points,
+            pathToleranceMm,
+            CONTOUR_APPROXIMATION_LIMITS.work - approximation.work,
+          );
+          output = simplified.points;
+          approximation.inputVertices += count;
+          approximation.outputVertices += output.length / 3;
+          approximation.maximumDeviationMm = Math.max(
+            approximation.maximumDeviationMm,
+            simplified.maximumDeviationMm,
+          );
+          approximation.work += simplified.work;
+        }
+        vertices += output.length / 3;
+        runs.push(output);
       }
     }
+  // With approximation enabled, inspect all runs within the run/work caps before
+  // checking final tool size. A two-sphere convex hull has at most N² + 4 faces.
+  // No partial recipe is returned when limits are exceeded.
+  if (
+    runs.length > ROUNDED_TOOL_LIMITS.runs ||
+    vertices > ROUNDED_TOOL_LIMITS.vertices ||
+    vertices * (circularSegments ** 2 + 4) > ROUNDED_TOOL_LIMITS.primitiveTriangles
+  )
+    throw new RoundedToolBudgetError(approximation);
   return {
+    approximation,
     sourceRevision: geometry.sourceRevision,
     radiusMm,
     profileToleranceMm,
