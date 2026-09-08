@@ -42,6 +42,17 @@ describe('initial manufacturing screen', () => {
     expect(report.measurements).toEqual({
       bounds: { min: [-20, -15, 0], max: [20, 15, 50], sizeMm: [40, 30, 50] },
       bodyCount: 1,
+      bodyBedContacts: [
+        {
+          outerShell: 0,
+          lowestZMm: 0,
+          belowBedMm: 0,
+          lowestPointAboveBedMm: 0,
+          nearBedProjectedAreaMm2: 1200,
+          nearBedTriangleCount: 2,
+          nearBedTriangles: [0, 1],
+        },
+      ],
       fitsBuildVolume: true,
       belowBedMm: 0,
       lowestPointAboveBedMm: 0,
@@ -56,7 +67,11 @@ describe('initial manufacturing screen', () => {
 
   it('reports floating undersides as overhangs, preserving original face IDs', () => {
     const report = auditPrintManufacturing(placedBox(10), settings);
-    expect(report.advisories).toEqual(['no-near-bed-area', 'overhangs']);
+    expect(report.advisories).toEqual([
+      'no-near-bed-area',
+      'bodies-without-near-bed-area',
+      'overhangs',
+    ]);
     expect(report.measurements?.lowestPointAboveBedMm).toBe(10);
     expect(report.measurements?.nearBedProjectedAreaMm2).toBe(0);
     expect(report.measurements?.overhangAreaMm2).toBe(1200);
@@ -116,6 +131,13 @@ describe('initial manufacturing screen', () => {
     expect(multiple.measurements?.bodyCount).toBe(2);
     expect(multiple.measurements?.nearBedProjectedAreaMm2).toBe(1200);
     expect(multiple.advisories).toContain('multiple-bodies');
+    expect(multiple.advisories).toContain('bodies-without-near-bed-area');
+    expect(
+      multiple.measurements?.bodyBedContacts.map((b) => [b.lowestZMm, b.nearBedProjectedAreaMm2]),
+    ).toEqual([
+      [0, 1200],
+      [10, 0],
+    ]);
     expect(multiple.advisories).toContain('overhangs');
     const cavity = placedBox();
     const inward = Uint32Array.from(cavity.T);
@@ -129,8 +151,40 @@ describe('initial manufacturing screen', () => {
       settings,
     );
     expect(hollow.measurements?.bodyCount).toBe(1);
+    expect(hollow.measurements?.bodyBedContacts).toHaveLength(1);
+    expect(hollow.advisories).not.toContain('bodies-without-near-bed-area');
     expect(hollow.measurements?.overhangAreaMm2).toBe(300);
     expect(hollow.advisories).not.toContain('multiple-bodies');
+  });
+
+  it('keeps nested material islands separate from cavity walls regardless of shell order', () => {
+    const box = placedBox();
+    const cavity = {
+      V: Float64Array.from(box.V, (v, i) => v * 0.8 + (i % 3 === 2 ? 5 : 0)),
+      T: Uint32Array.from(box.T),
+    };
+    for (let i = 0; i < cavity.T.length; i += 3)
+      [cavity.T[i + 1], cavity.T[i + 2]] = [cavity.T[i + 2], cavity.T[i + 1]];
+    const island = {
+      V: Float64Array.from(box.V, (v, i) => v * 0.2 + (i % 3 === 2 ? 20 : 0)),
+      T: box.T,
+    };
+    for (const parts of [
+      [box, cavity, island],
+      [island, cavity, box],
+    ]) {
+      const report = auditPrintManufacturing(combine(...parts), settings);
+      expect(report.status).toBe('screened');
+      const bodies = report.measurements!.bodyBedContacts;
+      expect(bodies).toHaveLength(2);
+      expect(bodies.map((b) => b.nearBedProjectedAreaMm2).sort((a, b) => a - b)).toEqual([0, 1200]);
+      for (const body of bodies) {
+        const shell = report.geometry.shellContainment!.shells[body.outerShell];
+        expect(shell.depth! % 2).toBe(0);
+        expect(body.lowestZMm).toBe(shell.depth === 0 ? 0 : 20);
+      }
+      expect(report.advisories).toContain('bodies-without-near-bed-area');
+    }
   });
 
   it('keeps counts complete when highlighted face IDs exceed the sample cap', () => {

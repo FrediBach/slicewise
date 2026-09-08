@@ -5,7 +5,7 @@ import {
   type PrintThicknessReport,
 } from './print-thickness';
 import { auditPrintTopology, type PrintTopologyReport } from './print-validation';
-import type { TopologyMesh } from './mesh-topology';
+import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
 type Vec = [number, number, number];
 export type PrintManufacturingSettings = {
@@ -24,9 +24,22 @@ export type PrintManufacturingAdvisory =
   | 'below-bed'
   | 'no-near-bed-area'
   | 'multiple-bodies'
+  | 'bodies-without-near-bed-area'
   | 'overhangs'
   | 'thin-samples'
   | 'thickness-unresolved';
+export type PrintBodyBedContact = {
+  /** Index of the exterior boundary in geometry.shellContainment.shells. */
+  outerShell: number;
+  lowestZMm: number;
+  belowBedMm: number;
+  lowestPointAboveBedMm: number;
+  /** Exterior downward area projected into the bed band. Not a support proof. */
+  nearBedProjectedAreaMm2: number;
+  nearBedTriangleCount: number;
+  /** Original exterior face IDs, capped at PRINT_MANUFACTURING_SAMPLES. */
+  nearBedTriangles: number[];
+};
 export type PrintManufacturingReport = {
   /** Screened does not mean print-ready; thickness is sampled and stability is not checked. */
   status: 'screened' | 'unavailable';
@@ -39,6 +52,7 @@ export type PrintManufacturingReport = {
   measurements: {
     bounds: { min: Vec; max: Vec; sizeMm: Vec };
     bodyCount: number;
+    bodyBedContacts: PrintBodyBedContact[];
     fitsBuildVolume: boolean;
     belowBedMm: number;
     lowestPointAboveBedMm: number;
@@ -143,6 +157,23 @@ export function auditPrintManufacturing(
   const boundsMin: Vec = [Infinity, Infinity, Infinity],
     boundsMax: Vec = [-Infinity, -Infinity, -Infinity];
   const { V, T } = mesh;
+  // Rebuild labels from current buffers: the mesh identity may have been cached
+  // before an in-place edit. Labels match the fresh geometry audit's traversal.
+  const { componentLabels } = getMeshTopology({ V, T });
+  const bodyByComponent = new Map<number, PrintBodyBedContact>();
+  geometry.shellContainment.shells.forEach((shell, outerShell) => {
+    if (shell.depth! % 2 !== 0) return;
+    bodyByComponent.set(shell.component, {
+      outerShell,
+      lowestZMm: Infinity,
+      belowBedMm: 0,
+      lowestPointAboveBedMm: 0,
+      nearBedProjectedAreaMm2: 0,
+      nearBedTriangleCount: 0,
+      nearBedTriangles: [],
+    });
+  });
+  const bodyBedContacts = [...bodyByComponent.values()];
   const bed = min[2],
     bandBottom = bed - settings.bedToleranceMm,
     bandTop = bed + settings.bedToleranceMm;
@@ -161,10 +192,18 @@ export function auditPrintManufacturing(
       }
       return p;
     });
+    const body = bodyByComponent.get(componentLabels[T[f * 3]]);
+    if (body) body.lowestZMm = Math.min(body.lowestZMm, ...face.map((p) => p[2]));
     const normal = cross(sub(face[1], face[0]), sub(face[2], face[0]));
     if (normal[2] >= 0) continue;
     const contact = clipAtZ(clipAtZ(face, bandBottom, true), bandTop, false);
-    nearBedProjectedAreaMm2 += polygonArea(contact, true);
+    const contactArea = polygonArea(contact, true);
+    nearBedProjectedAreaMm2 += contactArea;
+    if (body && contactArea > 0) {
+      body.nearBedProjectedAreaMm2 += contactArea;
+      body.nearBedTriangleCount++;
+      if (body.nearBedTriangles.length < PRINT_MANUFACTURING_SAMPLES) body.nearBedTriangles.push(f);
+    }
     if (-normal[2] / Math.hypot(...normal) <= threshold + 64 * Number.EPSILON) continue;
     // The band is counted as supported; faces wholly on its upper boundary do
     // not also become overhangs. Below-bed geometry has a separate advisory.
@@ -183,6 +222,10 @@ export function auditPrintManufacturing(
     report.unavailableReason = 'measurement-range';
     return report;
   }
+  for (const body of bodyBedContacts) {
+    body.belowBedMm = Math.max(0, bed - body.lowestZMm);
+    body.lowestPointAboveBedMm = Math.max(0, body.lowestZMm - bed);
+  }
   const fitsBuildVolume = boundsMin.every((v, i) => v >= min[i] && boundsMax[i] <= max[i]);
   const belowBedMm = Math.max(0, bed - boundsMin[2]);
   const bodyCount = geometry.shellContainment.bodyCount;
@@ -190,6 +233,8 @@ export function auditPrintManufacturing(
   if (belowBedMm > settings.bedToleranceMm) report.advisories.push('below-bed');
   if (nearBedProjectedAreaMm2 === 0) report.advisories.push('no-near-bed-area');
   if (bodyCount > 1) report.advisories.push('multiple-bodies');
+  if (bodyBedContacts.some((body) => body.nearBedProjectedAreaMm2 === 0))
+    report.advisories.push('bodies-without-near-bed-area');
   if (overhangTriangleCount) report.advisories.push('overhangs');
   if (settings.thickness) {
     report.thickness = samplePrintThickness(
@@ -209,6 +254,7 @@ export function auditPrintManufacturing(
       sizeMm: boundsMax.map((v, i) => v - boundsMin[i]) as Vec,
     },
     bodyCount,
+    bodyBedContacts,
     fitsBuildVolume,
     belowBedMm,
     lowestPointAboveBedMm: Math.max(0, boundsMin[2] - bed),
