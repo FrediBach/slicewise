@@ -154,7 +154,7 @@ export function ThreeDSurfacePanel({
         Profile tolerance: 0.05 mm. Construction allows {ROUNDED_TOOL_LIMITS.runs} tool loops,{' '}
         {ROUNDED_TOOL_LIMITS.vertices.toLocaleString('en-US')} path vertices and{' '}
         {ROUNDED_TOOL_LIMITS.primitiveTriangles.toLocaleString('en-US')} estimated construction
-        triangles. The combined source/tools and final result remain limited to 250,000 triangles.
+        triangles. The combined source/tools and final result remain limited to 500,000 triangles.
         Exact paths follow mesh detail; allowing contour approximation can reduce construction work.
       </p>
       <p className="three-d-slice-status" role="status">
@@ -185,6 +185,20 @@ export function ThreeDSurfacePanel({
       <p role="status" className="three-d-preparation-status">
         {state.preparation?.message ?? 'Untreated source'}
       </p>
+      {!!state.preparation?.cleanup?.length && (
+        <details className="three-d-diagnostics">
+          <summary>Generated mesh cleanup</summary>
+          <p>Exact cleanup only; no coordinate movement.</p>
+          <ul className="three-d-diagnostic-list">
+            {state.preparation.cleanup.map((item) => (
+              <li key={item.stage}>
+                {item.stage}: {item.mergedVertices} coincident vertices merged, {item.removedFaces}{' '}
+                zero-area faces removed, {item.removedUnusedVertices} unused vertices removed.
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {!!state.preparation?.checks && (
         <details className="three-d-diagnostics">
           <summary>Geometry checks</summary>

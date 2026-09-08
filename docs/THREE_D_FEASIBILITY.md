@@ -275,3 +275,21 @@ The original 2,000-path-vertex / 250,000-estimated-construction-triangle limits 
 At 100 mm, explicit 0.05 mm path approximation reduces this eight-slice workload from 2,048 to 757 vertices with 0.04958057 mm maximum measured deviation and 13,984 distance queries. Exact paths remain the default. At 80 mm with exact paths, both Inset and Emboss complete tool construction and reach the Boolean result audit, which rejects 16 degenerate faces; the local standalone regression takes roughly 5–6 seconds per operation. This is progress past the budget rejection, not an accepted treatment or a general performance guarantee. Sixteen exact cube slices still exceed construction work at 1,064,960 estimated triangles, and the error now reports that total and the 1,000,000 limit. Earlier scale measurements above describe the old limits.
 
 The existing 100,352-face / 24-slice scale-approximate trial (2,373 retained path vertices) also now passes recipe and capsule construction and reaches Boolean/output auditing, where it remains rejected. Its regression continues to require zero remaining adapter-owned native handles. The larger construction allowance has not established an accepted scale result.
+
+## Exact generated cleanup, adjacent predicates and larger workloads
+
+The current pipeline resolves the earlier eight-slice cube failure. Float32 conversion can collapse generated edges/faces. Exact generated-only cleanup merges identical coordinates and removes zero-area faces/unused vertices without moving coordinates; independent auditing then runs again. Remaining candidate contacts on very thin adjacent faces are resolved using exact dyadic integer plane/cone signs. Tests retain rejection of true adjacent crossings, coplanar folds and nonadjacent contacts; arbitrarily close but actually distinct adjacent planes now pass. This changes the earlier conservative adjacent-uncertainty behavior rather than increasing its numerical tolerance. Nonadjacent tests are still conservative.
+
+Eight exact cube slices pass Inset and Emboss at 80 mm; cleanup removes 16 collapsed result faces in each regression. At the default 100 mm, `npm run bench:3d:cube -- 8 inset 0` passes in about 7.1 seconds on Apple M3 Max / Node 25.5.0, removing 32 collapsed faces and merging 16 coincident vertices. Analytic torus operations that previously failed for zero-area faces now pass with disclosed cleanup. Source/neutral buffers are never cleaned automatically.
+
+The construction ceiling is now 32,000 vertices / 8,000,000 estimated capsule triangles (64 loops), and mesh/audit ceilings are 500,000 triangles / 20,000,000 intersection traversal units. Source slice extraction remains capped at 250,000 triangles. Measurements at 100 mm, 0.6 mm radius, Inset:
+
+| Selected slices | Path approximation | Elapsed | Outcome                                                            |
+| --------------- | ------------------ | ------- | ------------------------------------------------------------------ |
+| 16              | Exact              | 12.1 s  | Final audit rejects 16 surface contacts; no work-budget exhaustion |
+| 32              | Exact              | 25.1 s  | Final audit rejects 125 surface contacts                           |
+| 40              | 0.05 mm            | 0.62 s  | Tool rejected for unexpected boundary shells                       |
+
+Sequential process RSS samples grew from roughly 99 MB to 738 MB across those trials. They include JS, WASM and the test runner; they are neither peak WASM measurements nor evidence of a leak. Under the former 250,000 mesh-triangle ceiling, 40 exact slices took 19.6 seconds before rejection at aggregate input size. Forty exact slices have not yet been remeasured through the expanded final mesh/audit allowance. Larger budgets permit more work; they do not establish that every larger treatment is valid or fast.
+
+`npm run bench:3d:cube -- <slices> <inset|emboss> <0|0.05>` provides a repeatable end-to-end 100 mm cube trial, including stage timings, status, cleanup, accepted result triangle count, environment and process-memory samples. Full dense exact scale Boolean trials remain opt-in; regression tests check their source audit and complete 24-path recipe without repeatedly constructing thousands of native capsules.

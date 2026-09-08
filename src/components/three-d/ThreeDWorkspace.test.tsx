@@ -1,3 +1,4 @@
+import { ThreeDSurfacePanel } from './ThreeDSurfacePanel';
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -84,3 +85,32 @@ it('gates preparation on current slices and size and exposes cancellation withou
   document.removeEventListener('threedprepare', prepare);
   document.removeEventListener('threedcancel', cancel);
 });
+
+it.each(['accepted', 'rejected'] as const)(
+  'discloses exact cleanup for a %s preparation',
+  (status) => {
+    const project = createThreeDProject('test');
+    render(
+      <ThreeDSurfacePanel
+        project={project}
+        state={{
+          ...initialThreeDState,
+          project,
+          preparation: {
+            status,
+            message: 'Audit finished',
+            cleanup: [
+              { stage: 'Result', mergedVertices: 8, removedFaces: 16, removedUnusedVertices: 0 },
+            ],
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText('Generated mesh cleanup')).toBeInTheDocument();
+    expect(screen.getByText('Exact cleanup only; no coordinate movement.')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Result: 8 coincident vertices merged, 16 zero-area faces removed/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '3D export unavailable' })).toBeDisabled();
+  },
+);

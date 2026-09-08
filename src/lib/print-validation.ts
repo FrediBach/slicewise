@@ -54,8 +54,8 @@ export type PrintTopologyReport = {
   shellVolumesMm3: Float64Array;
 };
 export const PRINT_TOPOLOGY_LIMITS = {
-  vertices: 750_000,
-  triangles: 250_000,
+  vertices: 1_500_000,
+  triangles: 500_000,
   samples: 32,
 } as const;
 

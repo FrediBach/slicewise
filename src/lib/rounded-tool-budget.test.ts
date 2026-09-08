@@ -45,21 +45,24 @@ describe('rounded tool construction allowance', () => {
     expect(approximate.approximation!.outputVertices).toBeLessThan(1000);
   });
 
-  it('reports the complete construction estimate when 16 exact cube paths exceed it', () => {
+  it('admits 40 exact cube paths and reports the complete estimate for excessive profile detail', () => {
+    expect(createRoundedTreatmentRecipe(cubeSlices(40), { mode: 'all' }, 0.6).runs).toHaveLength(
+      40,
+    );
     let error: unknown;
     try {
-      createRoundedTreatmentRecipe(cubeSlices(16), { mode: 'all' }, 0.6);
+      createRoundedTreatmentRecipe(cubeSlices(40), { mode: 'all' }, 10);
     } catch (caught) {
       error = caught;
     }
     expect(error).toBeInstanceOf(RoundedToolBudgetError);
     expect((error as RoundedToolBudgetError).workload).toEqual({
-      runs: 16,
-      vertices: 4096,
-      primitiveTriangles: 1064960,
+      runs: 40,
+      vertices: 10240,
+      primitiveTriangles: 41984000,
     });
     expect((error as Error).message).toContain(
-      '1,064,960 estimated construction triangles (limit 1,000,000)',
+      '41,984,000 estimated construction triangles (limit 8,000,000)',
     );
     expect((error as Error).message).toContain('enable 0.05 mm contour approximation');
   });
@@ -68,10 +71,10 @@ describe('rounded tool construction allowance', () => {
     expect(() => checkRoundedToolBudget(roundedToolWorkload(65, 260, 8), null)).toThrow(
       '65 tool loops (limit 64)',
     );
-    expect(() => checkRoundedToolBudget(roundedToolWorkload(1, 8001, 8), null)).toThrow(
-      '8,001 path vertices (limit 8,000)',
+    expect(() => checkRoundedToolBudget(roundedToolWorkload(1, 32001, 8), null)).toThrow(
+      '32,001 path vertices (limit 32,000)',
     );
-    expect(() => checkRoundedToolBudget(roundedToolWorkload(8, 2048, 32), null)).toThrow(
+    expect(() => checkRoundedToolBudget(roundedToolWorkload(8, 2048, 128), null)).toThrow(
       'estimated construction triangles',
     );
   });

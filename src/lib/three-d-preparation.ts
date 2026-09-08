@@ -1,3 +1,4 @@
+import { cleanGeneratedSolid, type SolidCleanup } from './generated-solid-cleanup';
 import type { ManifoldToplevel } from 'manifold-3d';
 import { ThreeDGeometryCache } from './three-d-cache';
 import { createSolidKernel } from './solid-kernel';
@@ -48,7 +49,8 @@ export function prepareThreeD(
   cache = new ThreeDGeometryCache(),
 ): ThreeDReply {
   const { base, reply, geometry } = previewThreeD(request, cache);
-  const kernel = createSolidKernel(module);
+  const cleanup: SolidCleanup[] = [];
+  const kernel = createSolidKernel(module, (report) => cleanup.push(report));
   let approximation: ThreeDPreparation['approximation'] = null;
   try {
     if (!request.project.sizeConfirmed)
@@ -72,7 +74,15 @@ export function prepareThreeD(
     const tools = kernel.createRoundedTools(recipe);
     progress('Applying treatment and checking the result…');
     const result = kernel.run(base, tools, request.project.treatment);
-    const artifact = placeScaledThreeDSource(result.mesh, request.project);
+    const placed = placeScaledThreeDSource(result.mesh, request.project);
+    const cleaned = cleanGeneratedSolid(placed, 'Placed result');
+    if (
+      cleaned.report.mergedVertices ||
+      cleaned.report.removedFaces ||
+      cleaned.report.removedUnusedVertices
+    )
+      cleanup.push(cleaned.report);
+    const artifact = { ...placed, ...cleaned.mesh };
     progress('Checking the placed artifact and screening manufacturing advisories…');
     const screen = auditPrintManufacturing(artifact, {
       buildVolume: { min: [-110, -110, 0], max: [110, 110, 250] },
@@ -95,6 +105,7 @@ export function prepareThreeD(
       bodyCount: screen.measurements!.bodyCount,
       volumeMm3: screen.geometry.signedVolumeMm3!,
       approximation,
+      cleanup,
     };
   } catch (error) {
     if (error instanceof RoundedToolBudgetError) approximation = error.approximation;
@@ -102,6 +113,7 @@ export function prepareThreeD(
       status: 'rejected',
       message: error instanceof Error ? error.message : String(error),
       approximation,
+      cleanup,
       ...(error instanceof PrintTopologyError
         ? {
             checks: error.report.checks,

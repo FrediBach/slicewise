@@ -97,8 +97,8 @@ export type RoundedTreatmentRecipe = {
 
 export const ROUNDED_TOOL_LIMITS = {
   runs: 64,
-  vertices: 8_000,
-  primitiveTriangles: 1_000_000,
+  vertices: 32_000,
+  primitiveTriangles: 8_000_000,
 } as const;
 
 /**

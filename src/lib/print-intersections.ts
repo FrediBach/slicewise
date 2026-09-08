@@ -1,13 +1,14 @@
+import { exactAdjacentOverlap } from './exact-adjacent-overlap';
 import type { TopologyMesh } from './mesh-topology';
 
 export const PRINT_INTERSECTION_LIMITS = {
-  triangles: 250_000,
-  work: 5_000_000,
+  triangles: 500_000,
+  work: 20_000_000,
   samples: 32,
 } as const;
 export type PrintIntersectionReport = {
   status: 'passed' | 'failed' | 'budget-exceeded';
-  /** Contacts inside the declared numerical tolerance are conservatively rejected. */
+  /** Nonadjacent proximity remains conservative; adjacent candidates use exact signs. */
   toleranceMm: number;
   pairCount: number;
   adjacentPairCount: number;
@@ -74,9 +75,9 @@ const unit = (v: Vec): Vec => {
  * two triangle direction cones at that vertex. Nonparallel planes can share only
  * their intersection line; coplanar cones overlap iff an edge ray lies in the
  * other cone. A shared edge permits different planes or opposite coplanar sides.
- * Near-degenerate/near-coplanar uncertainty is rejected within the stated tolerance.
+ * This floating-point filter sends uncertain overlaps to an exact dyadic predicate.
  */
-function adjacentMayOverlap(a: Triangle, b: Triangle, shared: number, tolerance: number) {
+function approximateAdjacentOverlap(a: Triangle, b: Triangle, shared: number, tolerance: number) {
   if (shared === 3) return true;
   const ar = [subtract(a[1], a[0]), subtract(a[2], a[0])];
   const br = [subtract(b[1], b[0]), subtract(b[2], b[0])];
@@ -110,6 +111,10 @@ function adjacentMayOverlap(a: Triangle, b: Triangle, shared: number, tolerance:
     );
   }
   return au.some((ray) => inCone(ray, bu, bn)) || bu.some((ray) => inCone(ray, au, an));
+}
+
+function adjacentMayOverlap(a: Triangle, b: Triangle, shared: number, tolerance: number) {
+  return approximateAdjacentOverlap(a, b, shared, tolerance) && exactAdjacentOverlap(a, b, shared);
 }
 
 /**

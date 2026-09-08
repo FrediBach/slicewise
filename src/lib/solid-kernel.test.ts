@@ -84,23 +84,15 @@ describe('phase-0 solid kernel', () => {
   });
 
   it.each(['inset', 'emboss'] as const)(
-    'rejects zero-area faces in the analytic torus %s artifact',
+    'cleans exact collapsed faces and audits the analytic torus %s artifact',
     (operation) => {
       const fixture = fixtures[2];
-      const kernel = createSolidKernel(module);
-      expect(kernel.run(fixture.base, [], 'off').topology.status).toBe('topology-checked');
-      let failure: unknown;
-      try {
-        kernel.run(fixture.base, fixture.tools, operation);
-      } catch (error) {
-        failure = error;
-      }
-      expect(failure).toBeInstanceOf(PrintTopologyError);
-      const report = (failure as PrintTopologyError).report;
-      expect(
-        report.issues.find((issue) => issue.code === 'degenerate-face')!.count,
-      ).toBeGreaterThan(0);
-      expect(report.checks.faces).toBe('failed');
+      const cleanup: import('./generated-solid-cleanup').SolidCleanup[] = [];
+      const kernel = createSolidKernel(module, (report) => cleanup.push(report));
+      const result = kernel.run(fixture.base, fixture.tools, operation);
+      expect(result.topology.status).toBe('topology-checked');
+      expect(result.measurements.triangles).toBe(result.mesh.T.length / 3);
+      expect(cleanup.some((report) => report.removedFaces > 0)).toBe(true);
       expect(kernel.liveHandles).toBe(0);
     },
   );

@@ -136,6 +136,7 @@ describe('surface triangle contacts', () => {
       [1, 0, 1],
       [1, 1, -1],
       [1, 1, 1],
+      [1, 1, 1e-12], // Distinct planes; exact predicate resolves the near fold.
     ]) {
       mesh.V.set(third, 9);
       expect(auditSurfaceIntersections(mesh).status).toBe('passed');
@@ -143,7 +144,6 @@ describe('surface triangle contacts', () => {
     for (const third of [
       [1, 1, 0],
       [0, 2, 0],
-      [1, 1, 1e-12],
     ]) {
       mesh.V.set(third, 9);
       const report = auditSurfaceIntersections(mesh);
@@ -167,7 +167,7 @@ describe('surface triangle contacts', () => {
       { rays: [-1, 1, 0, -1, -1, 0], contact: false },
       { rays: [1, 0, 0, 1, -1, 0], contact: true },
       { rays: [1, 1, 0, 1, 2, 0], contact: true },
-      { rays: [1, 1, 1e-12, 1, 2, 1e-12], contact: true },
+      { rays: [1, 1, 1e-12, 1, 2, 1e-12], contact: false },
     ];
     for (const { rays, contact } of cases) {
       mesh.V.set(rays, 9);

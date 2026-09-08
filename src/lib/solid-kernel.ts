@@ -1,3 +1,4 @@
+import { cleanGeneratedSolid, type SolidCleanup } from './generated-solid-cleanup';
 import type { Manifold, ManifoldToplevel } from 'manifold-3d';
 import {
   checkRoundedToolBudget,
@@ -19,7 +20,7 @@ export type KernelMeasurements = {
 
 /** These bound input/output buffers, not the peak memory of a WASM Boolean. */
 export const SOLID_KERNEL_LIMITS = {
-  triangles: 250_000,
+  triangles: 500_000,
   tools: 64,
   bufferBytes: 64 * 1024 * 1024,
 } as const;
@@ -39,7 +40,20 @@ function checkMesh(mesh: SolidMesh) {
  * independent geometry audits run here; manufacturing advice is a separate stage.
  * The caller owns module initialization and can terminate its worker to cancel WASM.
  */
-export function createSolidKernel(module: ManifoldToplevel) {
+export function createSolidKernel(
+  module: ManifoldToplevel,
+  onCleanup: (report: SolidCleanup) => void = () => {},
+) {
+  const clean = (mesh: SolidMesh, stage: string) => {
+    const cleaned = cleanGeneratedSolid(mesh, stage);
+    if (
+      cleaned.report.mergedVertices ||
+      cleaned.report.removedFaces ||
+      cleaned.report.removedUnusedVertices
+    )
+      onCleanup(cleaned.report);
+    return cleaned.mesh;
+  };
   let liveHandles = 0;
   const own = (solid: Manifold) => {
     liveHandles++;
@@ -168,7 +182,10 @@ export function createSolidKernel(module: ManifoldToplevel) {
               'Rounded tool produced unexpected boundary shells. This path is unsupported.',
             );
           const mesh = combined!.getMesh();
-          const detached = { V: mesh.vertProperties.slice(), T: mesh.triVerts.slice() };
+          const detached = clean(
+            { V: mesh.vertProperties.slice(), T: mesh.triVerts.slice() },
+            `Rounded tool ${output.length + 1}`,
+          );
           assertPrintTopology(detached, 'Rounded tool');
           // Validate the quantized transfer artifact as well as the native solid.
           const roundTrip = importMesh(detached);
@@ -247,8 +264,18 @@ export function createSolidKernel(module: ManifoldToplevel) {
         // No property seams are introduced: the adapter imports XYZ only.
         const mesh = { V: output.vertProperties.slice(), T: output.triVerts.slice() };
         checkMesh(mesh);
-        const topology = assertPrintTopology(mesh, 'Result');
-        return { mesh, measurements, topology, inputTopology };
+        const cleaned = clean(mesh, 'Result');
+        const topology = assertPrintTopology(cleaned, 'Result');
+        return {
+          mesh: cleaned,
+          measurements: {
+            ...measurements,
+            triangles: cleaned.T.length / 3,
+            volumeMm3: topology.signedVolumeMm3!,
+          },
+          topology,
+          inputTopology,
+        };
       } finally {
         if (result) release(result);
         if (combined) release(combined);

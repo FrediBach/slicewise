@@ -4,7 +4,7 @@ type Vec = [number, number, number];
 export const PRINT_THICKNESS_LIMITS = {
   samples: 256,
   work: 2_000_000,
-  triangles: 250_000,
+  triangles: 500_000,
 } as const;
 export type PrintThicknessSettings = {
   maxSamples: number;

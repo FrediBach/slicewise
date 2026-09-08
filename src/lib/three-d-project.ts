@@ -66,6 +66,7 @@ export interface ThreeDPreparation {
   bodyCount?: number;
   volumeMm3?: number;
   approximation?: PathApproximationSummary | null;
+  cleanup?: import('./generated-solid-cleanup').SolidCleanup[];
 }
 export interface ThreeDReply {
   id: number;

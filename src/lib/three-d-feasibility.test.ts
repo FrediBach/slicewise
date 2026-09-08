@@ -1,3 +1,6 @@
+import { createRoundedTreatmentRecipe } from './slice-treatment';
+import { extractPlanarSlices } from './slice-geometry';
+import { createSolidKernel } from './solid-kernel';
 import { beforeAll, expect, it } from 'vitest';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { createScaleFeasibilityFixtures, runFeasibility } from './three-d-feasibility';
@@ -23,35 +26,16 @@ it('creates a deterministic target-scale source with 24 declared millimeter cuts
   expect(again.base.T).toEqual(fixture.base.T);
 });
 
-it('completes the scale source audit and records the rounded-tool budget blocker and releases handles across repetitions', () => {
-  const rows = runFeasibility(module, 2, 'scale');
-  expect(rows).toHaveLength(2);
-  for (const [repetition, row] of rows.entries()) {
-    expect(row).toMatchObject({
-      repetition,
-      suite: 'scale',
-      fixture: 'dense-sphere-24-slices',
-      sourceTriangles: 100_352,
-      requestedSlices: 24,
-      radiusMm: 0.6,
-      status: 'rejected',
-      failedStage: 'recipe',
-      liveHandles: 0,
-      contourRuns: 24,
-      contourVertices: 15_088,
-      message: expect.stringContaining('Rounded tool budget exceeded'),
-      sourceIntersectionWork: expect.any(Number),
-    });
-    expect(row).not.toHaveProperty('booleanMs');
-    expect(row).not.toHaveProperty('manufacturing');
-    // Diagnostics must survive the same JSON boundary as the CLI/worker report.
-    const encoded = JSON.stringify(row);
-    expect(encoded).toContain('"levels":[');
-    expect(encoded).toContain('"sourceIntersectionWork":');
-    if (!('sourceIntersectionWork' in row)) throw new Error('Missing source audit work');
-    expect(row.sourceIntersectionWork).toBeLessThan(5_000_000);
-    expect(row.sourceIntersectionWork).toBeGreaterThan(0);
-  }
+it('audits the scale source and admits all 24 exact paths under the expanded construction allowance', () => {
+  const [fixture] = createScaleFeasibilityFixtures(module);
+  const kernel = createSolidKernel(module);
+  expect(kernel.run(fixture.base, [], 'off').topology.status).toBe('topology-checked');
+  const geometry = extractPlanarSlices(fixture.base, fixture.field, 0);
+  const recipe = createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0.6);
+  expect(recipe.runs).toHaveLength(24);
+  expect(recipe.runs.reduce((n, run) => n + run.length / 3, 0)).toBe(15088);
+  expect(recipe.approximation).toBeNull();
+  expect(kernel.liveHandles).toBe(0);
 });
 
 it('admits the approximated scale tools but keeps the Boolean/output audit rejection', () => {

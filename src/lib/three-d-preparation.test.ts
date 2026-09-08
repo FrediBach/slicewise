@@ -1,3 +1,4 @@
+import { auditPrintTopology } from './print-validation';
 import { beforeAll, describe, expect, it } from 'vitest';
 import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { createThreeDProject, type ThreeDRequest } from './three-d-project';
@@ -205,7 +206,7 @@ describe('worker geometry cache', () => {
 });
 
 it.each(['inset', 'emboss'] as const)(
-  'constructs eight exact cube tools and rejects degenerate faces in the %s result',
+  'prepares eight exact cube slices with disclosed cleanup and verified %s geometry',
   (treatment) => {
     const r = request();
     r.project.treatment = treatment;
@@ -215,13 +216,20 @@ it.each(['inset', 'emboss'] as const)(
     const progress: string[] = [];
     const reply = prepareThreeD(r, module, (message) => progress.push(message));
     expect(progress).toContain('Constructing circular tools…');
-    expect(reply.preparation?.status).toBe('rejected');
+    expect(reply.preparation?.status, reply.preparation?.message).toBe('accepted');
     expect(progress).toContain('Applying treatment and checking the result…');
-    expect(reply.preparation?.message).toContain('Result failed topology checks');
-    expect(reply.preparation?.issues).toEqual(
-      expect.arrayContaining([expect.objectContaining({ code: 'degenerate-face' })]),
+    expect(reply.preparation?.checks).toMatchObject({
+      faces: 'passed',
+      selfIntersections: 'passed',
+    });
+    expect(reply.preparation?.cleanup).toEqual(
+      expect.arrayContaining([expect.objectContaining({ stage: 'Result', removedFaces: 16 })]),
     );
-    expect(reply.artifact).toEqual(reply.sourceArtifact);
+    const sourceVolume = auditPrintTopology(reply.sourceArtifact!).signedVolumeMm3!;
+    expect(reply.preparation!.volumeMm3).toBeGreaterThan(0);
+    if (treatment === 'inset') expect(reply.preparation!.volumeMm3).toBeLessThan(sourceVolume);
+    else expect(reply.preparation!.volumeMm3).toBeGreaterThan(sourceVolume);
+    expect(reply.artifact).not.toEqual(reply.sourceArtifact);
   },
   15000,
 );

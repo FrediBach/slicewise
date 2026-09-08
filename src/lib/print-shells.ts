@@ -1,6 +1,6 @@
 import type { TopologyMesh } from './mesh-topology';
 
-export const PRINT_SHELL_LIMITS = { shells: 256, triangles: 250_000, work: 5_000_000 } as const;
+export const PRINT_SHELL_LIMITS = { shells: 256, triangles: 500_000, work: 5_000_000 } as const;
 export const SHELL_WINDING_TOLERANCE = 1e-6;
 export type PrintShell = {
   component: number;
