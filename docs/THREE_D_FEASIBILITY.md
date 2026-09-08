@@ -1,6 +1,6 @@
 # 3D mode: Phase-0 feasibility record
 
-Status: kernel spike, triangle-derived capsule sweeps and independent topology audits implemented, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
+Status: kernel spike, triangle-derived capsule sweeps and independent topology audits and non-adjacent contact checks implemented, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
 
 ## Implemented
 
@@ -13,6 +13,7 @@ Status: kernel spike, triangle-derived capsule sweeps and independent topology a
 - `slice-treatment.ts` selects whole levels with All, inclusive ranges or every-N patterns with wrapped offsets. It creates detached circular capsule recipes. Zero radius produces no tools; the kernel retains exact source buffers for neutral operations. Primitive budgets preserve the whole selection or reject it.
 - Rounded tools use convex hulls of identically oriented endpoint spheres, unioned in batches of eight. Constructed tools must have one connected boundary shell both natively and after Float32 buffer conversion. Extra shells fail instead of being removed. This is a circular profile trial; independent width/depth and surface-normal profile frames remain unimplemented.
 - `print-validation.ts` audits the exact input/tool/result buffers independently of WASM: finite coordinates and indices, zero-area and duplicate indexed faces, edge incidence, opposing edge winding, single-cycle vertex links and signed shell volumes. Reports include bounded vertex/triangle samples, full issue counts and explicit unperformed checks. Invalid artifacts fail; unused vertices remain warnings, and source/tool reports survive in result metadata. Nothing is welded, reversed or discarded by the auditor.
+- `print-intersections.ts` now rejects non-adjacent surface contacts after basic topology checks. It records the tolerance, triangle pairs, work performed and whether its counts are complete. Pairs sharing an indexed vertex remain excluded.
 
 The [Manifold API](https://manifoldcad.org/docs/jsapi/classes/manifold.Manifold.html) requires explicit deletion and oriented manifold imports. Its import may collapse degenerate triangles or unnecessary vertices. This adapter does not add welding, hole filling, winding correction or other repair. Kernel acceptance and positive signed volume are insufficient evidence of geometric or printing validity.
 
@@ -67,7 +68,7 @@ The process-wide peak RSS was 213,392 KiB; before/after RSS was 126,795,776 / 21
 
 The audit checks each vertex's triangle link as well as its edges. Two closed tetrahedra touching at one shared vertex pass edge incidence and winding but fail the link's single-cycle requirement. Indexed duplicate faces and geometrically collinear faces fail before import can silently collapse them. A translated box retains its measured volume through per-shell local origins and compensated summation. Negative cavity shells are preserved; unused vertices are reported without changing source buffers.
 
-The result status is **topology-checked**, never geometry-valid or print-ready. `selfIntersections`, `shellContainment` and `manufacturing` remain explicitly `not-run`. For example, overlapping boxes can pass the implemented topological checks while still requiring intersection rejection, and a misplaced inward shell requires containment analysis. The auditor reuses connectivity with a fresh cache key so changed caller buffers cannot inherit a stale audit.
+At this stage, the result status was **topology-checked**, never geometry-valid or print-ready. `selfIntersections`, `shellContainment` and `manufacturing` remain explicitly `not-run`. At this stage, overlapping boxes passed the implemented topological checks while still requiring intersection rejection, and a misplaced inward shell required containment analysis. The contact follow-up below now rejects the overlapping-box case. The auditor reuses connectivity with a fresh cache key so changed caller buffers cannot inherit a stale audit.
 
 Bounds are 250,000 triangles / 750,000 vertices, with at most 32 vertex and triangle sample IDs per issue. Counts include every detected occurrence, not just the samples. Connectivity's existing minimum edge length of 10⁻¹² mm is treated as an unsupported-scale error instead of silently skipping those edges. Checks are read-only and never repair geometry.
 
@@ -86,7 +87,32 @@ The newer contour-driven torus remains supported by these checks. Three repetiti
 
 Process peak RSS was 353,360 KiB; before/after RSS was 129,236,992 / 361,512,960 bytes. The additional JS topology structures increase allocation pressure. This remains a process-wide measurement including Vite and WASM, not an isolated geometry budget; memory optimization and browser measurements are still required.
 
-Verification: 779 tests across 102 files pass, including 45 focused 3D tests. Formatting, lint, typecheck and both production/developer builds pass. React Doctor reports only the five existing warnings outside this change. The developer build retains the Manifold `node:module` externalization warning; browser loading and cancellation remain unverified.
+Topology-audit verification: 779 tests across 102 files pass, including 45 focused 3D tests. Formatting, lint, typecheck and both production/developer builds pass. React Doctor reports only the five existing warnings outside this change. The developer build retains the Manifold `node:module` externalization warning; browser loading and cancellation remain unverified.
+
+## Non-adjacent contact follow-up
+
+After topology and signed-volume checks, exact source, active-tool and output buffers now undergo a bounded non-adjacent contact audit. A deterministic median bounding-volume hierarchy prunes separated triangle bounds. The narrow test projects triangles onto separating axes, including in-plane edge normals to handle coplanar pairs. The method follows the [Geometric Tools separating-axis description](https://www.geometrictools.com/Documentation/MethodOfSeparatingAxes.pdf); this implementation uses conservative floating-point comparisons, not exact predicates.
+
+The reported tolerance is `max(1e-10 mm, 64 × Number.EPSILON × maximum absolute referenced coordinate)`. Geometry is never moved or welded. A pair without a separating gap beyond that tolerance is rejected as `non-adjacent-contact`; this includes unresolved near-contact, touching shells and coplanar overlap. Translation can increase the conservative tolerance. Unused coordinates do not affect it.
+
+Pairs sharing **any indexed vertex** are excluded. Their expected vertex/edge contacts still need to be distinguished from overlaps beyond that shared boundary. Therefore `nonAdjacentIntersections` can pass while the broader `selfIntersections`, `shellContainment` and `manufacturing` checks remain `not-run`. The overall result still says **topology-checked**, not geometry-valid. Nested outward shells and misplaced inward shells remain unresolved; the new audit does not infer physical body count or shell orientation.
+
+The cap is 250,000 triangles and five million traversal/leaf-candidate visits per artifact. Tree construction is bounded by the triangle cap; the visit budget covers the subsequent query work. Exhaustion rejects the artifact, retains up to 32 triangle-pair samples and explicitly marks counts incomplete (lower bounds). A completed audit records all detected pair counts even after sample storage fills. Benchmarks preserve these fields in JSON.
+
+Eleven additional regressions cover transverse and coplanar contact, gaps, ordering/transform invariance, explicit adjacent-face exclusions, numerical tolerance, diagnostic and work limits, spatial pruning, cache isolation and kernel source/tool rejection. Three contour repetitions produced 36 passing results, no rejections and zero remaining adapter-owned handles. The analytic repetition retained the same ten passing results and two torus rejections for 160 degenerate faces each, with zero remaining handles. Maximum output contact-audit work was 1,914,142 visits. On the same Node/M3 Max environment, median times including the additional checks were:
+
+| Fixture     | Tool construction (ms) | Inset + audits/measurements (ms) |
+| ----------- | ---------------------- | -------------------------------- |
+| Sphere      | 171.39                 | 54.13                            |
+| Tilted box  | 11.53                  | 4.26                             |
+| Torus       | 942.29                 | 249.28                           |
+| Sheared box | 9.84                   | 3.06                             |
+| Twisted box | 289.17                 | 110.43                           |
+| Bent box    | 313.30                 | 116.95                           |
+
+Process peak RSS was 381,328 KiB; before/after RSS was 125,747,200 / 388,513,792 bytes. This is still process-wide, not an isolated working-memory bound. The added audit cost reinforces the need for optimization and representative browser measurements before a public performance claim.
+
+Contact-audit verification: all 56 focused 3D tests pass. The full run passed 789 of 790 tests, with the previously observed five-second timeout in `OutputPanel.test.tsx`; an isolated rerun of that file passed all 13 tests without changing its timeout. Formatting, lint, typecheck and both builds pass. React Doctor retains only five pre-existing warnings. The separate build still reports Manifold’s `node:module` externalization warning; native browser interaction remains unverified.
 
 ## Reproduce
 
@@ -108,6 +134,6 @@ The browser automation bridge was unavailable during both implementation session
 
 1. Extend the triangle-derived circular sweeps to stable surface-normal frames with independent profile width/depth, and measure sharp corners and curved/deformed surfaces at a declared tolerance. The new path contract is not yet integrated with shared Config controls or physical sizing.
 2. Extend the initial twisted/bent/cavity and degenerate-cut regressions to thin walls, close folds, intersecting tools, generated tunnel sources and representative rejected-source statistics.
-3. Complete shell containment/orientation and non-adjacent intersection checks, then manufacturing diagnostics. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output through an explicit, measured operation rather than silent repair.
+3. Complete adjacent-face overlap checks and shell containment/orientation, then manufacturing diagnostics. Non-adjacent contacts now have a bounded conservative audit; exact/near-degenerate predicate robustness still needs broader stress testing. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output through an explicit, measured operation rather than silent repair.
 4. Verify browser cancellation/reinitialization, stale-job handling and source-buffer installation with realistic jobs. Measure peak WASM/JS/GPU memory and lower-memory devices. The internal page recreates its fixed fixtures; it is not the production source lifecycle.
 5. Benchmark representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).

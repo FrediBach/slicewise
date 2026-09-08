@@ -40,7 +40,9 @@ Prefer Node for geometry and serialization tests: it starts faster and makes acc
 
 `solid-kernel.test.ts` exercises the real Manifold WASM kernel, including groove/rib volume direction on sphere, box and sheared-box fixtures, deterministic geometry, input immutability, exact neutral buffers, asymmetric millimeter bounds, measured box penetration/protrusion, untreated torus and enclosed-cavity retention, explicit rejection of degenerate analytic torus treatments, overlapping tools, disconnected bodies, malformed/open input rejection, budgets, and owned-handle cleanup on success/failure/repetition. Boundary shell counts are kept distinct from physical body counts. It also verifies rejection of source faces that the native kernel would silently remove, exact neutral auditing, retained input warnings and cleanup on independent audit failures. These checks are not a complete solid or manufacturing validator. The separate browser worker trial, cancellation procedure, benchmark context, and remaining Phase-0 gates are documented in [THREE_D_FEASIBILITY.md](./THREE_D_FEASIBILITY.md).
 
-`print-validation.test.ts` covers closed shells, edge/winding defects, vertex fans touching at one vertex, indexed duplicates, zero-area faces, cavity volumes, translated volume stability, mutable input cache isolation, warning counts and bounded locations, malformed inputs and budgets. Overlapping shells and misplaced cavities demonstrate the explicit limits of topology-only checks.
+`print-validation.test.ts` covers closed shells, edge/winding defects, vertex fans touching at one vertex, indexed duplicates, zero-area faces, cavity volumes, translated volume stability, mutable input cache isolation, warning counts and bounded locations, malformed inputs and budgets. Overlapping shells now fail non-adjacent contact checks; misplaced cavities still demonstrate the explicit shell-containment gap.
+
+`print-intersections.test.ts` covers transverse crossings, coplanar overlaps/containment, unindexed edge/point contact, disjoint triangles with overlapping bounds, winding/order/transform invariance, declared tolerance, bounded samples, incomplete budget results, pruning and mutable-buffer isolation. Indexed neighbors remain excluded, with an overlapping-neighbor fixture documenting that unresolved case. Kernel integration rejects contacting source/tool shells and verifies unchanged inputs and zero remaining native handles.
 
 `slice-geometry.test.ts` covers exact triangle/barycentric alignment, plane normalization, run/level ordering, buffer isolation, compatibility with generic unsmoothed drawing intersections, cuts through vertices/edges, coincident but topologically separate surfaces, open paths, branching/coplanar failures and budgets. The shared drawing chaining routine is guarded by the full contour integration suite. `slice-treatment.test.ts` checks deterministic All/range/every-N selections, zero/open/budget cases, detached recipes, real capsule geometry, independent line/triangle feature measurements, tilted and deformed surfaces, multiple torus runs and native-failure cleanup. `src/dev/three-d-feasibility.test.ts` exercises suite routing, stale replies, cancellation, error recovery and page-exit cleanup with a mock worker; real-browser WASM responsiveness still needs manual verification.
 
@@ -105,6 +107,7 @@ Coverage currently measures the focused core under active test:
 - `terrain-routes.ts`
 - `map-settings.ts`
 - `mesh.ts`
+- `print-intersections.ts`
 - `print-validation.ts`
 - `solid-kernel.ts`
 - `slice-geometry.ts`

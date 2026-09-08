@@ -11,6 +11,12 @@ function topologySummary(report: PrintTopologyReport) {
   return {
     status: report.status,
     checks: report.checks,
+    nonAdjacentIntersections: report.nonAdjacentIntersections
+      ? {
+          ...report.nonAdjacentIntersections,
+          trianglePairs: Array.from(report.nonAdjacentIntersections.trianglePairs),
+        }
+      : null,
     signedVolumeMm3: report.signedVolumeMm3,
     shellVolumesMm3: Array.from(report.shellVolumesMm3),
     issues: report.issues.map((issue) => ({

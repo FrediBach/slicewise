@@ -1,7 +1,10 @@
+import { auditNonAdjacentIntersections, type PrintIntersectionReport } from './print-intersections';
 import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
 export type PrintTopologyIssueCode =
   | 'budget'
+  | 'non-adjacent-contact'
+  | 'intersection-budget'
   | 'invalid-buffer'
   | 'non-finite-vertex'
   | 'invalid-index'
@@ -19,7 +22,8 @@ export type PrintTopologyIssue = {
   code: PrintTopologyIssueCode;
   severity: 'error' | 'warning';
   count: number;
-  /** Bounded sample locations; count always describes the full audit. */
+  /** Bounded sample locations; counts describe detected issues. Intersection
+   * counts are lower bounds if the report says its work budget was exhausted. */
   vertices: Uint32Array;
   triangles: Uint32Array;
 };
@@ -29,6 +33,7 @@ type Check =
   | 'edges'
   | 'vertexLinks'
   | 'signedVolume'
+  | 'nonAdjacentIntersections'
   | 'selfIntersections'
   | 'shellContainment'
   | 'manufacturing';
@@ -38,6 +43,7 @@ export type PrintTopologyReport = {
   status: 'invalid' | 'topology-checked';
   checks: Record<Check, CheckState>;
   issues: PrintTopologyIssue[];
+  nonAdjacentIntersections: PrintIntersectionReport | null;
   signedVolumeMm3: number | null;
   /** Signed boundary shell volumes, not physical body volumes. Cavities stay negative. */
   shellVolumesMm3: Float64Array;
@@ -51,7 +57,8 @@ export const PRINT_TOPOLOGY_LIMITS = {
 /**
  * Deterministic, read-only checks on the exact indexed artifact, independent of
  * the Boolean kernel. No welding, winding repair or face removal is performed.
- * Intersections and nesting remain explicitly unperformed checks.
+ * Non-adjacent contacts are checked conservatively. Adjacent-face overlaps and
+ * shell nesting remain explicitly unperformed checks.
  */
 export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
   const { V, T } = mesh;
@@ -61,10 +68,12 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
     edges: 'not-run',
     vertexLinks: 'not-run',
     signedVolume: 'not-run',
+    nonAdjacentIntersections: 'not-run',
     selfIntersections: 'not-run',
     shellContainment: 'not-run',
     manufacturing: 'not-run',
   };
+  let intersections: PrintIntersectionReport | null = null;
   const issues = new Map<
     PrintTopologyIssueCode,
     { count: number; vertices: number[]; triangles: number[] }
@@ -101,6 +110,7 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
       vertices: Uint32Array.from(issue.vertices),
       triangles: Uint32Array.from(issue.triangles),
     })),
+    nonAdjacentIntersections: intersections,
     signedVolumeMm3,
     shellVolumesMm3,
   });
@@ -253,6 +263,18 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
   )
     add('non-positive-volume');
   checks.signedVolume = issues.has('non-positive-volume') ? 'failed' : 'passed';
+  if (checks.signedVolume === 'passed') {
+    intersections = auditNonAdjacentIntersections(mesh);
+    checks.nonAdjacentIntersections = intersections.status === 'passed' ? 'passed' : 'failed';
+    if (intersections.pairCount)
+      add(
+        'non-adjacent-contact',
+        [],
+        Array.from(intersections.trianglePairs),
+        intersections.pairCount,
+      );
+    if (!intersections.complete) add('intersection-budget');
+  }
   return finish(total, shells);
 }
 

@@ -218,6 +218,27 @@ describe('phase-0 solid kernel', () => {
     expect(invalid.T.length).toBe(base.T.length + 3);
   });
 
+  it('rejects contacting shells in sources and tools before native Boolean evaluation', () => {
+    const base = fixtures[1].base;
+    const overlap = {
+      V: Float32Array.from([
+        ...base.V,
+        ...Array.from(base.V, (v, i) => v + (i % 3 === 0 ? 10 : 0)),
+      ]),
+      T: Uint32Array.from([...base.T, ...Array.from(base.T, (v) => v + base.V.length / 3)]),
+    };
+    const original = structuredClone(overlap);
+    const kernel = createSolidKernel(module);
+    for (const operation of ['off', 'inset', 'emboss'] as const) {
+      expect(() => kernel.run(overlap, [], operation)).toThrow(/Source.*non-adjacent-contact/);
+      expect(kernel.liveHandles).toBe(0);
+    }
+    expect(() => kernel.run(base, [overlap], 'emboss')).toThrow(/Tool 1.*non-adjacent-contact/);
+    expect(kernel.liveHandles).toBe(0);
+    expect(overlap).toEqual(original);
+    expect(kernel.run(base, [], 'off').topology.checks.nonAdjacentIntersections).toBe('passed');
+  });
+
   it('returns explicit unperformed checks and warnings on exact neutral buffers', () => {
     const base = fixtures[1].base;
     const source = { V: new Float32Array([...base.V, 100, 100, 100]), T: base.T };

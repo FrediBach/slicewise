@@ -36,6 +36,7 @@ describe('independent print topology audit', () => {
       edges: 'passed',
       vertexLinks: 'passed',
       signedVolume: 'passed',
+      nonAdjacentIntersections: 'passed',
       selfIntersections: 'not-run',
       shellContainment: 'not-run',
       manufacturing: 'not-run',
@@ -123,14 +124,16 @@ describe('independent print topology audit', () => {
     expect(codes(combine(box, reversed(box)))).toContain('non-positive-volume');
   });
 
-  it('does not mistake overlapping or incorrectly nested shells for a fully valid solid', () => {
+  it('rejects crossing shells while leaving shell containment explicitly unchecked', () => {
     const box = solidBox();
     const overlapping = {
       V: Float64Array.from(box.V, (v, i) => v + (i % 3 === 0 ? 10 : 0)),
       T: box.T,
     };
     const report = auditPrintTopology(combine(box, overlapping));
-    expect(report.status).toBe('topology-checked');
+    expect(report.status).toBe('invalid');
+    expect(report.checks.nonAdjacentIntersections).toBe('failed');
+    expect(report.issues.some((issue) => issue.code === 'non-adjacent-contact')).toBe(true);
     expect(report.signedVolumeMm3).toBe(120_000);
     expect(report.checks.selfIntersections).toBe('not-run');
     const misplacedCavity = reversed({
