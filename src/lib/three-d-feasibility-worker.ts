@@ -7,16 +7,19 @@ const ready = Module({ locateFile: () => wasmUrl }).then((module) => {
   module.setup();
   return module;
 });
-self.addEventListener('message', async (event: MessageEvent<{ id: number; repeats: number }>) => {
-  const { id, repeats } = event.data;
-  try {
-    const module = await ready;
-    self.postMessage({ id, type: 'result', rows: runFeasibility(module, repeats) });
-  } catch (error) {
-    self.postMessage({
-      id,
-      type: 'error',
-      message: error instanceof Error ? error.message : String(error),
-    });
-  }
-});
+self.addEventListener(
+  'message',
+  async (event: MessageEvent<{ id: number; repeats: number; suite?: 'analytic' | 'contours' }>) => {
+    const { id, repeats, suite } = event.data;
+    try {
+      const module = await ready;
+      self.postMessage({ id, type: 'result', rows: runFeasibility(module, repeats, suite) });
+    } catch (error) {
+      self.postMessage({
+        id,
+        type: 'error',
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  },
+);

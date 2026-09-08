@@ -1,4 +1,5 @@
 import type { Manifold, ManifoldToplevel } from 'manifold-3d';
+import { ROUNDED_TOOL_LIMITS, type RoundedTreatmentRecipe } from './slice-treatment';
 
 /** Manufacturing coordinates are Z-up millimeters; no normalization or repair. */
 export type SolidMesh = { V: Float32Array; T: Uint32Array };
@@ -83,6 +84,105 @@ export function createSolidKernel(module: ManifoldToplevel) {
     /** Exposes owned handles for lifecycle regression tests, not heap measurements. */
     get liveHandles() {
       return liveHandles;
+    },
+    /** Creates bounded, closed capsule unions without exposing WASM handles. */
+    createRoundedTools(recipe: RoundedTreatmentRecipe): SolidMesh[] {
+      const { radiusMm: radius, circularSegments: segments, runs } = recipe;
+      if (
+        !Number.isFinite(radius) ||
+        radius < 0 ||
+        radius > 10 ||
+        !Number.isInteger(segments) ||
+        segments < 8 ||
+        segments > 128 ||
+        segments % 4
+      )
+        throw new Error('Invalid rounded tool profile.');
+      if (radius === 0) return [];
+      const vertices = runs.reduce((sum, run) => sum + run.length / 3, 0);
+      if (
+        runs.length > ROUNDED_TOOL_LIMITS.runs ||
+        vertices > ROUNDED_TOOL_LIMITS.vertices ||
+        vertices * (segments ** 2 + 4) > ROUNDED_TOOL_LIMITS.primitiveTriangles
+      )
+        throw new Error('Rounded tool budget exceeded.');
+      for (const run of runs) {
+        if (run.length < 9 || run.length % 3 || !run.every(Number.isFinite))
+          throw new Error('Invalid rounded tool path.');
+        for (let i = 0; i < run.length; i += 3) {
+          const next = (i + 3) % run.length;
+          if (
+            Math.hypot(run[next] - run[i], run[next + 1] - run[i + 1], run[next + 2] - run[i + 2]) <
+            1e-9
+          )
+            throw new Error('Rounded tool path contains a zero-length segment.');
+        }
+      }
+      const output: SolidMesh[] = [];
+      for (const run of runs) {
+        let combined: Manifold | undefined;
+        let batch: Manifold[] = [];
+        const flush = () => {
+          if (!batch.length) return;
+          let next: Manifold | undefined;
+          try {
+            next = own(module.Manifold.union(combined ? [combined, ...batch] : batch));
+            inspect(next); // Force evaluation while the batch is small.
+          } catch (error) {
+            if (next) release(next);
+            throw error;
+          } finally {
+            batch.forEach(release);
+            batch = [];
+          }
+          if (combined) release(combined);
+          combined = next;
+        };
+        const append = (part: Manifold) => {
+          batch.push(part);
+          if (batch.length === 8) flush();
+        };
+        try {
+          for (let i = 0; i < run.length; i += 3) {
+            const j = (i + 3) % run.length;
+            // Identically oriented endpoint spheres give adjacent capsules the
+            // same join geometry, avoiding coplanar cylinder/sphere seam slivers.
+            const sphere = own(module.Manifold.sphere(radius, segments));
+            let start: Manifold | undefined, end: Manifold | undefined;
+            try {
+              start = own(sphere.translate([run[i], run[i + 1], run[i + 2]]));
+              end = own(sphere.translate([run[j], run[j + 1], run[j + 2]]));
+              append(own(module.Manifold.hull([start, end])));
+            } finally {
+              if (end) release(end);
+              if (start) release(start);
+              release(sphere);
+            }
+          }
+          flush();
+          if (inspect(combined!).boundaryComponents !== 1)
+            throw new Error(
+              'Rounded tool produced unexpected boundary shells. This path is unsupported.',
+            );
+          const mesh = combined!.getMesh();
+          const detached = { V: mesh.vertProperties.slice(), T: mesh.triVerts.slice() };
+          // Validate the quantized transfer artifact as well as the native solid.
+          const roundTrip = importMesh(detached);
+          try {
+            if (inspect(roundTrip).boundaryComponents !== 1)
+              throw new Error(
+                'Rounded tool lost its single-shell topology during buffer conversion.',
+              );
+          } finally {
+            release(roundTrip);
+          }
+          output.push(detached);
+        } finally {
+          batch.forEach(release);
+          if (combined) release(combined);
+        }
+      }
+      return output;
     },
     run(base: SolidMesh, tools: readonly SolidMesh[], operation: SolidOperation) {
       if (!['off', 'inset', 'emboss'].includes(operation))

@@ -1,6 +1,7 @@
 'use strict';
 
 import { deformMesh } from './mesh-deformation';
+import { chainSliceSegments as chain } from './slice-geometry';
 import type { ObjectSettings } from './object-settings';
 
 import { createSliceRays } from './slice-rays';
@@ -692,48 +693,7 @@ export function extractScalarFieldLevel(
   return { pts, segs, ...(normalCollector ? { surfaceNormals: normalCollector.normals } : {}) };
 }
 
-/* ------------------------------------------- chain segments into runs */
-function chain(pts: NumericArray, segs: NumericArray): number[][] {
-  const n = pts.length / 3;
-  const head = new Int32Array(n).fill(-1);
-  const nextRef = new Int32Array(segs.length).fill(-1);
-  for (let s = 0; s < segs.length; s++) {
-    // adjacency: linked list per node
-    const v = segs[s];
-    nextRef[s] = head[v];
-    head[v] = s;
-  }
-  const used = new Uint8Array(segs.length / 2);
-  const deg = new Uint8Array(n);
-  for (const v of segs) if (deg[v] < 255) deg[v]++;
-
-  const polys: number[][] = [];
-  const walk = (start: number): void => {
-    const line: number[] = [start];
-    let cur = start;
-    for (;;) {
-      let picked = -1,
-        other = -1;
-      for (let s = head[cur]; s !== -1; s = nextRef[s]) {
-        const si = s >> 1;
-        if (used[si]) continue;
-        picked = si;
-        other = segs[s ^ 1];
-        break;
-      }
-      if (picked === -1) break;
-      used[picked] = 1;
-      line.push(other);
-      cur = other;
-      if (cur === start) break; // closed loop
-    }
-    if (line.length > 1) polys.push(line);
-  };
-  for (let v = 0; v < n; v++) if (deg[v] === 1) walk(v); // open runs first
-  for (let s = 0; s < segs.length; s += 2) if (!used[s >> 1]) walk(segs[s]); // then loops
-  return polys;
-}
-
+/* ------------------------------------------- world-space slice cache */
 const contourTopologyCache = new WeakMap<ContourMesh, Map<string, CachedSlice[]>>();
 
 /** Extracts one deterministic two-source Voronoi segment per crossed triangle. */

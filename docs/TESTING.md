@@ -11,6 +11,7 @@ npm run test:coverage    # run tests and write coverage/index.html
 npm run doctor           # audit React health; fail on error-severity findings
 npm run test:3d          # internal Phase-0 kernel fixture regressions
 npm run bench:3d -- 20   # 20 repetitions; JSON timings and process memory samples
+npm run bench:3d -- 5 contours # triangle-derived tools on six source fixtures
 npm run build:3d         # separate local WASM/worker developer-page build
 ```
 
@@ -38,6 +39,8 @@ The default environment is Node. A component test that needs browser APIs declar
 Prefer Node for geometry and serialization tests: it starts faster and makes accidental DOM dependencies visible.
 
 `solid-kernel.test.ts` exercises the real Manifold WASM kernel, including groove/rib volume direction on four fixtures, deterministic geometry, input immutability, exact neutral buffers, asymmetric millimeter bounds, measured box penetration/protrusion, torus-hole and enclosed-cavity retention, overlapping tools, disconnected bodies, malformed/open input rejection, budgets, and owned-handle cleanup on success/failure/repetition. Boundary shell counts are kept distinct from physical body counts. These checks are not a complete solid or manufacturing validator. The separate browser worker trial, cancellation procedure, benchmark context, and remaining Phase-0 gates are documented in [THREE_D_FEASIBILITY.md](./THREE_D_FEASIBILITY.md).
+
+`slice-geometry.test.ts` covers exact triangle/barycentric alignment, plane normalization, run/level ordering, buffer isolation, compatibility with generic unsmoothed drawing intersections, cuts through vertices/edges, coincident but topologically separate surfaces, open paths, branching/coplanar failures and budgets. The shared drawing chaining routine is guarded by the full contour integration suite. `slice-treatment.test.ts` checks deterministic All/range/every-N selections, zero/open/budget cases, detached recipes, real capsule geometry, independent line/triangle feature measurements, tilted and deformed surfaces, multiple torus runs and native-failure cleanup. `src/dev/three-d-feasibility.test.ts` exercises suite routing, stale replies, cancellation, error recovery and page-exit cleanup with a mock worker; real-browser WASM responsiveness still needs manual verification.
 
 ## What to test
 
@@ -100,6 +103,9 @@ Coverage currently measures the focused core under active test:
 - `terrain-routes.ts`
 - `map-settings.ts`
 - `mesh.ts`
+- `solid-kernel.ts`
+- `slice-geometry.ts`
+- `slice-treatment.ts`
 - `mesh-deformation.ts`
 - `object-settings.ts`
 - `mesh-curvature.ts`

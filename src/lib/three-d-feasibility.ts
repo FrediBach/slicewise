@@ -3,6 +3,8 @@ import type { Manifold, ManifoldToplevel, Vec2 } from 'manifold-3d';
 import { createSolidKernel, type SolidMesh } from './solid-kernel';
 import { deformMesh } from './mesh-deformation';
 import { vertexNormals } from './mesh';
+import { extractPlanarSlices, type PlanarSliceField } from './slice-geometry';
+import { createRoundedTreatmentRecipe } from './slice-treatment';
 
 export function createFeasibilityFixtures(module: ManifoldToplevel) {
   const allocated: Manifold[] = [];
@@ -68,9 +70,41 @@ export function createFeasibilityFixtures(module: ManifoldToplevel) {
   }
 }
 
-export function runFeasibility(module: ManifoldToplevel, repeats = 1) {
+export function createContourFeasibilityFixtures(module: ManifoldToplevel) {
+  const existing = createFeasibilityFixtures(module);
+  const box = existing[1].base;
+  const normalized = {
+    V: Float32Array.from(box.V, (v) => v / 30),
+    T: box.T,
+    N: vertexNormals(box.V, box.T),
+  };
+  const deform = (settings: Parameters<typeof deformMesh>[1]): SolidMesh => {
+    const result = deformMesh(normalized, { objectEnabled: true, ...settings });
+    return { V: Float32Array.from(result.V, (v) => v * 30), T: Uint32Array.from(result.T) };
+  };
+  return [
+    ...existing.map(({ name, base }) => ({ name, base })),
+    { name: 'twisted-box', base: deform({ objectTwistAngle: 60 }) },
+    { name: 'bent-box', base: deform({ objectBendAngle: 45 }) },
+  ].map((fixture) => ({
+    ...fixture,
+    field: {
+      kind: 'planar',
+      normal: fixture.name === 'box' ? [0.2, 0.1, 1] : [0, 0, 1],
+      levels: [3.7],
+    } as PlanarSliceField,
+  }));
+}
+
+export function runFeasibility(
+  module: ManifoldToplevel,
+  repeats = 1,
+  suite: 'analytic' | 'contours' = 'analytic',
+) {
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20)
     throw new Error('Choose 1–20 feasibility repetitions.');
+  if (suite === 'contours') return runContourFeasibility(module, repeats);
+  if (suite !== 'analytic') throw new Error('Unknown feasibility suite.');
   const kernel = createSolidKernel(module);
   const fixtures = createFeasibilityFixtures(module);
   const rows = [];
@@ -86,6 +120,56 @@ export function runFeasibility(module: ManifoldToplevel, repeats = 1) {
           elapsedMs: Math.round((performance.now() - start) * 100) / 100,
           ...result.measurements,
           outputBytes: result.mesh.V.byteLength + result.mesh.T.byteLength,
+          liveHandles: kernel.liveHandles,
+        });
+      }
+    }
+  }
+  return rows;
+}
+
+function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
+  const kernel = createSolidKernel(module);
+  const fixtures = createContourFeasibilityFixtures(module);
+  const rows = [];
+  for (let repetition = 0; repetition < repeats; repetition++) {
+    for (const fixture of fixtures) {
+      const start = performance.now();
+      try {
+        const geometry = extractPlanarSlices(fixture.base, fixture.field, 0);
+        const recipe = createRoundedTreatmentRecipe(geometry, { mode: 'all' }, 0.6);
+        const extractionMs = performance.now() - start;
+        const tools = kernel.createRoundedTools(recipe);
+        const toolConstructionMs = performance.now() - start - extractionMs;
+        for (const operation of ['inset', 'emboss'] as const) {
+          const operationStart = performance.now();
+          const result = kernel.run(fixture.base, tools, operation);
+          if (result.measurements.boundaryComponents !== 1)
+            throw new Error(
+              `${operation} produced unexpected boundary shells on this single-shell fixture.`,
+            );
+          rows.push({
+            repetition,
+            fixture: fixture.name,
+            operation,
+            status: 'kernel-accepted',
+            extractionMs,
+            toolConstructionMs,
+            booleanMs: performance.now() - operationStart,
+            sourceTriangles: fixture.base.T.length / 3,
+            contourRuns: recipe.runs.length,
+            contourVertices: recipe.runs.reduce((sum, run) => sum + run.length / 3, 0),
+            toolTriangles: tools.reduce((sum, tool) => sum + tool.T.length / 3, 0),
+            ...result.measurements,
+            liveHandles: kernel.liveHandles,
+          });
+        }
+      } catch (error) {
+        rows.push({
+          repetition,
+          fixture: fixture.name,
+          status: 'rejected',
+          message: error instanceof Error ? error.message : String(error),
           liveHandles: kernel.liveHandles,
         });
       }

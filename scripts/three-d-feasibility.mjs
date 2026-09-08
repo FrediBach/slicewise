@@ -14,7 +14,7 @@ try {
   const module = await Module();
   module.setup();
   const before = process.memoryUsage();
-  const rows = runFeasibility(module, Number(process.argv[2] ?? 1));
+  const rows = runFeasibility(module, Number(process.argv[2] ?? 1), process.argv[3] ?? 'analytic');
   console.log(
     JSON.stringify(
       {
@@ -30,6 +30,7 @@ try {
           'Process samples include Vite, JS and WASM. They are not peak WASM allocation measurements.',
         before,
         after: process.memoryUsage(),
+        processPeakRssKiB: process.resourceUsage().maxRSS,
         rows,
       },
       null,

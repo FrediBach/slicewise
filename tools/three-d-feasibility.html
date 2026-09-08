@@ -26,11 +26,13 @@
   <body>
     <h1>3D kernel feasibility</h1>
     <p>
-      Internal Phase-0 trial: four fixed millimeter fixtures with rounded tools. Kernel acceptance
-      does not establish print readiness or general profile accuracy.
+      Internal Phase-0 trial: analytic tools or triangle-derived contour sweeps on six millimeter
+      fixtures, including tilted, twisted and bent shapes. Kernel acceptance does not establish
+      print readiness or general profile accuracy.
     </p>
-    <button id="run">Run fixtures</button>
-    <button id="repeat">Run 20 repetitions</button>
+    <button id="run">Run analytic fixtures</button>
+    <button id="contours">Run contour fixtures</button>
+    <button id="repeat">Repeat contour fixtures ×20</button>
     <button id="cancel" disabled>Cancel and release worker</button>
     <p id="status" role="status">Ready. Geometry stays in a local worker.</p>
     <pre id="results" aria-label="Fixture measurements"></pre>
