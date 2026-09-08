@@ -41,3 +41,46 @@ it('keeps signed numeric drafts editable, restores invalid drafts, and follows e
   unmount();
   document.removeEventListener('threedprojectchange', commands);
 });
+
+it('gates preparation on current slices and size and exposes cancellation without enabling export', () => {
+  const prepare = vi.fn(),
+    cancel = vi.fn();
+  document.addEventListener('threedprepare', prepare);
+  document.addEventListener('threedcancel', cancel);
+  const { unmount } = render(<ThreeDPanel />);
+  const project = { ...createThreeDProject('test'), treatment: 'inset' as const };
+  const state = {
+    ...initialThreeDState,
+    active: true,
+    status: 'ready' as const,
+    project,
+    source: { id: 'test', name: 'Test', imported: false },
+    slices: {
+      positions: new Float32Array(),
+      selected: new Float32Array(),
+      count: 3,
+      selectedCount: 3,
+      runs: 3,
+    },
+    preparation: { status: 'idle' as 'idle' | 'pending', message: 'Source preview' },
+  };
+  const publish = () =>
+    act(() => {
+      document.dispatchEvent(new CustomEvent('threedstatechange', { detail: { ...state } }));
+    });
+  publish();
+  expect(screen.getByRole('button', { name: 'Prepare treatment' })).toBeDisabled();
+  project.sizeConfirmed = true;
+  publish();
+  fireEvent.click(screen.getByRole('button', { name: 'Prepare treatment' }));
+  expect(prepare).toHaveBeenCalledTimes(1);
+  state.preparation = { status: 'pending', message: 'Constructing tools…' };
+  publish();
+  expect(screen.getByRole('button', { name: 'Prepare treatment' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(cancel).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: '3D export unavailable' })).toBeDisabled();
+  unmount();
+  document.removeEventListener('threedprepare', prepare);
+  document.removeEventListener('threedcancel', cancel);
+});

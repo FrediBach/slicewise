@@ -63,10 +63,12 @@ export default function App() {
           </div>
           <SourcePanel />
           <ObjectPanel />
-          <ThreeDPanel />
           <div className="drawing-only">
             <ViewPanel />
-            <ContoursPanel />
+          </div>
+          <ContoursPanel />
+          <ThreeDPanel />
+          <div className="drawing-only">
             <AppearancePanel />
             <CanvasPanel />
             <EffectsPanel />

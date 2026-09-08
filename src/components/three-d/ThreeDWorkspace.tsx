@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
+import { PhysicalNumberInput } from './PhysicalNumberInput';
+import { ThreeDSurfacePanel } from './ThreeDSurfacePanel';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
 import { Section } from '../ui/section';
 import {
@@ -21,31 +23,6 @@ function useThreeDState() {
 function edit(patch: Partial<ThreeDProject>) {
   document.dispatchEvent(new CustomEvent('threedprojectchange', { detail: patch }));
 }
-// Keep incomplete numeric text editable; only valid values reach the project.
-function PhysicalNumberInput({
-  value,
-  ...props
-}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value'> & { value: number }) {
-  const input = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (input.current) input.current.value = String(value);
-  }, [value]);
-  return (
-    <input
-      {...props}
-      ref={input}
-      defaultValue={value}
-      onBlur={() => {
-        if (
-          input.current &&
-          (!input.current.validity.valid || !Number.isFinite(input.current.valueAsNumber))
-        )
-          input.current.value = String(value);
-      }}
-    />
-  );
-}
-
 export function ThreeDPanel() {
   const state = useThreeDState();
   const project = state.project;
@@ -173,27 +150,19 @@ export function ThreeDPanel() {
           </>
         )}
       </Section>
-      <Section
-        title="Preparation"
-        description="Treatments and export are not available in this milestone."
-        defaultOpen
-      >
-        <p className="gradient-note">
-          Surface treatment: Off. Solid validity, wall thickness, support and stability have not
-          been checked.
-        </p>
-        <Button disabled>3D export unavailable</Button>
-      </Section>
+      {project && <ThreeDSurfacePanel state={state} project={project} />}
     </div>
   );
 }
 function Viewport({ state }: { state: ThreeDUiState }) {
   const host = useRef<HTMLDivElement>(null);
   const adapter = useRef<ReturnType<typeof createThreeDScene> | null>(null);
-  const current = useRef(state.artifact);
+  const current = useRef(state);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [style, setStyle] = useState<SceneStyle>('Studio');
+  const [showSlices, setShowSlices] = useState(true);
+  const [showSource, setShowSource] = useState(false);
   const [ortho, setOrtho] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -203,7 +172,8 @@ function Viewport({ state }: { state: ThreeDUiState }) {
         try {
           adapter.current = createThreeDScene(host.current);
           adapter.current.style('Studio');
-          adapter.current.setArtifact(current.current);
+          adapter.current.setArtifact(current.current.artifact);
+          adapter.current.slices(current.current.slices ?? null);
           setReady(true);
         } catch {
           setError('3D rendering is unavailable. Enable WebGL or try another browser.');
@@ -219,9 +189,25 @@ function Viewport({ state }: { state: ThreeDUiState }) {
     };
   }, []);
   useEffect(() => {
-    current.current = state.artifact;
-    adapter.current?.setArtifact(state.artifact);
-  }, [state.artifact]);
+    current.current = state;
+  }, [state]);
+  useEffect(() => {
+    adapter.current?.setArtifact(
+      showSource ? (state.sourceArtifact ?? state.artifact) : state.artifact,
+    );
+    adapter.current?.slices(
+      showSlices && !(showSource && state.preparation?.status === 'accepted')
+        ? (state.slices ?? null)
+        : null,
+    );
+  }, [
+    state.artifact,
+    state.sourceArtifact,
+    state.slices,
+    state.preparation?.status,
+    showSource,
+    showSlices,
+  ]);
   const outside =
     state.artifact &&
     (state.artifact.min[0] < -110 ||
@@ -277,12 +263,44 @@ function Viewport({ state }: { state: ThreeDUiState }) {
           </Button>
         </div>
       </div>
+      <div className="three-d-inspection-tools">
+        <Button
+          variant="outline"
+          aria-pressed={showSlices}
+          onClick={() => setShowSlices(!showSlices)}
+        >
+          Slices
+        </Button>
+        <Button
+          variant="outline"
+          disabled={state.preparation?.status !== 'accepted'}
+          aria-pressed={showSource && state.preparation?.status === 'accepted'}
+          onClick={() => setShowSource(!showSource)}
+        >
+          {showSource && state.preparation?.status === 'accepted'
+            ? 'Show result'
+            : 'Compare source'}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!ready}
+          onClick={() =>
+            document.dispatchEvent(
+              new CustomEvent('threedalignview', {
+                detail: { direction: adapter.current?.direction() },
+              }),
+            )
+          }
+        >
+          Align slices to view
+        </Button>
+      </div>
       <div ref={host} className="three-d-canvas" />
       <div className="three-d-scene-label">
         <b>{state.source?.name ?? 'No source'}</b>
         <span>3D / internal prototype</span>
       </div>
-      {(error || !ready || state.status !== 'ready') && (
+      {(error || !ready || (!state.artifact && state.status !== 'ready')) && (
         <p className="three-d-message" role="status">
           {error || (!ready ? 'Loading 3D viewport…' : state.message)}
         </p>
@@ -295,7 +313,9 @@ function Viewport({ state }: { state: ThreeDUiState }) {
         </span>
         <span>
           {outside ? 'Outside reference build volume · ' : ''}
-          {state.message}
+          {showSource && state.preparation?.status === 'accepted'
+            ? 'Untreated source comparison · prepared result retained'
+            : state.message}
         </span>
         <span>Drag to orbit · right-drag to pan · scroll to zoom</span>
       </div>

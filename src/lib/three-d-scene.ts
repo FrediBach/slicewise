@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import type { ThreeDArtifact } from './three-d-project';
+import type { ThreeDArtifact, ThreeDSlices } from './three-d-project';
 export type ReferenceView = 'Fit' | 'Front' | 'Side' | 'Top' | 'Isometric';
 export type SceneStyle = 'Studio' | 'Inspect' | 'Print';
 
@@ -34,6 +34,19 @@ export function createThreeDScene(host: HTMLElement) {
   });
   const mesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
   scene.add(mesh);
+  material.polygonOffset = true;
+  material.polygonOffsetFactor = 1;
+  material.polygonOffsetUnits = 1;
+  const sliceLines = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: '#776d62', transparent: true, opacity: 0.35 }),
+  );
+  const selectedLines = new THREE.LineSegments(
+    new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: '#8b3216' }),
+  );
+  selectedLines.renderOrder = 2;
+  scene.add(sliceLines, selectedLines);
   scene.add(new THREE.HemisphereLight('#fff8ef', '#77788b', 2.7));
   const light = new THREE.DirectionalLight('#ffffff', 3.2);
   light.position.set(-150, -200, 300);
@@ -126,6 +139,22 @@ export function createThreeDScene(host: HTMLElement) {
       }
       draw();
     },
+    slices(slices: ThreeDSlices | null) {
+      for (const [object, positions] of [
+        [sliceLines, slices?.positions],
+        [selectedLines, slices?.selected],
+      ] as const) {
+        object.geometry.dispose();
+        object.geometry = new THREE.BufferGeometry();
+        if (positions)
+          object.geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        object.visible = !!positions?.length;
+      }
+      draw();
+    },
+    direction(): [number, number, number] {
+      return camera.getWorldDirection(new THREE.Vector3()).toArray();
+    },
     view,
     style(style: SceneStyle) {
       material.wireframe = style === 'Inspect';
@@ -150,6 +179,10 @@ export function createThreeDScene(host: HTMLElement) {
       controls.dispose();
       mesh.geometry.dispose();
       material.dispose();
+      for (const lines of [sliceLines, selectedLines]) {
+        lines.geometry.dispose();
+        lines.material.dispose();
+      }
       grid.geometry.dispose();
       (grid.material as THREE.Material).dispose();
       box.geometry.dispose();

@@ -32,7 +32,7 @@ it('coalesces edits, rejects stale sources and exit replies, and restarts after 
   const source = { id: 'a', version: 1, name: 'A', mesh, imported: false, upY: false };
   const request = { source, project: createThreeDProject('a'), settings: {} };
   runtime.request(request);
-  runtime.request(request);
+  runtime.request({ ...request, project: { ...request.project, radiusMm: 1 } });
   runtime.request({ ...request, source: { ...source, version: 2 } });
   expect(workers[0].requests).toHaveLength(1);
   expect(workers[0].requests[0].source.mesh.V).not.toBe(mesh.V);
@@ -55,4 +55,73 @@ it('coalesces edits, rejects stale sources and exit replies, and restarts after 
   expect(workers).toHaveLength(3);
   runtime.stop();
   expect(mesh.V.byteLength).toBe(36);
+});
+
+it('keeps progress pending, cancels native work, restarts and invalidates accepted results on edits', () => {
+  const workers: WorkerStub[] = [];
+  const runtime = new ThreeDRuntime(
+    () => {},
+    () => {
+      const w = new WorkerStub();
+      workers.push(w);
+      return w as unknown as Worker;
+    },
+  );
+  const artifact = {
+    V: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
+    T: new Uint32Array([0, 1, 2]),
+    min: [0, 0, 0] as [number, number, number],
+    max: [1, 1, 0] as [number, number, number],
+    dimensions: [1, 1, 0] as [number, number, number],
+  };
+  const input = {
+    source: { id: 'a', version: 1, name: 'A', mesh: artifact, imported: false, upY: false },
+    project: { ...createThreeDProject('a'), sizeConfirmed: true, treatment: 'inset' as const },
+    settings: {},
+  };
+  runtime.request(input);
+  workers[0].reply({ id: 1, sourceVersion: 1, artifact, sourceArtifact: artifact });
+  runtime.prepare();
+  const first = workers[0].requests.at(-1)!;
+  workers[0].reply({ id: first.id, sourceVersion: 1, progress: 'Constructing tools…' });
+  expect(runtime.state.preparation?.status).toBe('pending');
+  runtime.cancel();
+  expect(workers[0].terminated).toBe(true);
+  expect(runtime.state.preparation?.status).toBe('cancelled');
+  workers[0].reply({
+    id: first.id,
+    sourceVersion: 1,
+    artifact,
+    preparation: { status: 'accepted', message: 'late' },
+  });
+  expect(runtime.state.preparation?.status).toBe('cancelled');
+  runtime.prepare();
+  expect(workers).toHaveLength(2);
+  const next = workers[1].requests.at(-1)!;
+  workers[1].reply({
+    id: next.id,
+    sourceVersion: 1,
+    artifact,
+    sourceArtifact: artifact,
+    preparation: { status: 'accepted', message: 'accepted' },
+  });
+  expect(runtime.state.preparation?.status).toBe('accepted');
+  const calls = workers[1].requests.length;
+  runtime.request(input);
+  expect(workers[1].requests).toHaveLength(calls);
+  expect(runtime.state.preparation?.status).toBe('accepted');
+  runtime.request({ ...input, project: { ...input.project, radiusMm: 1 } });
+  expect(runtime.state.artifact).toBeNull();
+  expect(runtime.state.preparation?.status).toBe('idle');
+  workers[1].reply({
+    id: workers[1].requests.at(-1)!.id,
+    sourceVersion: 1,
+    artifact,
+    sourceArtifact: artifact,
+  });
+  runtime.prepare();
+  runtime.request({ ...input, source: { ...input.source, version: 2 } });
+  expect(workers[1].terminated).toBe(true);
+  expect(workers).toHaveLength(3);
+  runtime.stop();
 });

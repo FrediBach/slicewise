@@ -2756,3 +2756,79 @@ body.three-d-mode .topbar {
     padding: 10px 12px;
   }
 }
+
+/* Compact 3D actions match the density of the existing workspace switch. */
+.three-d-toolbar .button,
+.three-d-inspection-tools .button,
+.three-d-panel .button {
+  flex: none;
+  width: auto;
+  height: 26px;
+  padding: 0 8px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+.three-d-toolbar {
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  gap: 6px;
+}
+.three-d-toolbar > div {
+  gap: 3px;
+}
+.three-d-inspection-tools {
+  position: absolute;
+  z-index: 2;
+  top: 44px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.three-d-inspection-tools .button {
+  background: #faf8f4e8;
+}
+.three-d-inspection-tools .button[aria-pressed='true'] {
+  background: #292c2b;
+  color: white;
+}
+.three-d-prepare-actions {
+  display: flex;
+  gap: 6px;
+}
+.three-d-slice-status,
+.three-d-preparation-status,
+.three-d-diagnostics,
+.three-d-diagnostic-list {
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 12px 0;
+}
+.three-d-diagnostics summary {
+  cursor: pointer;
+}
+.three-d-diagnostics dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.three-d-diagnostics dt {
+  text-transform: capitalize;
+}
+.three-d-diagnostics dd {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .three-d-toolbar {
+    gap: 6px;
+  }
+  .three-d-inspection-tools {
+    top: 108px;
+  }
+  .three-d-scene-label {
+    top: 178px;
+  }
+}

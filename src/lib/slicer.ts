@@ -1,5 +1,7 @@
 'use strict';
 
+import { cameraBasis } from './projection';
+import { selectSliceIndices } from './slice-treatment';
 import { ThreeDRuntime } from './three-d-runtime';
 import {
   createThreeDProject,
@@ -4108,6 +4110,8 @@ if (typeof document !== 'undefined') {
       };
       threeDMesh = state.mesh;
       threeDProject = structuredClone(threeDProjects.get(id) ?? createThreeDProject(id));
+      if (!threeDProjects.has(id))
+        threeDProject.viewDirection = cameraBasis(state.az, state.el, state.roll).f;
       threeDHistory = new ParameterHistory({ limit: 100 });
       commitThreeDHistory();
     }
@@ -4168,11 +4172,63 @@ if (typeof document !== 'undefined') {
       )
         next[key] = [...values];
     }
+    if (['off', 'inset', 'emboss'].includes(patch.treatment ?? ''))
+      next.treatment = patch.treatment!;
+    if (Number.isFinite(patch.radiusMm) && patch.radiusMm! >= 0 && patch.radiusMm! <= 10)
+      next.radiusMm = patch.radiusMm!;
+    if ([0, 0.05].includes(patch.pathToleranceMm!)) next.pathToleranceMm = patch.pathToleranceMm!;
+    if (patch.selection) {
+      try {
+        selectSliceIndices(state.lines, patch.selection);
+        next.selection = structuredClone(patch.selection);
+      } catch {
+        /* Retain valid selection. */
+      }
+    }
     if (typeof patch.onBed === 'boolean') next.onBed = patch.onBed;
     if (typeof patch.sizeConfirmed === 'boolean') next.sizeConfirmed = patch.sizeConfirmed;
     threeDProject = next;
     refreshThreeD();
     scheduleParameterHistory();
+  });
+  document.addEventListener('threedprepare', () => {
+    if (threeDMode) {
+      commitThreeDHistory();
+      threeDRuntime.prepare();
+    }
+  });
+  document.addEventListener('threedcancel', () => {
+    if (threeDMode) threeDRuntime.cancel();
+  });
+  document.addEventListener('threedalignview', (event) => {
+    if (!threeDMode || !threeDProject) return;
+    const direction = (event as CustomEvent<{ direction: number[] }>).detail?.direction;
+    if (
+      !Array.isArray(direction) ||
+      direction.length !== 3 ||
+      !direction.every(Number.isFinite) ||
+      Math.hypot(...direction) < 1e-9
+    )
+      return;
+    // Undo print rotation in reverse order to freeze the view in design space.
+    const p = [...direction];
+    for (let axis = 2; axis >= 0; axis--) {
+      const j = (axis + 1) % 3,
+        k = (axis + 2) % 3;
+      const a = (-threeDProject.rotation[axis] * Math.PI) / 180,
+        c = Math.cos(a),
+        s = Math.sin(a);
+      const v = c * p[j] - s * p[k];
+      p[k] = s * p[j] + c * p[k];
+      p[j] = v;
+    }
+    commitThreeDHistory();
+    threeDProject = { ...threeDProject, viewDirection: p as [number, number, number] };
+    state.axis = 'cam';
+    setSelectValue('axis', 'cam');
+    syncSliceFieldControls();
+    refreshThreeD();
+    commitThreeDHistory();
   });
   window.addEventListener('pagehide', () => threeDRuntime.stop());
   window.addEventListener('pageshow', (event) => {

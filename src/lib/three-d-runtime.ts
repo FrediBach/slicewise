@@ -9,7 +9,11 @@ import {
 export class ThreeDRuntime {
   #worker: Worker | null = null;
   #id = 0;
+  #signature = '';
+
   #busy = false;
+  #input: Omit<ThreeDRequest, 'id'> | null = null;
+  #preparing = false;
   #queued: ThreeDRequest | null = null;
   state: ThreeDUiState = { ...initialThreeDState };
   constructor(
@@ -18,14 +22,44 @@ export class ThreeDRuntime {
       new Worker(new URL('./three-d-worker.ts', import.meta.url), { type: 'module' }),
   ) {}
   request(input: Omit<ThreeDRequest, 'id'>): void {
+    const signature = JSON.stringify([
+      input.source.id,
+      input.source.version,
+      input.project,
+      input.settings,
+    ]);
+    // Blur/resize may request the same geometry again. They must not invalidate
+    // a prepared artifact or restart an identical pending job.
+    if (
+      input.purpose !== 'prepare' &&
+      signature === this.#signature &&
+      this.state.status !== 'error'
+    )
+      return;
+    this.#signature = signature;
+    if (this.#preparing) this.#terminate();
+    this.#input = input;
+    const preparing = input.purpose === 'prepare';
+    this.#preparing = preparing;
+    const previous = this.state;
     const id = ++this.#id;
     this.state = {
       active: true,
       source: { id: input.source.id, name: input.source.name, imported: input.source.imported },
       project: structuredClone(input.project),
       status: 'pending',
-      message: 'Updating shaped source…',
-      artifact: null,
+      message: preparing
+        ? 'Preparing treatment · untreated source shown'
+        : 'Updating shaped source…',
+      artifact: preparing ? (previous.sourceArtifact ?? previous.artifact) : null,
+      sourceArtifact: preparing ? (previous.sourceArtifact ?? previous.artifact) : null,
+      slices: preparing ? previous.slices : null,
+      preparation: {
+        status: preparing ? 'pending' : 'idle',
+        message: preparing
+          ? 'Starting preparation…'
+          : 'Settings changed · prepare to see the treatment',
+      },
     };
     this.publish(this.state);
     if (!this.#worker) {
@@ -33,15 +67,37 @@ export class ThreeDRuntime {
       this.#worker = worker;
       worker.addEventListener('message', (event: MessageEvent<ThreeDReply>) => {
         if (worker !== this.#worker) return;
-        this.#busy = false;
         const reply = event.data;
+        if (reply.progress) {
+          if (reply.id === this.#id && reply.sourceVersion === this.#sourceVersion) {
+            this.state = {
+              ...this.state,
+              preparation: { status: 'pending', message: reply.progress },
+            };
+            this.publish(this.state);
+          }
+          return;
+        }
+        this.#busy = false;
         if (reply.id === this.#id && reply.sourceVersion === this.#sourceVersion) {
+          this.#preparing = false;
           this.state = {
             ...this.state,
-            status: reply.artifact ? 'ready' : 'error',
-            artifact: reply.artifact ?? null,
+            status: reply.artifact || this.state.sourceArtifact ? 'ready' : 'error',
+            artifact: reply.artifact ?? this.state.sourceArtifact ?? null,
+            sourceArtifact:
+              reply.sourceArtifact ?? reply.artifact ?? this.state.sourceArtifact ?? null,
+            slices: reply.slices ?? this.state.slices,
+            preparation:
+              reply.preparation ??
+              (reply.error
+                ? { status: 'rejected', message: reply.error }
+                : { status: 'idle', message: 'Untreated source · choose a treatment and prepare' }),
             message:
-              reply.error ?? 'Untreated source · solid and manufacturing checks have not run',
+              reply.error ??
+              (reply.preparation?.status === 'accepted'
+                ? reply.preparation.message
+                : 'Untreated source · no current prepared result'),
           };
           this.publish(this.state);
         }
@@ -53,10 +109,12 @@ export class ThreeDRuntime {
         this.#worker = null;
         this.#busy = false;
         this.#queued = null;
+        this.#preparing = false;
         this.state = {
           ...this.state,
-          status: 'error',
-          artifact: null,
+          status: this.state.sourceArtifact ? 'ready' : 'error',
+          artifact: this.state.sourceArtifact ?? null,
+          preparation: { status: 'rejected', message: 'Worker stopped. Prepare again to retry.' },
           message: 'The 3D worker stopped. Change a setting or re-enter 3D to retry.',
         };
         this.publish(this.state);
@@ -81,12 +139,44 @@ export class ThreeDRuntime {
       [V.buffer, T.buffer, N.buffer],
     );
   }
-  stop(): void {
+  prepare(): void {
+    if (
+      !this.#input ||
+      this.#busy ||
+      !this.state.artifact ||
+      this.state.slices?.error ||
+      !this.#input.project.sizeConfirmed ||
+      this.#input.project.treatment === 'off' ||
+      this.#input.project.radiusMm === 0
+    )
+      return;
+    this.request({ ...this.#input, purpose: 'prepare' });
+  }
+  cancel(): void {
+    if (!this.#preparing) return;
     this.#id++;
+    this.#terminate();
+    this.state = {
+      ...this.state,
+      status: 'ready',
+      artifact: this.state.sourceArtifact ?? null,
+      message: 'Untreated source · preparation cancelled',
+      preparation: { status: 'cancelled', message: 'Cancelled. You can prepare again.' },
+    };
+    this.publish(this.state);
+  }
+  #terminate(): void {
+    this.#preparing = false;
     this.#worker?.terminate();
     this.#worker = null;
     this.#busy = false;
     this.#queued = null;
+  }
+  stop(): void {
+    this.#id++;
+    this.#terminate();
+    this.#input = null;
+    this.#signature = '';
     this.state = { ...initialThreeDState };
     this.publish(this.state);
   }

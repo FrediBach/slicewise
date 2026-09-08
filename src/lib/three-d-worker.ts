@@ -1,12 +1,44 @@
-import { deformMesh } from './mesh-deformation';
-import { placeThreeDSource, type ThreeDRequest, type ThreeDReply } from './three-d-project';
-self.addEventListener('message', (event: MessageEvent<ThreeDRequest>) => {
-  const { id, source, project, settings } = event.data;
+import { previewThreeD, prepareThreeD } from './three-d-preparation';
+import type { ThreeDRequest, ThreeDReply } from './three-d-project';
+
+// Heavy WASM loads only for an explicit preparation action, from the local bundle.
+let kernelModule: Promise<import('manifold-3d').ManifoldToplevel> | null = null;
+self.addEventListener('message', async (event: MessageEvent<ThreeDRequest>) => {
+  const request = event.data;
+  const { id, source } = request;
   try {
-    const artifact = placeThreeDSource(deformMesh(source.mesh, settings), source, project);
-    const reply: ThreeDReply = { id, sourceVersion: source.version, artifact };
-    self.postMessage(reply, { transfer: [artifact.V.buffer, artifact.T.buffer] });
+    let reply: ThreeDReply;
+    if (request.purpose === 'prepare') {
+      self.postMessage({
+        id,
+        sourceVersion: source.version,
+        progress: 'Loading the local geometry kernel…',
+      } satisfies ThreeDReply);
+      kernelModule ??= Promise.all([
+        import('manifold-3d'),
+        import('manifold-3d/manifold.wasm?url'),
+      ]).then(async ([{ default: Module }, { default: wasmUrl }]) => {
+        const module = await Module({ locateFile: () => wasmUrl });
+        module.setup();
+        return module;
+      });
+      reply = prepareThreeD(request, await kernelModule, (progress) =>
+        self.postMessage({ id, sourceVersion: source.version, progress } satisfies ThreeDReply),
+      );
+    } else reply = previewThreeD(request).reply;
+    const buffers = new Set<ArrayBuffer>();
+    for (const artifact of [reply.artifact, reply.sourceArtifact])
+      if (artifact) {
+        buffers.add(artifact.V.buffer as ArrayBuffer);
+        buffers.add(artifact.T.buffer as ArrayBuffer);
+      }
+    if (reply.slices) {
+      buffers.add(reply.slices.positions.buffer as ArrayBuffer);
+      buffers.add(reply.slices.selected.buffer as ArrayBuffer);
+    }
+    self.postMessage(reply, { transfer: [...buffers] });
   } catch (error) {
+    kernelModule = null;
     self.postMessage({
       id,
       sourceVersion: source.version,

@@ -13,7 +13,9 @@ export function ContoursPanel() {
     >
       <FieldGroup title="Density & finish">
         <ValueControl id="lines" label="Line count" min="1" max="200" step="1" value="40" />
-        <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
+        <div className="drawing-only">
+          <ValueControl id="quality" label="Curve quality" min="1" max="10" step="1" value="7" />
+        </div>
       </FieldGroup>
       <FieldGroup title="Line spacing">
         <SelectControl
@@ -88,20 +90,22 @@ export function ContoursPanel() {
         />
       </FieldGroup>
       <SliceFieldControls />
-      <SliceRayControls />
-      <FieldGroup title="Path construction" className="field-group--checks">
-        <div className="check-grid">
-          <Checkbox id="spiral" randomizable>
-            Continuous spiral
-          </Checkbox>
-          <Checkbox id="hide" defaultChecked randomizable>
-            Remove hidden lines
-          </Checkbox>
-          <Checkbox id="sil" defaultChecked randomizable>
-            Add outer silhouette
-          </Checkbox>
-        </div>
-      </FieldGroup>
+      <div className="drawing-only">
+        <SliceRayControls />
+        <FieldGroup title="Path construction" className="field-group--checks">
+          <div className="check-grid">
+            <Checkbox id="spiral" randomizable>
+              Continuous spiral
+            </Checkbox>
+            <Checkbox id="hide" defaultChecked randomizable>
+              Remove hidden lines
+            </Checkbox>
+            <Checkbox id="sil" defaultChecked randomizable>
+              Add outer silhouette
+            </Checkbox>
+          </div>
+        </FieldGroup>
+      </div>
     </Section>
   );
 }
