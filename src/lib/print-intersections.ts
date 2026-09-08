@@ -188,11 +188,16 @@ export function auditSurfaceIntersections(
     return node;
   };
   const root = build(0, count);
-  const overlaps = (f: number, other: ArrayLike<number>, offset = 0) => {
+  const overlaps = (
+    a: ArrayLike<number>,
+    aOffset: number,
+    other: ArrayLike<number>,
+    offset = 0,
+  ) => {
     for (let axis = 0; axis < 3; axis++)
       if (
-        bounds[f * 6 + axis] > other[offset + axis + 3] + toleranceMm ||
-        other[offset + axis] > bounds[f * 6 + axis + 3] + toleranceMm
+        a[aOffset + axis] > other[offset + axis + 3] + toleranceMm ||
+        other[offset + axis] > a[aOffset + axis + 3] + toleranceMm
       )
         return false;
     return true;
@@ -203,22 +208,34 @@ export function auditSurfaceIntersections(
       const v = id * 3;
       return [V[v], V[v + 1], V[v + 2]];
     }) as Triangle;
-  for (let f = 0; f < count; f++) {
-    const stack = [root];
-    while (stack.length) {
-      if (work >= workLimit) return finish(false);
-      work++;
-      const node = stack.pop()!;
-      if (!overlaps(f, node.bounds)) continue;
-      if (node.left && node.right) {
-        stack.push(node.right, node.left);
-        continue;
-      }
-      for (let i = node.start; i < node.end; i++) {
+  // Traverse unordered node pairs once. A self-pair partitions into LL, LR,
+  // RR; disjoint subtrees partition by splitting one side. Thus every unordered
+  // triangle pair reaches at most one leaf pair, without a root walk per face.
+  const stack: [Node, Node][] = [[root, root]];
+  while (stack.length) {
+    if (work >= workLimit) return finish(false);
+    work++;
+    const [a, b] = stack.pop()!;
+    if (!overlaps(a.bounds, 0, b.bounds)) continue;
+    if (a === b && a.left && a.right) {
+      stack.push([a.right, a.right], [a.left, a.right], [a.left, a.left]);
+      continue;
+    }
+    if (a.left && a.right && (!b.left || a.end - a.start >= b.end - b.start)) {
+      stack.push([a.right, b], [a.left, b]);
+      continue;
+    }
+    if (b.left && b.right) {
+      stack.push([a, b.right], [a, b.left]);
+      continue;
+    }
+    for (let i = a.start; i < a.end; i++) {
+      for (let j = a === b ? i + 1 : b.start; j < b.end; j++) {
         if (work >= workLimit) return finish(false);
         work++;
-        const g = order[i];
-        if (g <= f || !overlaps(f, bounds, g * 6)) continue;
+        const f = Math.min(order[i], order[j]),
+          g = Math.max(order[i], order[j]);
+        if (!overlaps(bounds, f * 6, bounds, g * 6)) continue;
         const fids = ids(f),
           gids = ids(g);
         // Each list has at most three entries; avoid allocating lookup sets per pair.

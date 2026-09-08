@@ -254,7 +254,8 @@ function runContourFeasibility(
       };
       try {
         if (suite === 'scale') {
-          kernel.run(fixture.base, [], 'off');
+          const source = kernel.run(fixture.base, [], 'off');
+          progress.sourceIntersectionWork = source.topology.intersections!.work;
           progress.sourceAuditMs = performance.now() - start;
         }
         stage = 'extraction';

@@ -23,7 +23,7 @@ it('creates a deterministic target-scale source with 24 declared millimeter cuts
   expect(again.base.T).toEqual(fixture.base.T);
 });
 
-it('records the current scale audit budget blocker and releases handles across repetitions', () => {
+it('completes the scale source audit and records the rounded-tool budget blocker and releases handles across repetitions', () => {
   const rows = runFeasibility(module, 2, 'scale');
   expect(rows).toHaveLength(2);
   for (const [repetition, row] of rows.entries()) {
@@ -35,22 +35,21 @@ it('records the current scale audit budget blocker and releases handles across r
       requestedSlices: 24,
       radiusMm: 0.6,
       status: 'rejected',
-      failedStage: 'source-audit',
+      failedStage: 'recipe',
       liveHandles: 0,
-      topology: {
-        intersections: {
-          status: 'budget-exceeded',
-          complete: false,
-          pairCount: 0,
-          work: 5_000_000,
-        },
-      },
+      contourRuns: 24,
+      contourVertices: 15_088,
+      message: expect.stringContaining('Rounded tool budget exceeded'),
+      sourceIntersectionWork: expect.any(Number),
     });
     expect(row).not.toHaveProperty('booleanMs');
     expect(row).not.toHaveProperty('manufacturing');
     // Diagnostics must survive the same JSON boundary as the CLI/worker report.
     const encoded = JSON.stringify(row);
-    expect(encoded).toContain('"trianglePairs":[]');
-    expect(encoded).toContain('"shellVolumesMm3":[');
+    expect(encoded).toContain('"levels":[');
+    expect(encoded).toContain('"sourceIntersectionWork":');
+    if (!('sourceIntersectionWork' in row)) throw new Error('Missing source audit work');
+    expect(row.sourceIntersectionWork).toBeLessThan(5_000_000);
+    expect(row.sourceIntersectionWork).toBeGreaterThan(0);
   }
 });

@@ -326,6 +326,50 @@ describe('surface triangle contacts', () => {
     expect(auditSurfaceIntersections(triangles(base)).status).toBe('passed');
   });
 
+  it('matches exhaustive face-pair queries across subtree splits without duplicate contacts', () => {
+    // Groups mix shared-vertex overlap, unindexed overlap and disjoint geometry.
+    // Reordering makes spatial tree order differ from original face IDs.
+    const mesh = triangles(
+      ...Array.from({ length: 12 }, (_, group) =>
+        Array.from({ length: 3 }, () => base.map(([x, y, z]): Point => [x + group * 5, y, z])),
+      ).flat(),
+    );
+    for (let group = 0; group < 12; group++) mesh.T[group * 9 + 3] = mesh.T[group * 9];
+    const faces = Array.from({ length: 36 }, (_, f) => Array.from(mesh.T.slice(f * 3, f * 3 + 3)));
+    for (const order of [
+      faces,
+      [...faces].reverse(),
+      faces.filter((_, i) => i % 2 === 0).concat(faces.filter((_, i) => i % 2)),
+    ]) {
+      const T = Uint32Array.from(order.flat());
+      const expected = new Set<string>();
+      let adjacent = 0,
+        nonAdjacent = 0;
+      for (let f = 0; f < order.length; f++)
+        for (let g = f + 1; g < order.length; g++) {
+          const pair = auditSurfaceIntersections({ V: mesh.V, T: [...order[f], ...order[g]] });
+          if (pair.pairCount) expected.add(`${f},${g}`);
+          adjacent += pair.adjacentPairCount;
+          nonAdjacent += pair.nonAdjacentPairCount;
+        }
+      const report = auditSurfaceIntersections({ V: mesh.V, T });
+      expect(report.complete).toBe(true);
+      expect(report.pairCount).toBe(expected.size);
+      expect(report.adjacentPairCount).toBe(adjacent);
+      expect(report.nonAdjacentPairCount).toBe(nonAdjacent);
+      const sampled = new Set<string>();
+      for (let i = 0; i < report.trianglePairs.length; i += 2) {
+        const key = `${report.trianglePairs[i]},${report.trianglePairs[i + 1]}`;
+        expect(expected.has(key)).toBe(true);
+        expect(sampled.has(key)).toBe(false);
+        sampled.add(key);
+      }
+      // A just-insufficient budget never claims completion; exact work suffices.
+      expect(auditSurfaceIntersections({ V: mesh.V, T }, report.work - 1).complete).toBe(false);
+      expect(auditSurfaceIntersections({ V: mesh.V, T }, report.work)).toEqual(report);
+    }
+  });
+
   it('prunes separated geometry and does not reuse stale caller bounds', () => {
     const mesh = triangles(
       ...Array.from({ length: 1000 }, (_, i) => base.map(([x, y, z]): Point => [x + i * 10, y, z])),
