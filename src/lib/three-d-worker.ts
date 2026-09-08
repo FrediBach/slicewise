@@ -1,4 +1,4 @@
-import { prepareStlExport, prepareThreeMfExport } from './three-d-export';
+import { packageThreeDExports } from './three-d-export';
 import { ThreeDGeometryCache } from './three-d-cache';
 import { previewThreeD, prepareThreeD } from './three-d-preparation';
 import type { ThreeDRequest, ThreeDReply } from './three-d-project';
@@ -34,20 +34,13 @@ self.addEventListener('message', async (event: MessageEvent<ThreeDRequest>) => {
         geometryCache,
       );
     } else reply = previewThreeD(request, geometryCache).reply;
-    if (request.purpose === 'prepare') {
-      if (reply.preparation?.status === 'accepted')
-        self.postMessage({
-          id,
-          sourceVersion: source.version,
-          progress: 'Packaging checked export files…',
-        } satisfies ThreeDReply);
-      reply.stl = prepareStlExport(reply);
-      try {
-        reply.threeMf = prepareThreeMfExport(reply, source.name);
-      } catch (error) {
-        reply.threeMfError = error instanceof Error ? error.message : String(error);
-      }
-    }
+    if (reply.preparation?.status === 'accepted')
+      self.postMessage({
+        id,
+        sourceVersion: source.version,
+        progress: 'Packaging checked export files…',
+      } satisfies ThreeDReply);
+    packageThreeDExports(request, reply);
     const buffers = new Set<ArrayBuffer>();
     if (reply.stl) buffers.add(reply.stl);
     if (reply.threeMf) buffers.add(reply.threeMf);

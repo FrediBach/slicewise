@@ -163,7 +163,7 @@ export function ThreeDSurfacePanel({
             : 'Updating slices…')}
       </p>
       {!project.sizeConfirmed && (
-        <p className="gradient-note">Confirm a physical size before preparing.</p>
+        <p className="gradient-note">Confirm a physical size before preparing or exporting.</p>
       )}
       <div className="three-d-prepare-actions">
         <Button
@@ -246,8 +246,16 @@ export function ThreeDSurfacePanel({
       </p>
       <p className="gradient-note">
         3MF includes millimeter units and the object name. STL must be imported as mm. Both export
-        the current checked single body. Printer settings, supports and toolpaths are not included.
+        the current mesh with its physical size and print placement. Printer settings, supports and
+        toolpaths are not included.
       </p>
+      {state.preparation?.status !== 'accepted' && (
+        <p className="gradient-note">
+          Export uses the untreated source, including Object transforms. Geometry audits have not
+          been applied.
+        </p>
+      )}
+      {state.stlError && <p role="status">STL unavailable: {state.stlError}</p>}
       {state.threeMfError && <p role="status">3MF unavailable: {state.threeMfError}</p>}
       <div className="three-d-prepare-actions">
         <Button

@@ -4222,7 +4222,7 @@ if (typeof document !== 'undefined') {
     if (!threeDMode) return;
     const bytes = format === '3mf' ? threeDRuntime.exportThreeMf() : threeDRuntime.exportStl();
     if (!bytes) {
-      toast('Prepare a current single-body result before exporting.');
+      toast('Wait for a current exportable mesh and confirm its physical size.');
       return;
     }
     const anchor = document.createElement('a');

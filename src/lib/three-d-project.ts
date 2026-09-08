@@ -75,6 +75,9 @@ export interface ThreeDPreparation {
   cleanup?: import('./generated-solid-cleanup').SolidCleanup[];
 }
 export interface ThreeDReply {
+  /** Confirmed-size preview; no treatment or geometry audit has been applied. */
+  untreatedExport?: boolean;
+  stlError?: string;
   stl?: ArrayBuffer;
   threeMf?: ArrayBuffer;
   threeMfError?: string;
@@ -88,6 +91,7 @@ export interface ThreeDReply {
   error?: string;
 }
 export interface ThreeDUiState {
+  stlError?: string;
   exportAvailable?: boolean;
   threeMfAvailable?: boolean;
   threeMfError?: string;

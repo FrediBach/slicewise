@@ -1,3 +1,5 @@
+import { previewThreeD } from './three-d-preparation';
+import { packageThreeDExports } from './three-d-export';
 import { serializeThreeMf } from './three-mf';
 import { solidBox } from '../test/fixtures/solid';
 import { auditPrintTopology } from './print-validation';
@@ -150,4 +152,47 @@ it('keeps progress pending, cancels native work, restarts and invalidates accept
   expect(workers[1].terminated).toBe(true);
   expect(workers).toHaveLength(3);
   runtime.stop();
+});
+
+it('downloads detached untreated files and replaces them only with current preview replies', () => {
+  const worker = new WorkerStub();
+  const runtime = new ThreeDRuntime(
+    () => {},
+    () => worker as unknown as Worker,
+  );
+  const input = {
+    source: { id: 'box', version: 1, name: 'Box', mesh: solidBox(), imported: false, upY: false },
+    project: { ...createThreeDProject('box'), sizeConfirmed: true },
+    settings: { axis: 'up' as const, lines: 3 },
+  };
+  const respond = (request: ThreeDRequest) => {
+    const { reply } = previewThreeD(request);
+    packageThreeDExports(request, reply);
+    worker.reply(reply);
+    return reply;
+  };
+  runtime.request(input);
+  const first = worker.requests[0];
+  const reply = respond(first);
+  expect(runtime.state.preparation?.status).toBe('idle');
+  expect(runtime.state.exportAvailable).toBe(true);
+  expect(runtime.state.threeMfAvailable).toBe(true);
+  const stl = runtime.exportStl()!;
+  const model = runtime.exportThreeMf()!;
+  expect(stl).toEqual(reply.stl);
+  expect(model).toEqual(reply.threeMf);
+  new Uint8Array(stl).fill(0);
+  new Uint8Array(model).fill(0);
+  expect(runtime.exportStl()).toEqual(reply.stl);
+  expect(runtime.exportThreeMf()).toEqual(reply.threeMf);
+  runtime.request({ ...input, project: { ...input.project, longestMm: 120 } });
+  expect(runtime.exportStl()).toBeNull();
+  expect(runtime.exportThreeMf()).toBeNull();
+  worker.reply(reply);
+  expect(runtime.exportStl()).toBeNull();
+  respond(worker.requests.at(-1)!);
+  expect(new Uint8Array(runtime.exportStl()!)).not.toEqual(new Uint8Array(reply.stl!));
+  runtime.stop();
+  expect(runtime.exportStl()).toBeNull();
+  expect(runtime.exportThreeMf()).toBeNull();
 });

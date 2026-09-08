@@ -1,5 +1,5 @@
 import { serializeThreeMf } from './three-mf';
-import type { ThreeDReply } from './three-d-project';
+import type { ThreeDReply, ThreeDRequest } from './three-d-project';
 import { serializeBinaryStl } from './stl-export';
 
 const REQUIRED_CHECKS = [
@@ -16,12 +16,13 @@ export function hasExportableGeometry(reply: ThreeDReply) {
   return (
     !reply.error &&
     !!reply.artifact &&
-    reply.preparation?.status === 'accepted' &&
-    reply.preparation.bodyCount === 1 &&
-    REQUIRED_CHECKS.every((check) => reply.preparation?.checks?.[check] === 'passed')
+    ((reply.untreatedExport === true && !reply.preparation) ||
+      (reply.preparation?.status === 'accepted' &&
+        reply.preparation.bodyCount === 1 &&
+        REQUIRED_CHECKS.every((check) => reply.preparation?.checks?.[check] === 'passed')))
   );
 }
-/** Called in the worker after the exact placed artifact has completed its audits. */
+/** Serializes the exact placed source or an audited treatment result. */
 export function prepareStlExport(reply: ThreeDReply): ArrayBuffer | undefined {
   return hasExportableGeometry(reply) ? serializeBinaryStl(reply.artifact!) : undefined;
 }
@@ -40,4 +41,19 @@ export function prepareThreeMfExport(reply: ThreeDReply, name: string): ArrayBuf
 }
 export function threeDModelFilename(name: string) {
   return threeDStlFilename(name).replace(/\.stl$/, '.model.3mf');
+}
+
+/** Package each format independently, retaining the preview if serialization fails. */
+export function packageThreeDExports(request: ThreeDRequest, reply: ThreeDReply): void {
+  reply.untreatedExport = request.purpose !== 'prepare' && request.project.sizeConfirmed;
+  try {
+    reply.stl = prepareStlExport(reply);
+  } catch (error) {
+    reply.stlError = error instanceof Error ? error.message : String(error);
+  }
+  try {
+    reply.threeMf = prepareThreeMfExport(reply, request.source.name);
+  } catch (error) {
+    reply.threeMfError = error instanceof Error ? error.message : String(error);
+  }
 }

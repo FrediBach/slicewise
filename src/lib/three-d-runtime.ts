@@ -85,16 +85,15 @@ export class ThreeDRuntime {
         }
         this.#busy = false;
         if (reply.id === this.#id && reply.sourceVersion === this.#sourceVersion) {
-          this.#stl =
-            this.#preparing && reply.stl && hasExportableGeometry(reply) ? reply.stl : null;
-          this.#threeMf =
-            this.#preparing && reply.threeMf && hasExportableGeometry(reply) ? reply.threeMf : null;
+          this.#stl = reply.stl && hasExportableGeometry(reply) ? reply.stl : null;
+          this.#threeMf = reply.threeMf && hasExportableGeometry(reply) ? reply.threeMf : null;
           this.#preparing = false;
           this.state = {
             ...this.state,
             exportAvailable: !!this.#stl,
             threeMfAvailable: !!this.#threeMf,
             threeMfError: reply.threeMfError,
+            stlError: reply.stlError,
             status: reply.artifact || this.state.sourceArtifact ? 'ready' : 'error',
             artifact: reply.artifact ?? this.state.sourceArtifact ?? null,
             sourceArtifact:
@@ -104,7 +103,7 @@ export class ThreeDRuntime {
               reply.preparation ??
               (reply.error
                 ? { status: 'rejected', message: reply.error }
-                : { status: 'idle', message: 'Untreated source · choose a treatment and prepare' }),
+                : { status: 'idle', message: 'Untreated source · no geometry audits applied' }),
             message:
               reply.error ??
               (reply.preparation?.status === 'accepted'
@@ -129,6 +128,7 @@ export class ThreeDRuntime {
           exportAvailable: false,
           threeMfAvailable: false,
           threeMfError: undefined,
+          stlError: undefined,
           status: this.state.sourceArtifact ? 'ready' : 'error',
           artifact: this.state.sourceArtifact ?? null,
           preparation: { status: 'rejected', message: 'Worker stopped. Prepare again to retry.' },
@@ -180,22 +180,19 @@ export class ThreeDRuntime {
       exportAvailable: false,
       threeMfAvailable: false,
       threeMfError: undefined,
+      stlError: undefined,
       message: 'Untreated source · preparation cancelled',
       preparation: { status: 'cancelled', message: 'Cancelled. You can prepare again.' },
     };
     this.publish(this.state);
   }
   exportStl(): ArrayBuffer | null {
-    return this.state.active &&
-      this.state.status === 'ready' &&
-      this.state.preparation?.status === 'accepted'
+    return this.state.active && this.state.status === 'ready'
       ? (this.#stl?.slice(0) ?? null)
       : null;
   }
   exportThreeMf(): ArrayBuffer | null {
-    return this.state.active &&
-      this.state.status === 'ready' &&
-      this.state.preparation?.status === 'accepted'
+    return this.state.active && this.state.status === 'ready'
       ? (this.#threeMf?.slice(0) ?? null)
       : null;
   }
