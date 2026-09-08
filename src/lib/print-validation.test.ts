@@ -5,7 +5,7 @@ import {
   PrintTopologyError,
   PRINT_TOPOLOGY_LIMITS,
 } from './print-validation';
-import { solidBox } from '../test/fixtures/solid';
+import { foldedOctahedron, solidBox } from '../test/fixtures/solid';
 import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
 function reversed(mesh: TopologyMesh) {
@@ -37,7 +37,7 @@ describe('independent print topology audit', () => {
       vertexLinks: 'passed',
       signedVolume: 'passed',
       nonAdjacentIntersections: 'passed',
-      selfIntersections: 'not-run',
+      selfIntersections: 'passed',
       shellContainment: 'not-run',
       manufacturing: 'not-run',
     });
@@ -133,9 +133,9 @@ describe('independent print topology audit', () => {
     const report = auditPrintTopology(combine(box, overlapping));
     expect(report.status).toBe('invalid');
     expect(report.checks.nonAdjacentIntersections).toBe('failed');
-    expect(report.issues.some((issue) => issue.code === 'non-adjacent-contact')).toBe(true);
+    expect(report.issues.some((issue) => issue.code === 'surface-contact')).toBe(true);
     expect(report.signedVolumeMm3).toBe(120_000);
-    expect(report.checks.selfIntersections).toBe('not-run');
+    expect(report.checks.selfIntersections).toBe('failed');
     const misplacedCavity = reversed({
       V: Float64Array.from(box.V, (v, i) => v / 2 + (i % 3 === 0 ? 100 : 0)),
       T: box.T,
@@ -143,6 +143,20 @@ describe('independent print topology audit', () => {
     const misplaced = auditPrintTopology(combine(box, misplacedCavity));
     expect(misplaced.checks.shellContainment).toBe('not-run');
     expect([...misplaced.shellVolumesMm3]).toEqual([60_000, -7_500]);
+  });
+
+  it('rejects folded adjacent faces despite closed manifold topology and positive volume', () => {
+    const mesh = foldedOctahedron(),
+      original = structuredClone(mesh);
+    const report = auditPrintTopology(mesh);
+    for (const check of ['buffers', 'faces', 'edges', 'vertexLinks', 'signedVolume'] as const)
+      expect(report.checks[check]).toBe('passed');
+    expect(report.signedVolumeMm3).toBeCloseTo(2 / 3, 10);
+    expect(report.status).toBe('invalid');
+    expect(report.checks.selfIntersections).toBe('failed');
+    expect(report.intersections?.adjacentPairCount).toBeGreaterThan(0);
+    expect(report.checks.shellContainment).toBe('not-run');
+    expect(mesh).toEqual(original);
   });
 
   it('measures translated geometry stably and audits current buffers without stale cache reuse', () => {

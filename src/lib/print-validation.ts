@@ -1,9 +1,9 @@
-import { auditNonAdjacentIntersections, type PrintIntersectionReport } from './print-intersections';
+import { auditSurfaceIntersections, type PrintIntersectionReport } from './print-intersections';
 import { getMeshTopology, type TopologyMesh } from './mesh-topology';
 
 export type PrintTopologyIssueCode =
   | 'budget'
-  | 'non-adjacent-contact'
+  | 'surface-contact'
   | 'intersection-budget'
   | 'invalid-buffer'
   | 'non-finite-vertex'
@@ -43,7 +43,7 @@ export type PrintTopologyReport = {
   status: 'invalid' | 'topology-checked';
   checks: Record<Check, CheckState>;
   issues: PrintTopologyIssue[];
-  nonAdjacentIntersections: PrintIntersectionReport | null;
+  intersections: PrintIntersectionReport | null;
   signedVolumeMm3: number | null;
   /** Signed boundary shell volumes, not physical body volumes. Cavities stay negative. */
   shellVolumesMm3: Float64Array;
@@ -57,8 +57,8 @@ export const PRINT_TOPOLOGY_LIMITS = {
 /**
  * Deterministic, read-only checks on the exact indexed artifact, independent of
  * the Boolean kernel. No welding, winding repair or face removal is performed.
- * Non-adjacent contacts are checked conservatively. Adjacent-face overlaps and
- * shell nesting remain explicitly unperformed checks.
+ * Surface contacts are checked conservatively, including adjacent-face overlaps.
+ * Shell nesting remains explicitly unperformed.
  */
 export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
   const { V, T } = mesh;
@@ -110,7 +110,7 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
       vertices: Uint32Array.from(issue.vertices),
       triangles: Uint32Array.from(issue.triangles),
     })),
-    nonAdjacentIntersections: intersections,
+    intersections,
     signedVolumeMm3,
     shellVolumesMm3,
   });
@@ -264,15 +264,12 @@ export function auditPrintTopology(mesh: TopologyMesh): PrintTopologyReport {
     add('non-positive-volume');
   checks.signedVolume = issues.has('non-positive-volume') ? 'failed' : 'passed';
   if (checks.signedVolume === 'passed') {
-    intersections = auditNonAdjacentIntersections(mesh);
-    checks.nonAdjacentIntersections = intersections.status === 'passed' ? 'passed' : 'failed';
+    intersections = auditSurfaceIntersections(mesh);
+    checks.selfIntersections = intersections.status === 'passed' ? 'passed' : 'failed';
+    checks.nonAdjacentIntersections =
+      intersections.complete && !intersections.nonAdjacentPairCount ? 'passed' : 'failed';
     if (intersections.pairCount)
-      add(
-        'non-adjacent-contact',
-        [],
-        Array.from(intersections.trianglePairs),
-        intersections.pairCount,
-      );
+      add('surface-contact', [], Array.from(intersections.trianglePairs), intersections.pairCount);
     if (!intersections.complete) add('intersection-budget');
   }
   return finish(total, shells);

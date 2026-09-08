@@ -5,6 +5,7 @@ import { createRoundedTreatmentRecipe, selectSliceIndices } from './slice-treatm
 import { extractPlanarSlices } from './slice-geometry';
 import { solidBox } from '../test/fixtures/solid';
 import { getMeshTopology } from './mesh-topology';
+import { PrintTopologyError } from './print-validation';
 import { createFeasibilityFixtures, createContourFeasibilityFixtures } from './three-d-feasibility';
 
 let module: ManifoldToplevel;
@@ -43,6 +44,36 @@ function positiveSurfaceX(mesh: SolidMesh, y: number, z: number) {
 }
 
 describe('slice selection and rounded capsule recipes', () => {
+  it('accepts contour torus Inset but rejects four adjacent overlaps in its Float32 Emboss result', () => {
+    const fixture = createContourFeasibilityFixtures(module).find((f) => f.name === 'torus')!;
+    const original = structuredClone(fixture.base);
+    const kernel = createSolidKernel(module);
+    const tools = kernel.createRoundedTools(
+      createRoundedTreatmentRecipe(
+        extractPlanarSlices(fixture.base, fixture.field, 0),
+        { mode: 'all' },
+        0.6,
+      ),
+    );
+    expect(kernel.run(fixture.base, tools, 'inset').topology.checks.selfIntersections).toBe(
+      'passed',
+    );
+    let failure: unknown;
+    try {
+      kernel.run(fixture.base, tools, 'emboss');
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(PrintTopologyError);
+    const report = (failure as PrintTopologyError).report;
+    expect(report.checks.nonAdjacentIntersections).toBe('passed');
+    expect(report.checks.selfIntersections).toBe('failed');
+    expect(report.intersections?.adjacentPairCount).toBe(4);
+    expect(report.intersections?.complete).toBe(true);
+    expect(kernel.liveHandles).toBe(0);
+    expect(fixture.base).toEqual(original);
+  });
+
   it('selects ordered levels with clamped/empty ranges and wrapped pattern offsets', () => {
     expect(selectSliceIndices(4, { mode: 'all' })).toEqual([0, 1, 2, 3]);
     expect(selectSliceIndices(4, { mode: 'range', first: -10, last: 2 })).toEqual([0, 1, 2]);

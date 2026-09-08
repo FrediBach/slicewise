@@ -4,6 +4,7 @@ import { createSolidKernel, SOLID_KERNEL_LIMITS, type SolidMesh } from './solid-
 import { createFeasibilityFixtures } from './three-d-feasibility';
 import { getMeshTopology } from './mesh-topology';
 import { PrintTopologyError } from './print-validation';
+import { foldedOctahedron } from '../test/fixtures/solid';
 
 let module: ManifoldToplevel;
 let fixtures: ReturnType<typeof createFeasibilityFixtures>;
@@ -230,13 +231,35 @@ describe('phase-0 solid kernel', () => {
     const original = structuredClone(overlap);
     const kernel = createSolidKernel(module);
     for (const operation of ['off', 'inset', 'emboss'] as const) {
-      expect(() => kernel.run(overlap, [], operation)).toThrow(/Source.*non-adjacent-contact/);
+      expect(() => kernel.run(overlap, [], operation)).toThrow(/Source.*surface-contact/);
       expect(kernel.liveHandles).toBe(0);
     }
-    expect(() => kernel.run(base, [overlap], 'emboss')).toThrow(/Tool 1.*non-adjacent-contact/);
+    expect(() => kernel.run(base, [overlap], 'emboss')).toThrow(/Tool 1.*surface-contact/);
     expect(kernel.liveHandles).toBe(0);
     expect(overlap).toEqual(original);
     expect(kernel.run(base, [], 'off').topology.checks.nonAdjacentIntersections).toBe('passed');
+  });
+
+  it('blocks a folded manifold source or tool while retaining adjacent-pair diagnostics', () => {
+    const mesh = foldedOctahedron(),
+      original = structuredClone(mesh);
+    const kernel = createSolidKernel(module);
+    for (const operation of ['off', 'inset', 'emboss'] as const) {
+      let failure: unknown;
+      try {
+        kernel.run(mesh, [], operation);
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(PrintTopologyError);
+      expect(
+        (failure as PrintTopologyError).report.intersections?.adjacentPairCount,
+      ).toBeGreaterThan(0);
+      expect(kernel.liveHandles).toBe(0);
+    }
+    expect(() => kernel.run(fixtures[1].base, [mesh], 'inset')).toThrow(/Tool 1.*surface-contact/);
+    expect(kernel.liveHandles).toBe(0);
+    expect(mesh).toEqual(original);
   });
 
   it('returns explicit unperformed checks and warnings on exact neutral buffers', () => {
@@ -246,7 +269,7 @@ describe('phase-0 solid kernel', () => {
     expect(result.mesh).toBe(source);
     expect(result.topology.status).toBe('topology-checked');
     expect(result.topology.checks.shellContainment).toBe('not-run');
-    expect(result.topology.checks.selfIntersections).toBe('not-run');
+    expect(result.topology.checks.selfIntersections).toBe('passed');
     expect(result.topology.issues[0].code).toBe('unused-vertex');
     expect(result.topology.issues[0].severity).toBe('warning');
     const treated = createSolidKernel(module).run(source, fixtures[1].tools, 'emboss');

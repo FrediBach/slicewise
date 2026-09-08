@@ -11,10 +11,10 @@ function topologySummary(report: PrintTopologyReport) {
   return {
     status: report.status,
     checks: report.checks,
-    nonAdjacentIntersections: report.nonAdjacentIntersections
+    intersections: report.intersections
       ? {
-          ...report.nonAdjacentIntersections,
-          trianglePairs: Array.from(report.nonAdjacentIntersections.trianglePairs),
+          ...report.intersections,
+          trianglePairs: Array.from(report.intersections.trianglePairs),
         }
       : null,
     signedVolumeMm3: report.signedVolumeMm3,
@@ -195,28 +195,38 @@ function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
         const toolConstructionMs = performance.now() - start - extractionMs;
         for (const operation of ['inset', 'emboss'] as const) {
           const operationStart = performance.now();
-          const result = kernel.run(fixture.base, tools, operation);
-          if (result.measurements.boundaryComponents !== 1)
-            throw new Error(
-              `${operation} produced unexpected boundary shells on this single-shell fixture.`,
-            );
-          rows.push({
-            repetition,
-            fixture: fixture.name,
-            operation,
-            status: result.topology.status,
-            topology: topologySummary(result.topology),
-            inputWarnings: inputWarnings(result.inputTopology),
-            extractionMs,
-            toolConstructionMs,
-            booleanMs: performance.now() - operationStart,
-            sourceTriangles: fixture.base.T.length / 3,
-            contourRuns: recipe.runs.length,
-            contourVertices: recipe.runs.reduce((sum, run) => sum + run.length / 3, 0),
-            toolTriangles: tools.reduce((sum, tool) => sum + tool.T.length / 3, 0),
-            ...result.measurements,
-            liveHandles: kernel.liveHandles,
-          });
+          try {
+            const result = kernel.run(fixture.base, tools, operation);
+            if (result.measurements.boundaryComponents !== 1)
+              throw new Error(
+                `${operation} produced unexpected boundary shells on this single-shell fixture.`,
+              );
+            rows.push({
+              repetition,
+              fixture: fixture.name,
+              operation,
+              status: result.topology.status,
+              topology: topologySummary(result.topology),
+              inputWarnings: inputWarnings(result.inputTopology),
+              extractionMs,
+              toolConstructionMs,
+              booleanMs: performance.now() - operationStart,
+              sourceTriangles: fixture.base.T.length / 3,
+              contourRuns: recipe.runs.length,
+              contourVertices: recipe.runs.reduce((sum, run) => sum + run.length / 3, 0),
+              toolTriangles: tools.reduce((sum, tool) => sum + tool.T.length / 3, 0),
+              ...result.measurements,
+              liveHandles: kernel.liveHandles,
+            });
+          } catch (error) {
+            rows.push({
+              repetition,
+              fixture: fixture.name,
+              operation,
+              ...failureSummary(error),
+              liveHandles: kernel.liveHandles,
+            });
+          }
         }
       } catch (error) {
         rows.push({

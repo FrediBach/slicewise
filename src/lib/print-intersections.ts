@@ -10,6 +10,8 @@ export type PrintIntersectionReport = {
   /** Contacts inside the declared numerical tolerance are conservatively rejected. */
   toleranceMm: number;
   pairCount: number;
+  adjacentPairCount: number;
+  nonAdjacentPairCount: number;
   /** Flat pairs of triangle IDs, bounded independently of the full count. */
   trianglePairs: Uint32Array;
   /** False means work stopped early; pairCount is then only a lower bound. */
@@ -62,13 +64,61 @@ function mayContact(a: Triangle, b: Triangle, tolerance: number) {
   return true;
 }
 
+const dot = (a: Vec, b: Vec) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const unit = (v: Vec): Vec => {
+  const length = Math.hypot(...v);
+  return v.map((x) => x / length) as Vec;
+};
+
+/** Shared IDs occur first in both triangles. For a shared vertex, intersect the
+ * two triangle direction cones at that vertex. Nonparallel planes can share only
+ * their intersection line; coplanar cones overlap iff an edge ray lies in the
+ * other cone. A shared edge permits different planes or opposite coplanar sides.
+ * Near-degenerate/near-coplanar uncertainty is rejected within the stated tolerance.
+ */
+function adjacentMayOverlap(a: Triangle, b: Triangle, shared: number, tolerance: number) {
+  if (shared === 3) return true;
+  const ar = [subtract(a[1], a[0]), subtract(a[2], a[0])];
+  const br = [subtract(b[1], b[0]), subtract(b[2], b[0])];
+  const minimumLength = Math.min(
+    ...ar.map((r) => Math.hypot(...r)),
+    ...br.map((r) => Math.hypot(...r)),
+  );
+  if (minimumLength <= tolerance) return true;
+  const angularTolerance = Math.max(64 * Number.EPSILON, tolerance / minimumLength);
+  const au = ar.map(unit),
+    bu = br.map(unit);
+  const ac = cross(au[0], au[1]),
+    bc = cross(bu[0], bu[1]);
+  if (Math.min(Math.hypot(...ac), Math.hypot(...bc)) <= angularTolerance) return true;
+  const an = unit(ac),
+    bn = unit(bc);
+  if (shared === 2) {
+    if (Math.abs(dot(br[1], an)) > tolerance || Math.abs(dot(ar[1], bn)) > tolerance) return false;
+    return dot(an, bn) >= 0;
+  }
+  const inCone = (ray: Vec, rays: Vec[], normal: Vec) =>
+    dot(cross(rays[0], ray), normal) >= -angularTolerance &&
+    dot(cross(ray, rays[1]), normal) >= -angularTolerance;
+  const line = cross(an, bn);
+  if (Math.hypot(...line) > angularTolerance) {
+    const direction = unit(line),
+      opposite = direction.map((x) => -x) as Vec;
+    return (
+      (inCone(direction, au, an) && inCone(direction, bu, bn)) ||
+      (inCone(opposite, au, an) && inCone(opposite, bu, bn))
+    );
+  }
+  return au.some((ray) => inCone(ray, bu, bn)) || bu.some((ray) => inCone(ray, au, an));
+}
+
 /**
  * Requires finite, indexed, nondegenerate triangles (the topology auditor checks
- * those first). Pairs sharing ANY indexed vertex are excluded, so this does not
- * certify all self-intersections or shell nesting. No input or geometry cache is
+ * those first). Shared vertices/edges are allowed only when adjacent faces do
+ * not overlap beyond them. Shell nesting is not tested. No input or cache is
  * mutated. A deterministic median BVH bounds work on spatially separated faces.
  */
-export function auditNonAdjacentIntersections(
+export function auditSurfaceIntersections(
   mesh: TopologyMesh,
   workLimit: number = PRINT_INTERSECTION_LIMITS.work,
 ): PrintIntersectionReport {
@@ -82,6 +132,8 @@ export function auditNonAdjacentIntersections(
   const count = T.length / 3;
   const pairs: number[] = [];
   let pairCount = 0,
+    adjacentPairCount = 0,
+    nonAdjacentPairCount = 0,
     work = 0;
   let toleranceMm = 1e-10,
     magnitude = 0;
@@ -89,6 +141,8 @@ export function auditNonAdjacentIntersections(
     status: !complete ? 'budget-exceeded' : pairCount ? 'failed' : 'passed',
     toleranceMm,
     pairCount,
+    adjacentPairCount,
+    nonAdjacentPairCount,
     trianglePairs: Uint32Array.from(pairs),
     complete,
     work,
@@ -143,9 +197,10 @@ export function auditNonAdjacentIntersections(
         return false;
     return true;
   };
-  const triangle = (f: number): Triangle =>
-    [0, 1, 2].map((corner) => {
-      const v = T[f * 3 + corner] * 3;
+  const ids = (f: number) => [T[f * 3], T[f * 3 + 1], T[f * 3 + 2]];
+  const triangle = (vertices: number[]): Triangle =>
+    vertices.map((id) => {
+      const v = id * 3;
       return [V[v], V[v + 1], V[v + 2]];
     }) as Triangle;
   for (let f = 0; f < count; f++) {
@@ -164,10 +219,23 @@ export function auditNonAdjacentIntersections(
         work++;
         const g = order[i];
         if (g <= f || !overlaps(f, bounds, g * 6)) continue;
-        let adjacent = false;
-        for (let a = 0; a < 3; a++)
-          for (let b = 0; b < 3; b++) if (T[f * 3 + a] === T[g * 3 + b]) adjacent = true;
-        if (adjacent || !mayContact(triangle(f), triangle(g), toleranceMm)) continue;
+        const fids = ids(f),
+          gids = ids(g);
+        // Each list has at most three entries; avoid allocating lookup sets per pair.
+        const hasVertex = (vertices: number[], id: number) =>
+          vertices[0] === id || vertices[1] === id || vertices[2] === id;
+        const shared = fids.filter((id) => hasVertex(gids, id));
+        const contact = shared.length
+          ? adjacentMayOverlap(
+              triangle([...shared, ...fids.filter((id) => !hasVertex(shared, id))]),
+              triangle([...shared, ...gids.filter((id) => !hasVertex(shared, id))]),
+              shared.length,
+              toleranceMm,
+            )
+          : mayContact(triangle(fids), triangle(gids), toleranceMm);
+        if (!contact) continue;
+        if (shared.length) adjacentPairCount++;
+        else nonAdjacentPairCount++;
         pairCount++;
         if (pairs.length < PRINT_INTERSECTION_LIMITS.samples * 2) pairs.push(f, g);
       }
