@@ -35,6 +35,10 @@ it('keeps signed numeric drafts editable, restores invalid drafts, and follows e
   fireEvent.change(rotation, { target: { value: '-999' } });
   fireEvent.blur(rotation);
   expect(rotation).toHaveValue(-45);
+  fireEvent.change(screen.getByRole('combobox', { name: 'Result vertex cleanup' }), {
+    target: { value: '0' },
+  });
+  expect(commands.mock.lastCall![0].detail.resultWeldToleranceMm).toBe(0);
   project.rotation = [0, 0, 0];
   publish();
   expect(rotation).toHaveValue(0);
@@ -100,16 +104,25 @@ it.each(['accepted', 'rejected'] as const)(
             status,
             message: 'Audit finished',
             cleanup: [
-              { stage: 'Result', mergedVertices: 8, removedFaces: 16, removedUnusedVertices: 0 },
+              {
+                stage: 'Result',
+                mergedVertices: 8,
+                removedFaces: 16,
+                removedUnusedVertices: 0,
+                toleranceMm: 0.00001,
+                maximumDisplacementMm: 0.000003814697265625,
+              },
             ],
           },
         }}
       />,
     );
     expect(screen.getByText('Generated mesh cleanup')).toBeInTheDocument();
-    expect(screen.getByText('Exact cleanup only; no coordinate movement.')).toBeInTheDocument();
     expect(
-      screen.getByText(/Result: 8 coincident vertices merged, 16 zero-area faces removed/),
+      screen.getByText('Generated geometry only. Vertex movement is reported for each stage.'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Result: 8 vertices merged, 16 zero-area faces removed/),
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '3D export unavailable' })).toBeDisabled();
   },

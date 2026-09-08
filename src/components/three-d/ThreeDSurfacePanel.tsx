@@ -150,6 +150,21 @@ export function ThreeDSurfacePanel({
           <option value="0.05">Allow 0.05 mm path deviation</option>
         </select>
       </label>
+      <label className="three-d-field">
+        Result vertex cleanup
+        <select
+          aria-label="Result vertex cleanup"
+          value={project.resultWeldToleranceMm ?? 0}
+          onChange={(e) => edit({ resultWeldToleranceMm: Number(e.target.value) })}
+        >
+          <option value="0.00001">Resolve rounding within 0.00001 mm</option>
+          <option value="0">Exact coordinates only</option>
+        </select>
+      </label>
+      <p className="gradient-note">
+        Cleanup applies to generated result vertices, never the source. Movement is bounded by the
+        selected tolerance and reported below; the result is fully checked afterward.
+      </p>
       <p className="gradient-note">
         Profile tolerance: 0.05 mm. Construction allows {ROUNDED_TOOL_LIMITS.runs} tool loops,{' '}
         {ROUNDED_TOOL_LIMITS.vertices.toLocaleString('en-US')} path vertices and{' '}
@@ -188,12 +203,14 @@ export function ThreeDSurfacePanel({
       {!!state.preparation?.cleanup?.length && (
         <details className="three-d-diagnostics">
           <summary>Generated mesh cleanup</summary>
-          <p>Exact cleanup only; no coordinate movement.</p>
+          <p>Generated geometry only. Vertex movement is reported for each stage.</p>
           <ul className="three-d-diagnostic-list">
             {state.preparation.cleanup.map((item) => (
               <li key={item.stage}>
-                {item.stage}: {item.mergedVertices} coincident vertices merged, {item.removedFaces}{' '}
-                zero-area faces removed, {item.removedUnusedVertices} unused vertices removed.
+                {item.stage}: {item.mergedVertices} vertices merged, {item.removedFaces} zero-area
+                faces removed, {item.removedUnusedVertices} unused vertices removed. Maximum vertex
+                movement: {(item.maximumDisplacementMm ?? 0).toFixed(8)} mm (limit{' '}
+                {(item.toleranceMm ?? 0).toFixed(8)} mm).
               </li>
             ))}
           </ul>

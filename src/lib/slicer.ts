@@ -4176,6 +4176,8 @@ if (typeof document !== 'undefined') {
       next.treatment = patch.treatment!;
     if (Number.isFinite(patch.radiusMm) && patch.radiusMm! >= 0 && patch.radiusMm! <= 10)
       next.radiusMm = patch.radiusMm!;
+    if ([0, 0.00001].includes(patch.resultWeldToleranceMm!))
+      next.resultWeldToleranceMm = patch.resultWeldToleranceMm!;
     if ([0, 0.05].includes(patch.pathToleranceMm!)) next.pathToleranceMm = patch.pathToleranceMm!;
     if (patch.selection) {
       try {

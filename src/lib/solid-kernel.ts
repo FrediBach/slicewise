@@ -43,9 +43,14 @@ function checkMesh(mesh: SolidMesh) {
 export function createSolidKernel(
   module: ManifoldToplevel,
   onCleanup: (report: SolidCleanup) => void = () => {},
+  resultWeldToleranceMm = 0,
 ) {
   const clean = (mesh: SolidMesh, stage: string) => {
-    const cleaned = cleanGeneratedSolid(mesh, stage);
+    const cleaned = cleanGeneratedSolid(
+      mesh,
+      stage,
+      stage === 'Result' ? resultWeldToleranceMm : 0,
+    );
     if (
       cleaned.report.mergedVertices ||
       cleaned.report.removedFaces ||

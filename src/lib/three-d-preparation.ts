@@ -50,7 +50,11 @@ export function prepareThreeD(
 ): ThreeDReply {
   const { base, reply, geometry } = previewThreeD(request, cache);
   const cleanup: SolidCleanup[] = [];
-  const kernel = createSolidKernel(module, (report) => cleanup.push(report));
+  const kernel = createSolidKernel(
+    module,
+    (report) => cleanup.push(report),
+    request.project.resultWeldToleranceMm ?? 0,
+  );
   let approximation: ThreeDPreparation['approximation'] = null;
   try {
     if (!request.project.sizeConfirmed)

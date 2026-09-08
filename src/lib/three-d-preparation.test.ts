@@ -205,11 +205,16 @@ describe('worker geometry cache', () => {
   });
 });
 
-it.each(['inset', 'emboss'] as const)(
-  'prepares eight exact cube slices with disclosed cleanup and verified %s geometry',
-  (treatment) => {
+it.each(
+  [80, 100].flatMap((longestMm) =>
+    (['inset', 'emboss'] as const).map((treatment) => ({ longestMm, treatment })),
+  ),
+)(
+  'prepares eight exact cube slices at $longestMm mm with verified $treatment geometry',
+  ({ longestMm, treatment }) => {
     const r = request();
     r.project.treatment = treatment;
+    r.project.longestMm = longestMm;
     r.source.mesh = weld(sphereDemo('cube'));
     r.project.pathToleranceMm = 0;
     r.settings.lines = 8;
@@ -223,8 +228,11 @@ it.each(['inset', 'emboss'] as const)(
       selfIntersections: 'passed',
     });
     expect(reply.preparation?.cleanup).toEqual(
-      expect.arrayContaining([expect.objectContaining({ stage: 'Result', removedFaces: 16 })]),
+      expect.arrayContaining([expect.objectContaining({ stage: 'Result', toleranceMm: 0.00001 })]),
     );
+    for (const report of reply.preparation!.cleanup!) {
+      expect(report.maximumDisplacementMm).toBeLessThanOrEqual(report.toleranceMm);
+    }
     const sourceVolume = auditPrintTopology(reply.sourceArtifact!).signedVolumeMm3!;
     expect(reply.preparation!.volumeMm3).toBeGreaterThan(0);
     if (treatment === 'inset') expect(reply.preparation!.volumeMm3).toBeLessThan(sourceVolume);
@@ -233,3 +241,22 @@ it.each(['inset', 'emboss'] as const)(
   },
   15000,
 );
+
+it('preserves exact-only cleanup and rejection for the 100 mm Emboss rounding regression', () => {
+  const r = request();
+  r.source.mesh = weld(sphereDemo('cube'));
+  r.settings.lines = 8;
+  Object.assign(r.project, {
+    longestMm: 100,
+    treatment: 'emboss',
+    resultWeldToleranceMm: 0,
+    pathToleranceMm: 0,
+  });
+  const reply = prepareThreeD(r, module);
+  expect(reply.preparation?.status).toBe('rejected');
+  expect(reply.preparation?.issues).toContainEqual({ code: 'surface-contact', count: 16 });
+  expect(reply.preparation?.cleanup).toContainEqual(
+    expect.objectContaining({ toleranceMm: 0, maximumDisplacementMm: 0 }),
+  );
+  expect(reply.artifact).toBe(reply.sourceArtifact);
+}, 15000);

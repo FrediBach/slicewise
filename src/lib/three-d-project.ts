@@ -31,6 +31,7 @@ export interface ThreeDProject {
   treatment: SolidOperation;
   radiusMm: number;
   pathToleranceMm: number;
+  resultWeldToleranceMm: number;
   selection: SliceSelection;
   viewDirection: Triple;
 }
@@ -110,6 +111,7 @@ export function createThreeDProject(sourceId: string): ThreeDProject {
     treatment: 'off',
     radiusMm: 0.6,
     pathToleranceMm: 0,
+    resultWeldToleranceMm: 0.00001,
     selection: { mode: 'all' },
     viewDirection: [0, -1, 0],
   };
