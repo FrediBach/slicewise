@@ -231,6 +231,16 @@ The recipe's optional fifth argument is the path tolerance in millimeters; zero 
 
 Regressions measure circle deviation independently, preserve concave corners and original indices, check deterministic detached output, rigid transforms, collapse/input/work rejection, opt-in recipe behavior, and real-kernel box groove/rib dimensions after removing collinear contour subdivisions. The remaining scale blocker calls for a more efficient tool representation or a separately declared accuracy tradeoff; approximation at this tolerance alone does not resolve it.
 
+## Indexed planar miter-sweep trial
+
+`planar-sweep.ts` adds a separate experimental tool representation. It connects circular-profile rings into one indexed mesh per closed planar contour, with `2 × path vertices × profile segments` faces. Ring offsets intersect neighboring edge-offset lines, giving miter joins instead of capsule-union corners. The maximum miter multiplier is reported and capped at 2; reversing/acute corners and nonplanar paths are rejected. Planarity is checked within 1e-7 mm. Circular-profile sagitta is reported for straight segments, separately from corner extension. The exact Float32 tool buffer must pass the independent topology, contact and shell audits before use; small-loop foldovers and contacting tubes remain errors.
+
+`npm run bench:3d -- 1 scale-sweep` explicitly selects this representation with 0.05 mm path approximation, 0.6 mm radius and 16 profile segments. The 2,373 retained vertices produce 75,936 tool triangles across 24 closed, audited tools, fitting the existing 250k aggregate input triangle budget together with the 100,352-face source. No capsule limits are raised. Maximum miter multiplier is 1.00158110 and straight-segment profile deviation is 0.01152883 mm. These are path-plane frames, not independently controlled surface-normal width/depth; the representation is not enabled in production or substituted for the existing capsule trial.
+
+On one M3 Max / Node v25.5.0 run, source audit took 1,097.96 ms, extraction 361.21 ms and tool construction (including path approximation and tool audits) 733.40 ms. Inset and Emboss operation attempts took 4,184.82 and 4,209.44 ms. Both final outputs were rejected: Inset detected 57 contacts before exhausting five million audit work units; Emboss exhausted that budget without detecting a contact. Counts from incomplete audits are lower bounds, and contact classification is conservative rather than an exact-predicate proof. No accepted final artifact or ten-second target success is claimed. All adapter-owned handles returned to zero; process peak RSS was 815,936 KiB including Vite, JS and WASM.
+
+Tests cover deterministic closed tools, linear triangle count, measured circle volume and radius, miter extension, reversed/tilted paths, native box Inset/Emboss operations, and rejection of nonplanar, acute, intersecting and over-budget tools. The remaining questions are output-contact robustness, complete output auditing within limits, dimensional fidelity on deformed surfaces and eventual profile/join design.
+
 ## Reproduce
 
 ```bash
@@ -239,6 +249,7 @@ npm run bench:3d -- 20
 npm run bench:3d -- 5 contours
 npm run bench:3d -- 3 scale
 npm run bench:3d -- 1 scale-approximate
+npm run bench:3d -- 1 scale-sweep
 npm run build:3d
 npm run dev
 ```
@@ -255,4 +266,4 @@ The browser automation bridge was unavailable during both implementation session
 2. Extend the initial twisted/bent/cavity and degenerate-cut regressions to thin walls, close folds, intersecting tools, generated tunnel sources and representative rejected-source statistics.
 3. Extend thickness sampling with adaptive treatment-region coverage and extend per-body bed-contact screening with support/stability diagnostics, and expand shell/intersection numerical stress testing. Shell containment/orientation now has a bounded implementation. Adjacent and non-adjacent contacts now have a bounded conservative audit; exact/near-degenerate predicate robustness still needs broader stress testing. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output and the contour torus's Emboss overlaps through explicit, measured operations rather than silent repair.
 4. Verify browser cancellation/reinitialization, stale-job handling and source-buffer installation with realistic jobs. Measure peak WASM/JS/GPU memory and lower-memory devices. The internal page recreates its fixed fixtures; it is not the production source lifecycle.
-5. Resolve the target-scale rounded-tool recipe budget blocker, then benchmark complete preparation on representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).
+5. Resolve the capsule recipe budget blocker or establish an alternative sweep with accepted final outputs (the planar miter trial currently fails output contact/budget checks), then benchmark complete preparation on representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).

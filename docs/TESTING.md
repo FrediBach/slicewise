@@ -113,6 +113,7 @@ Coverage currently measures the focused core under active test:
 - `terrain-routes.ts`
 - `map-settings.ts`
 - `mesh.ts`
+- `planar-sweep.ts`
 - `contour-approximation.ts`
 - `print-thickness.ts`
 - `print-manufacturing.ts`
@@ -196,3 +197,5 @@ Origin-driven ray regressions check spherical and cylindrical source positions i
 The intersection suite also compares BVH traversal counts and sampled face pairs against exhaustive two-face contact queries across reordered groups, with exact and just-insufficient work-budget checks. The optimized traversal keeps all narrow predicates and rejection tolerances unchanged.
 
 `contour-approximation.test.ts` independently measures circular-path deviation, checks retained concave corners, detached deterministic buffers, rigid transforms, and input/collapse/work-budget rejection. Recipe integration verifies explicit opt-in, unchanged exact defaults, and real-kernel groove/rib dimensions after collinear subdivision removal. The scale-approximate feasibility test records the measured 0.05 mm reduction and retained recipe-budget rejection.
+
+`planar-sweep.test.ts` checks closed deterministic miter tubes, linear face counts, circular-path volume/radius, reported corner extension, reversed/tilted planes, native Inset/Emboss integration, and rejection of nonplanar, acute, self-contacting or over-budget inputs. The `scale-sweep` CLI benchmark separately records complete tool construction followed by current final-output rejection; it is not a passing performance gate.

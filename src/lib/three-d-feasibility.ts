@@ -1,3 +1,6 @@
+import { createPlanarSweep } from './planar-sweep';
+import { approximateClosedContour, CONTOUR_APPROXIMATION_LIMITS } from './contour-approximation';
+import type { PathApproximationSummary } from './slice-treatment';
 /** Internal Phase-0 fixtures, not the production contour/profile implementation. */
 import type { Manifold, ManifoldToplevel, Vec2 } from 'manifold-3d';
 import { createSolidKernel, type SolidMesh } from './solid-kernel';
@@ -189,11 +192,16 @@ export function createScaleFeasibilityFixtures(module: ManifoldToplevel) {
 export function runFeasibility(
   module: ManifoldToplevel,
   repeats = 1,
-  suite: 'analytic' | 'contours' | 'scale' | 'scale-approximate' = 'analytic',
+  suite: 'analytic' | 'contours' | 'scale' | 'scale-approximate' | 'scale-sweep' = 'analytic',
 ) {
   if (!Number.isInteger(repeats) || repeats < 1 || repeats > 20)
     throw new Error('Choose 1–20 feasibility repetitions.');
-  if (suite === 'contours' || suite === 'scale' || suite === 'scale-approximate')
+  if (
+    suite === 'contours' ||
+    suite === 'scale' ||
+    suite === 'scale-approximate' ||
+    suite === 'scale-sweep'
+  )
     return runContourFeasibility(module, repeats, suite);
   if (suite !== 'analytic') throw new Error('Unknown feasibility suite.');
   const kernel = createSolidKernel(module);
@@ -236,7 +244,7 @@ export function runFeasibility(
 function runContourFeasibility(
   module: ManifoldToplevel,
   repeats: number,
-  suite: 'contours' | 'scale' | 'scale-approximate',
+  suite: 'contours' | 'scale' | 'scale-approximate' | 'scale-sweep',
 ) {
   const kernel = createSolidKernel(module);
   const fixtures = suite.startsWith('scale')
@@ -246,7 +254,13 @@ function runContourFeasibility(
   for (let repetition = 0; repetition < repeats; repetition++) {
     for (const fixture of fixtures) {
       const start = performance.now();
-      const workload = { suite, field: fixture.field, radiusMm: 0.6 };
+      const workload = {
+        suite,
+        field: fixture.field,
+        radiusMm: 0.6,
+        toolRepresentation: suite === 'scale-sweep' ? 'planar-miter' : 'capsule-union',
+      };
+      let approximationSummary: PathApproximationSummary | null = null;
       let stage = 'source-audit';
       const progress: Record<string, number> = {
         sourceTriangles: fixture.base.T.length / 3,
@@ -273,15 +287,70 @@ function runContourFeasibility(
         );
         stage = 'recipe';
         const toolStart = performance.now();
-        const recipe = createRoundedTreatmentRecipe(
-          geometry,
-          { mode: 'all' },
-          0.6,
-          0.05,
-          suite === 'scale-approximate' ? 0.05 : 0,
-        );
-        stage = 'tool-construction';
-        const tools = kernel.createRoundedTools(recipe);
+        let recipe: { runs: Float64Array[]; approximation: PathApproximationSummary | null };
+        let tools: SolidMesh[];
+        if (suite === 'scale-sweep') {
+          const approximation: PathApproximationSummary = {
+            toleranceMm: 0.05,
+            maximumDeviationMm: 0,
+            inputVertices: 0,
+            outputVertices: 0,
+            work: 0,
+          };
+          recipe = { runs: [], approximation };
+          for (const slice of geometry.slices)
+            for (let run = 0; run < slice.closed.length; run++) {
+              if (!slice.closed[run])
+                throw new Error('Planar sweep trial requires closed contours.');
+              const start = slice.runOffsets[run],
+                end = slice.runOffsets[run + 1] - 1;
+              const points = new Float64Array((end - start) * 3);
+              for (let i = start; i < end; i++) {
+                const id = slice.runPoints[i];
+                points.set(slice.points.subarray(id * 3, id * 3 + 3), (i - start) * 3);
+              }
+              const result = approximateClosedContour(
+                points,
+                0.05,
+                CONTOUR_APPROXIMATION_LIMITS.work - approximation.work,
+              );
+              approximation.inputVertices += points.length / 3;
+              approximation.outputVertices += result.points.length / 3;
+              approximation.maximumDeviationMm = Math.max(
+                approximation.maximumDeviationMm,
+                result.maximumDeviationMm,
+              );
+              approximation.work += result.work;
+              recipe.runs.push(result.points);
+            }
+          if (recipe.runs.length > 64 || approximation.outputVertices * 32 > 250_000)
+            throw new Error('Planar sweep trial budget exceeded.');
+          stage = 'tool-construction';
+          tools = [];
+          progress.maximumMiterMultiplier = 1;
+          for (const run of recipe.runs) {
+            const sweep = createPlanarSweep(run, geometry.field.normal, 0.6, 16);
+            tools.push(sweep.mesh);
+            progress.maximumMiterMultiplier = Math.max(
+              progress.maximumMiterMultiplier,
+              sweep.maximumMiterMultiplier,
+            );
+            progress.straightProfileDeviationMm = sweep.straightProfileDeviationMm;
+          }
+        } else {
+          const rounded = createRoundedTreatmentRecipe(
+            geometry,
+            { mode: 'all' },
+            0.6,
+            0.05,
+            suite === 'scale-approximate' ? 0.05 : 0,
+          );
+          recipe = rounded;
+          stage = 'tool-construction';
+          tools = kernel.createRoundedTools(rounded);
+        }
+        approximationSummary = recipe.approximation;
+        progress.toolTriangles = tools.reduce((sum, tool) => sum + tool.T.length / 3, 0);
         const toolConstructionMs = performance.now() - toolStart;
         progress.toolConstructionMs = toolConstructionMs;
         for (const operation of ['inset', 'emboss'] as const) {
@@ -320,6 +389,7 @@ function runContourFeasibility(
               operation,
               ...workload,
               ...progress,
+              approximation: approximationSummary,
               failedStage: 'boolean-and-output-audit',
               elapsedMs: performance.now() - operationStart,
               ...failureSummary(error),
@@ -335,6 +405,7 @@ function runContourFeasibility(
           ...progress,
           failedStage: stage,
           elapsedMs: performance.now() - start,
+          approximation: approximationSummary,
           ...failureSummary(error),
           liveHandles: kernel.liveHandles,
         });

@@ -14,7 +14,7 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: [
         'src/lib/animation-frame-cache.ts',
-        'src/lib/{solid-kernel,slice-geometry,slice-treatment,contour-approximation,print-validation,print-intersections,print-shells,print-manufacturing,print-thickness}.ts',
+        'src/lib/{solid-kernel,slice-geometry,slice-treatment,contour-approximation,planar-sweep,print-validation,print-intersections,print-shells,print-manufacturing,print-thickness}.ts',
         'src/lib/{mesh-deformation,object-settings}.ts',
         'src/lib/{animation-history,animation-interpolation,animation-migrations,animation-playback,animation-project,animation-validation,animation-video-export,block-glitch,colorPair,contour-weave,contour-weave-settings,contour-engine,contour-refinement,contour-features,contour-sequence,euclidean-rhythm,gcode,gcode-3d-toolpaths,gcode-calibration,gcode-layout,gcode-nib-footprint,gcode-profiles,gcode-surface-presets,gcode-validation,generative-terrain,generativeMesh,hyperbolic-tiling,mapAnnotations,map-features,map-settings,terrain-routes,mesh,mesh-curvature,mesh-geodesics,mesh-topology,misregistration,music-quantization,paper-orientation,parameter-history,parameter-migrations,polyline-styling,projection,render-scheduling,render-settings,sample-and-hold,scalar-fields,scan-band-glitch,sequencer-events,sequencer-playback,sequencer-probability,sequencer-project,slicer-export,staggered-slices,svg-mesh,tile-shuffle,toolpaths,vector-zoom,video-encoder,web-audio-engine,wraparound-tear}.ts',
         'src/lib/demo-meshes/index.ts',
