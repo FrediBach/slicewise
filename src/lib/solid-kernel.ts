@@ -1,5 +1,6 @@
 import type { Manifold, ManifoldToplevel } from 'manifold-3d';
 import { ROUNDED_TOOL_LIMITS, type RoundedTreatmentRecipe } from './slice-treatment';
+import { assertPrintTopology } from './print-validation';
 
 /** Manufacturing coordinates are Z-up millimeters; no normalization or repair. */
 export type SolidMesh = { V: Float32Array; T: Uint32Array };
@@ -166,6 +167,7 @@ export function createSolidKernel(module: ManifoldToplevel) {
             );
           const mesh = combined!.getMesh();
           const detached = { V: mesh.vertProperties.slice(), T: mesh.triVerts.slice() };
+          assertPrintTopology(detached, 'Rounded tool');
           // Validate the quantized transfer artifact as well as the native solid.
           const roundTrip = importMesh(detached);
           try {
@@ -199,6 +201,11 @@ export function createSolidKernel(module: ManifoldToplevel) {
       if (inputs.reduce((sum, mesh) => sum + mesh.T.length / 3, 0) > SOLID_KERNEL_LIMITS.triangles)
         throw new Error('Solid triangle budget exceeded. Reduce source or treatment complexity.');
       inputs.forEach(checkMesh);
+      const sourceTopology = assertPrintTopology(base, 'Source');
+      const inputTopology = {
+        source: sourceTopology,
+        tools: activeTools.map((mesh, index) => assertPrintTopology(mesh, `Tool ${index + 1}`)),
+      };
       let source: Manifold | undefined;
       let combined: Manifold | undefined;
       let result: Manifold | undefined;
@@ -207,7 +214,13 @@ export function createSolidKernel(module: ManifoldToplevel) {
         const baseMeasurements = inspect(source);
         // Preserve the exact original arrays on neutral operations, even if import
         // internally collapses redundant topology. No Boolean or mesh round trip.
-        if (!activeTools.length) return { mesh: base, measurements: baseMeasurements };
+        if (!activeTools.length)
+          return {
+            mesh: base,
+            measurements: baseMeasurements,
+            topology: sourceTopology,
+            inputTopology,
+          };
         for (const toolMesh of activeTools) {
           const tool = importMesh(toolMesh);
           let retained = false;
@@ -232,7 +245,8 @@ export function createSolidKernel(module: ManifoldToplevel) {
         // No property seams are introduced: the adapter imports XYZ only.
         const mesh = { V: output.vertProperties.slice(), T: output.triVerts.slice() };
         checkMesh(mesh);
-        return { mesh, measurements };
+        const topology = assertPrintTopology(mesh, 'Result');
+        return { mesh, measurements, topology, inputTopology };
       } finally {
         if (result) release(result);
         if (combined) release(combined);

@@ -1,6 +1,6 @@
 # 3D mode: Phase-0 feasibility record
 
-Status: kernel spike and triangle-derived capsule sweep trial implemented, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
+Status: kernel spike, triangle-derived capsule sweeps and independent topology audits implemented, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
 
 ## Implemented
 
@@ -12,6 +12,7 @@ Status: kernel spike and triangle-derived capsule sweep trial implemented, 8 Sep
 - `slice-geometry.ts` retains ordered levels, source revision, a fixed planar direction, XYZ points, segment triangle ownership, endpoint barycentrics, geometric face normals, run offsets and closure flags in serializable buffers. Roots join by source edge/vertex identity, never spatial proximity. Coplanar faces, branching cuts, malformed inputs and exceeded budgets fail explicitly. Open runs remain identifiable and cannot become closed treatment tools. The existing drawing run-chaining routine was moved here unchanged; the stricter manufacturing extractor does not replace drawing smoothing or field behavior.
 - `slice-treatment.ts` selects whole levels with All, inclusive ranges or every-N patterns with wrapped offsets. It creates detached circular capsule recipes. Zero radius produces no tools; the kernel retains exact source buffers for neutral operations. Primitive budgets preserve the whole selection or reject it.
 - Rounded tools use convex hulls of identically oriented endpoint spheres, unioned in batches of eight. Constructed tools must have one connected boundary shell both natively and after Float32 buffer conversion. Extra shells fail instead of being removed. This is a circular profile trial; independent width/depth and surface-normal profile frames remain unimplemented.
+- `print-validation.ts` audits the exact input/tool/result buffers independently of WASM: finite coordinates and indices, zero-area and duplicate indexed faces, edge incidence, opposing edge winding, single-cycle vertex links and signed shell volumes. Reports include bounded vertex/triangle samples, full issue counts and explicit unperformed checks. Invalid artifacts fail; unused vertices remain warnings, and source/tool reports survive in result metadata. Nothing is welded, reversed or discarded by the auditor.
 
 The [Manifold API](https://manifoldcad.org/docs/jsapi/classes/manifold.Manifold.html) requires explicit deletion and oriented manifold imports. Its import may collapse degenerate triangles or unnecessary vertices. This adapter does not add welding, hole filling, winding correction or other repair. Kernel acceptance and positive signed volume are insufficient evidence of geometric or printing validity.
 
@@ -26,7 +27,7 @@ The initial analytic suite uses one fixed equatorial tool with a 0.6 mm circular
 | Torus       | 60 × 60 × 20         | 8,192          | 13,760          | 14,272           |
 | Sheared box | 55 × 30 × 50         | 12             | 172             | 700              |
 
-The original thirteen kernel tests exercise the actual WASM module. All four analytic fixtures lose material under Inset and gain material under Emboss, remain one connected body, and produce deterministic buffers without mutating inputs. Independent buffer checks verify closed edges, opposite edge winding and signed volume. The box test measures 0.6 mm penetration/protrusion at equatorial samples; the torus retains its 10 mm inner radius. Duplicate tools, separate bodies, an enclosed cavity, malformed/open meshes, an entirely removed object and repeated preparation cover additional failure and lifecycle behavior. These measurements do not establish width accuracy at box corners, on the sheared surface or between samples.
+The initial thirteen kernel tests established volume changes, edge closure, determinism, input isolation and selected dimensions, plus failure/cleanup behavior. These historical measurements precede the independent topology audit below: **the analytic torus treatments are now rejected for zero-area output faces**, despite passing the earlier kernel-only checks. The box measurements remain 0.6 mm penetration/protrusion at equatorial samples. These measurements do not establish width accuracy at corners, on the sheared surface or between samples.
 
 Initial Node benchmark: Apple M3 Max, arm64, Darwin 24.6.0, Node 25.5.0; 20 repetitions / 240 operations. Inset and Emboss timings are combined below and include input conversion, tool union, Boolean evaluation, measurements and output copies. Fixture construction and module startup are excluded.
 
@@ -62,6 +63,31 @@ Tool construction includes native unions, measurements and buffer-round-trip che
 
 The process-wide peak RSS was 213,392 KiB; before/after RSS was 126,795,776 / 218,497,024 bytes. The benchmark now reports the OS high-water mark as well as memory samples. This includes Vite, fixture generation, JavaScript and WASM across the entire process and still does not isolate peak kernel allocation or establish a browser memory limit.
 
+## Independent topology audit follow-up
+
+The audit checks each vertex's triangle link as well as its edges. Two closed tetrahedra touching at one shared vertex pass edge incidence and winding but fail the link's single-cycle requirement. Indexed duplicate faces and geometrically collinear faces fail before import can silently collapse them. A translated box retains its measured volume through per-shell local origins and compensated summation. Negative cavity shells are preserved; unused vertices are reported without changing source buffers.
+
+The result status is **topology-checked**, never geometry-valid or print-ready. `selfIntersections`, `shellContainment` and `manufacturing` remain explicitly `not-run`. For example, overlapping boxes can pass the implemented topological checks while still requiring intersection rejection, and a misplaced inward shell requires containment analysis. The auditor reuses connectivity with a fresh cache key so changed caller buffers cannot inherit a stale audit.
+
+Bounds are 250,000 triangles / 750,000 vertices, with at most 32 vertex and triangle sample IDs per issue. Counts include every detected occurrence, not just the samples. Connectivity's existing minimum edge length of 10⁻¹² mm is treated as an unsupported-scale error instead of silently skipping those edges. Checks are read-only and never repair geometry.
+
+Fourteen new regressions cover the auditor and its kernel integration. Both analytic torus operations now reject **160 zero-area faces** in their Float32 output. This limitation remains visible in benchmark rows with structured diagnostics; the runner continues through other operations instead of aborting the whole suite. A separate regression demonstrates that Manifold accepts a source with a degenerate face by dropping it, while the new guard rejects that exact source even for Off. These failures are intentional until an explicit, tolerance-accounted conversion/cleanup step is implemented and revalidated.
+
+The newer contour-driven torus remains supported by these checks. Three repetitions produced 36 topology-checked contour results, zero rejected contour fixtures and zero remaining adapter-owned handles. One analytic repetition produced 10 topology-checked results and the two expected torus rejections, also with zero remaining handles. On the same Node/M3 Max environment, median tool-construction / Inset-operation times including the added audits were:
+
+| Fixture     | Tool construction (ms) | Inset + audits/measurements (ms) |
+| ----------- | ---------------------- | -------------------------------- |
+| Sphere      | 149.37                 | 25.60                            |
+| Tilted box  | 9.68                   | 1.68                             |
+| Torus       | 855.89                 | 119.98                           |
+| Sheared box | 8.03                   | 1.52                             |
+| Twisted box | 258.89                 | 53.18                            |
+| Bent box    | 275.49                 | 45.58                            |
+
+Process peak RSS was 353,360 KiB; before/after RSS was 129,236,992 / 361,512,960 bytes. The additional JS topology structures increase allocation pressure. This remains a process-wide measurement including Vite and WASM, not an isolated geometry budget; memory optimization and browser measurements are still required.
+
+Verification: 779 tests across 102 files pass, including 45 focused 3D tests. Formatting, lint, typecheck and both production/developer builds pass. React Doctor reports only the five existing warnings outside this change. The developer build retains the Manifold `node:module` externalization warning; browser loading and cancellation remain unverified.
+
 ## Reproduce
 
 ```bash
@@ -82,6 +108,6 @@ The browser automation bridge was unavailable during both implementation session
 
 1. Extend the triangle-derived circular sweeps to stable surface-normal frames with independent profile width/depth, and measure sharp corners and curved/deformed surfaces at a declared tolerance. The new path contract is not yet integrated with shared Config controls or physical sizing.
 2. Extend the initial twisted/bent/cavity and degenerate-cut regressions to thin walls, close folds, intersecting tools, generated tunnel sources and representative rejected-source statistics.
-3. Add independent vertex manifoldness, shell containment/orientation and non-adjacent intersection checks. Preserve intentional cavities; never infer validity from total volume alone.
+3. Complete shell containment/orientation and non-adjacent intersection checks, then manufacturing diagnostics. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output through an explicit, measured operation rather than silent repair.
 4. Verify browser cancellation/reinitialization, stale-job handling and source-buffer installation with realistic jobs. Measure peak WASM/JS/GPU memory and lower-memory devices. The internal page recreates its fixed fixtures; it is not the production source lifecycle.
 5. Benchmark representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).

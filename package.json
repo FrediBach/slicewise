@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:3d": "vitest run src/lib/solid-kernel.test.ts src/lib/slice-geometry.test.ts src/lib/slice-treatment.test.ts src/dev/three-d-feasibility.test.ts",
+    "test:3d": "vitest run src/lib/solid-kernel.test.ts src/lib/slice-geometry.test.ts src/lib/slice-treatment.test.ts src/lib/print-validation.test.ts src/dev/three-d-feasibility.test.ts",
     "build:3d": "vite build --config vite.feasibility.config.ts",
     "bench:3d": "node scripts/three-d-feasibility.mjs",
     "test:watch": "vitest",

@@ -3,6 +3,7 @@ import Module, { type ManifoldToplevel } from 'manifold-3d';
 import { createSolidKernel, SOLID_KERNEL_LIMITS, type SolidMesh } from './solid-kernel';
 import { createFeasibilityFixtures } from './three-d-feasibility';
 import { getMeshTopology } from './mesh-topology';
+import { PrintTopologyError } from './print-validation';
 
 let module: ManifoldToplevel;
 let fixtures: ReturnType<typeof createFeasibilityFixtures>;
@@ -47,7 +48,7 @@ function expectClosedOriented(mesh: SolidMesh) {
 }
 
 describe('phase-0 solid kernel', () => {
-  it.each(['sphere', 'box', 'torus', 'sheared-box'])(
+  it.each(['sphere', 'box', 'sheared-box'])(
     'removes grooves and fuses ribs on %s without mutating inputs',
     (name) => {
       const fixture = fixtures.find((item) => item.name === name)!;
@@ -81,17 +82,27 @@ describe('phase-0 solid kernel', () => {
     }
   });
 
-  it('keeps the torus hole open and measures a 0.6 mm outer equatorial rib', () => {
-    const fixture = fixtures[2];
-    const result = createSolidKernel(module).run(fixture.base, fixture.tools, 'emboss');
-    const radii = Array.from({ length: result.mesh.V.length / 3 }, (_, i) =>
-      Math.hypot(result.mesh.V[i * 3], result.mesh.V[i * 3 + 1]),
-    );
-    expect(Math.min(...radii)).toBeCloseTo(10, 4);
-    expect(result.measurements.bounds.max[0]).toBeCloseTo(30.6, 4);
-    expect(result.measurements.bounds.max[2]).toBeCloseTo(10, 4);
-    expect(getMeshTopology(result.mesh).componentSizes).toHaveLength(1);
-  });
+  it.each(['inset', 'emboss'] as const)(
+    'rejects zero-area faces in the analytic torus %s artifact',
+    (operation) => {
+      const fixture = fixtures[2];
+      const kernel = createSolidKernel(module);
+      expect(kernel.run(fixture.base, [], 'off').topology.status).toBe('topology-checked');
+      let failure: unknown;
+      try {
+        kernel.run(fixture.base, fixture.tools, operation);
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(PrintTopologyError);
+      const report = (failure as PrintTopologyError).report;
+      expect(
+        report.issues.find((issue) => issue.code === 'degenerate-face')!.count,
+      ).toBeGreaterThan(0);
+      expect(report.checks.faces).toBe('failed');
+      expect(kernel.liveHandles).toBe(0);
+    },
+  );
 
   it('unions overlapping tools instead of applying the same groove twice', () => {
     const fixture = fixtures[0];
@@ -185,5 +196,40 @@ describe('phase-0 solid kernel', () => {
     expect(result.measurements.boundaryComponents).toBe(2);
     expect(getMeshTopology(result.mesh).componentSizes).toHaveLength(2);
     expect(kernel.liveHandles).toBe(0);
+  });
+
+  it('rejects a degenerate source before import can silently discard its face, including Off', () => {
+    const base = fixtures[1].base;
+    const invalid = { V: base.V, T: new Uint32Array([...base.T, 0, 0, 0]) };
+    const native = new module.Manifold(
+      new module.Mesh({ numProp: 3, vertProperties: invalid.V, triVerts: invalid.T }),
+    );
+    try {
+      expect(native.status()).toBe('NoError');
+      expect(native.numTri()).toBe(base.T.length / 3);
+    } finally {
+      native.delete();
+    }
+    const kernel = createSolidKernel(module);
+    for (const operation of ['off', 'inset', 'emboss'] as const) {
+      expect(() => kernel.run(invalid, fixtures[1].tools, operation)).toThrow(PrintTopologyError);
+      expect(kernel.liveHandles).toBe(0);
+    }
+    expect(invalid.T.length).toBe(base.T.length + 3);
+  });
+
+  it('returns explicit unperformed checks and warnings on exact neutral buffers', () => {
+    const base = fixtures[1].base;
+    const source = { V: new Float32Array([...base.V, 100, 100, 100]), T: base.T };
+    const result = createSolidKernel(module).run(source, [], 'off');
+    expect(result.mesh).toBe(source);
+    expect(result.topology.status).toBe('topology-checked');
+    expect(result.topology.checks.shellContainment).toBe('not-run');
+    expect(result.topology.checks.selfIntersections).toBe('not-run');
+    expect(result.topology.issues[0].code).toBe('unused-vertex');
+    expect(result.topology.issues[0].severity).toBe('warning');
+    const treated = createSolidKernel(module).run(source, fixtures[1].tools, 'emboss');
+    expect(treated.inputTopology.source.issues[0].code).toBe('unused-vertex');
+    expect(source.V.length).toBe(base.V.length + 3);
   });
 });

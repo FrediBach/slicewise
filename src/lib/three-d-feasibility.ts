@@ -5,6 +5,39 @@ import { deformMesh } from './mesh-deformation';
 import { vertexNormals } from './mesh';
 import { extractPlanarSlices, type PlanarSliceField } from './slice-geometry';
 import { createRoundedTreatmentRecipe } from './slice-treatment';
+import { PrintTopologyError, type PrintTopologyReport } from './print-validation';
+
+function topologySummary(report: PrintTopologyReport) {
+  return {
+    status: report.status,
+    checks: report.checks,
+    signedVolumeMm3: report.signedVolumeMm3,
+    shellVolumesMm3: Array.from(report.shellVolumesMm3),
+    issues: report.issues.map((issue) => ({
+      ...issue,
+      vertices: Array.from(issue.vertices),
+      triangles: Array.from(issue.triangles),
+    })),
+  };
+}
+
+function failureSummary(error: unknown) {
+  return {
+    status: 'rejected',
+    message: error instanceof Error ? error.message : String(error),
+    ...(error instanceof PrintTopologyError ? { topology: topologySummary(error.report) } : {}),
+  };
+}
+
+function inputWarnings(input: { source: PrintTopologyReport; tools: PrintTopologyReport[] }) {
+  return [input.source, ...input.tools].flatMap((report, index) =>
+    topologySummary(report).issues.flatMap((issue) =>
+      issue.severity === 'warning'
+        ? [{ input: index === 0 ? 'source' : `tool-${index}`, ...issue }]
+        : [],
+    ),
+  );
+}
 
 export function createFeasibilityFixtures(module: ManifoldToplevel) {
   const allocated: Manifold[] = [];
@@ -112,16 +145,29 @@ export function runFeasibility(
     for (const fixture of fixtures) {
       for (const operation of ['off', 'inset', 'emboss'] as const) {
         const start = performance.now();
-        const result = kernel.run(fixture.base, fixture.tools, operation);
-        rows.push({
-          repetition,
-          fixture: fixture.name,
-          operation,
-          elapsedMs: Math.round((performance.now() - start) * 100) / 100,
-          ...result.measurements,
-          outputBytes: result.mesh.V.byteLength + result.mesh.T.byteLength,
-          liveHandles: kernel.liveHandles,
-        });
+        try {
+          const result = kernel.run(fixture.base, fixture.tools, operation);
+          rows.push({
+            repetition,
+            fixture: fixture.name,
+            operation,
+            status: result.topology.status,
+            elapsedMs: Math.round((performance.now() - start) * 100) / 100,
+            ...result.measurements,
+            topology: topologySummary(result.topology),
+            inputWarnings: inputWarnings(result.inputTopology),
+            outputBytes: result.mesh.V.byteLength + result.mesh.T.byteLength,
+            liveHandles: kernel.liveHandles,
+          });
+        } catch (error) {
+          rows.push({
+            repetition,
+            fixture: fixture.name,
+            operation,
+            ...failureSummary(error),
+            liveHandles: kernel.liveHandles,
+          });
+        }
       }
     }
   }
@@ -152,7 +198,9 @@ function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
             repetition,
             fixture: fixture.name,
             operation,
-            status: 'kernel-accepted',
+            status: result.topology.status,
+            topology: topologySummary(result.topology),
+            inputWarnings: inputWarnings(result.inputTopology),
             extractionMs,
             toolConstructionMs,
             booleanMs: performance.now() - operationStart,
@@ -168,8 +216,7 @@ function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
         rows.push({
           repetition,
           fixture: fixture.name,
-          status: 'rejected',
-          message: error instanceof Error ? error.message : String(error),
+          ...failureSummary(error),
           liveHandles: kernel.liveHandles,
         });
       }
