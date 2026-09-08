@@ -1,6 +1,6 @@
 # 3D mode: Phase-0 feasibility record
 
-Status: kernel spike, triangle-derived capsule sweeps, independent topology audits and surface-contact checks including adjacent faces, and shell containment/orientation implemented, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
+Status: Phase-0 kernel and validation spike implemented through initial manufacturing screening, 8 September 2026. **The Phase-0 gate is still open.** Manifold 3.5.3 is pinned for evaluation, not yet selected for a public printing release. No production controls or export behavior have changed.
 
 ## Implemented
 
@@ -16,6 +16,8 @@ Status: kernel spike, triangle-derived capsule sweeps, independent topology audi
 - `print-intersections.ts` now rejects surface contacts after basic topology checks, including overlap beyond an indexed shared edge or vertex. It records the tolerance, triangle pairs, work performed and whether its counts are complete. Adjacent and non-adjacent pairs have separate counts; `selfIntersections` now records the full conservative surface audit.
 
 - `print-shells.ts` classifies nesting after closed-manifold and surface-contact checks pass. It validates alternating outward/inward orientation and reports physical body count separately from boundary shell count. Ambiguity and budget exhaustion reject the artifact and leave body count unavailable.
+
+- `print-manufacturing.ts` provides an initial advisory screen with explicit build bounds, bed tolerance and overhang angle. It reports physical placement, a near-bed projected-area estimate, overhang area/face samples and body count, leaving thickness and stability unperformed. It never changes or automatically places the artifact.
 
 The [Manifold API](https://manifoldcad.org/docs/jsapi/classes/manifold.Manifold.html) requires explicit deletion and oriented manifold imports. Its import may collapse degenerate triangles or unnecessary vertices. This adapter does not add welding, hole filling, winding correction or other repair. Kernel acceptance and positive signed volume are insufficient evidence of geometric or printing validity.
 
@@ -161,6 +163,22 @@ Single contour and analytic benchmark repetitions retained the expected outcomes
 
 Shell-audit verification: all 808 tests across 104 files pass, including 74 focused 3D tests. Formatting, lint, typecheck and both builds pass. React Doctor retains five pre-existing warnings outside this change. The developer build retains its Manifold `node:module` externalization warning; native browser loading and cancellation remain unverified.
 
+## Initial manufacturing advisory screen
+
+A separate read-only screen now accepts explicit axis-aligned build bounds in the artifact's existing Z-up millimeter frame. The build region's minimum Z is the bed; the function does not rotate, translate or drop geometry. It freshly runs the geometry audit before measuring the artifact, so a stale caller report cannot authorize changed buffers. Invalid geometry returns `unavailable` with its diagnostics. Geometry that passes gets a `screened` result and any advisories; this label never means print-ready.
+
+The screen reports referenced-vertex bounds and dimensions, exact bounds fit, depth below bed, lowest-point clearance and validated body count. Build-volume fit uses the actual bounds without tolerance expansion. A separate below-bed advisory triggers beyond the stated bed tolerance. Unused vertices remain geometry warnings and do not enlarge the bounds.
+
+For approximate bed contact, downward-facing triangles are clipped to the band within `bedToleranceMm` of the bed. Their projected XY areas are summed. This is a **near-bed area estimate**, not a union footprint, adhesion estimate or proof that every body is supported. A tilted face with only a line at the bed can have a nonzero band estimate; zero tolerance gives that line zero area. Multiple bodies remain an explicit advisory even when the total near-bed area is nonzero.
+
+Overhang angle is measured **from vertical toward a downward horizontal underside**: vertical is 0°, a downward 45° slope is 45°, and an underside is 90°. Downward faces exceeding the configured threshold are flagged, excluding portions inside/below the bed band. The screen records full face count, clipped surface area and at most 32 original triangle IDs. The numeric angular comparison has a `64 × Number.EPSILON` margin on the normal ratio. It does not simulate supports or bridging; enclosed cavity ceilings can also be flagged. Thickness and stability are explicitly `not-run`, and the geometry report's full `manufacturing` check remains `not-run`.
+
+The developer trial uses recorded assumptions of `[-100, -100, 0]` to `[100, 100, 200]` mm build bounds, 0.05 mm bed tolerance and a 45° overhang threshold. These are internal fixture assumptions, not new production controls or printer recommendations. Centered fixtures therefore report below-bed placement. Each accepted analytic/contour row includes serialized manufacturing diagnostics and `manufacturingMs`; the existing Boolean/operation timing stops before this separate screen. Screening time includes the fresh geometry audit, which currently duplicates the kernel boundary audit and can be substantial.
+
+Nine new regressions cover analytic dimensions and area, floating/below-bed placement, build limits, sloping-face clipping, angle thresholds, cavity ceilings, multiple bodies, bounded samples, unused coordinates, detached settings, stale-buffer rejection and invalid assumptions. A single contour repetition retains 11 accepted geometry results and the known torus Emboss overlap rejection; all 11 accepted results are screened and all rows end with zero adapter-owned handles. The analytic suite likewise retains its two known torus degeneracy rejections. Manufacturing advisories do not reclassify accepted geometry as kernel failures.
+
+Manufacturing-screen verification: all 817 tests across 105 files pass, including 83 focused 3D tests. Formatting, lint, typecheck and both builds pass. React Doctor retains five pre-existing warnings. The developer build retains its Manifold `node:module` externalization warning; native browser loading and cancellation remain unverified.
+
 ## Reproduce
 
 ```bash
@@ -181,6 +199,6 @@ The browser automation bridge was unavailable during both implementation session
 
 1. Extend the triangle-derived circular sweeps to stable surface-normal frames with independent profile width/depth, and measure sharp corners and curved/deformed surfaces at a declared tolerance. The new path contract is not yet integrated with shared Config controls or physical sizing.
 2. Extend the initial twisted/bent/cavity and degenerate-cut regressions to thin walls, close folds, intersecting tools, generated tunnel sources and representative rejected-source statistics.
-3. Implement manufacturing diagnostics and expand shell/intersection numerical stress testing. Shell containment/orientation now has a bounded implementation. Adjacent and non-adjacent contacts now have a bounded conservative audit; exact/near-degenerate predicate robustness still needs broader stress testing. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output and the contour torus's Emboss overlaps through explicit, measured operations rather than silent repair.
+3. Extend the initial manufacturing screen with bounded thickness sampling and support/stability diagnostics, and expand shell/intersection numerical stress testing. Shell containment/orientation now has a bounded implementation. Adjacent and non-adjacent contacts now have a bounded conservative audit; exact/near-degenerate predicate robustness still needs broader stress testing. Vertex manifoldness and basic topology audits now run independently, but they do not establish full solid validity. Resolve the analytic torus's degenerate output and the contour torus's Emboss overlaps through explicit, measured operations rather than silent repair.
 4. Verify browser cancellation/reinitialization, stale-job handling and source-buffer installation with realistic jobs. Measure peak WASM/JS/GPU memory and lower-memory devices. The internal page recreates its fixed fixtures; it is not the production source lifecycle.
 5. Benchmark representative 100k-triangle / 24-slice cases before recording a kernel decision and moving through the shared-foundation/workspace gates in [the implementation plan](./THREE_D_MODE_PLAN.md).

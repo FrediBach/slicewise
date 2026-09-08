@@ -6,6 +6,7 @@ import { vertexNormals } from './mesh';
 import { extractPlanarSlices, type PlanarSliceField } from './slice-geometry';
 import { createRoundedTreatmentRecipe } from './slice-treatment';
 import { PrintTopologyError, type PrintTopologyReport } from './print-validation';
+import { auditPrintManufacturing } from './print-manufacturing';
 
 function topologySummary(report: PrintTopologyReport) {
   return {
@@ -25,6 +26,30 @@ function topologySummary(report: PrintTopologyReport) {
       vertices: Array.from(issue.vertices),
       triangles: Array.from(issue.triangles),
     })),
+  };
+}
+
+function screenForFeasibility(mesh: SolidMesh) {
+  const start = performance.now();
+  // Developer-only assumptions, included verbatim in each report. Fixture poses
+  // stay unchanged, so centered meshes intentionally report below-bed placement.
+  const report = auditPrintManufacturing(mesh, {
+    buildVolume: { min: [-100, -100, 0], max: [100, 100, 200] },
+    bedToleranceMm: 0.05,
+    overhangFromVerticalDeg: 45,
+  });
+  return {
+    manufacturingMs: performance.now() - start,
+    manufacturing: {
+      ...report,
+      geometry: topologySummary(report.geometry),
+      measurements: report.measurements
+        ? {
+            ...report.measurements,
+            overhangTriangles: Array.from(report.measurements.overhangTriangles),
+          }
+        : null,
+    },
   };
 }
 
@@ -164,6 +189,7 @@ export function runFeasibility(
             topology: topologySummary(result.topology),
             inputWarnings: inputWarnings(result.inputTopology),
             outputBytes: result.mesh.V.byteLength + result.mesh.T.byteLength,
+            ...screenForFeasibility(result.mesh),
             liveHandles: kernel.liveHandles,
           });
         } catch (error) {
@@ -217,6 +243,7 @@ function runContourFeasibility(module: ManifoldToplevel, repeats: number) {
               contourVertices: recipe.runs.reduce((sum, run) => sum + run.length / 3, 0),
               toolTriangles: tools.reduce((sum, tool) => sum + tool.T.length / 3, 0),
               ...result.measurements,
+              ...screenForFeasibility(result.mesh),
               liveHandles: kernel.liveHandles,
             });
           } catch (error) {

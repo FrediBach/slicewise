@@ -32,7 +32,7 @@ function checkMesh(mesh: SolidMesh) {
 
 /**
  * Phase-0 kernel boundary. Acceptance by Manifold is NOT a print-readiness check:
- * independent intersections, shell orientation and manufacturing checks are pending.
+ * independent geometry audits run here; manufacturing advice is a separate stage.
  * The caller owns module initialization and can terminate its worker to cancel WASM.
  */
 export function createSolidKernel(module: ManifoldToplevel) {
