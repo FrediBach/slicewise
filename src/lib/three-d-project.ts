@@ -51,6 +51,8 @@ export interface ThreeDRequest {
   purpose?: 'preview' | 'prepare';
 }
 export interface ThreeDSlices {
+  /** Stable field/selection identity, independent of camera and print placement. */
+  fieldKey?: string;
   positions: Float32Array;
   selected: Float32Array;
   count: number;

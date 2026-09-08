@@ -260,3 +260,15 @@ it('preserves exact-only cleanup and rejection for the 100 mm Emboss rounding re
   );
   expect(reply.artifact).toBe(reply.sourceArtifact);
 }, 15000);
+
+it('distinguishes field modes with identical planes, while preserving overlay identity through placement', () => {
+  const r = request();
+  r.settings = { axis: 'x', lines: 3, cutAz: 0, cutEl: 0 };
+  const width = previewThreeD(r).reply.slices!;
+  r.settings.axis = 'custom';
+  const custom = previewThreeD(r).reply.slices!;
+  expect(custom.positions).toEqual(width.positions);
+  expect(custom.fieldKey).not.toBe(width.fieldKey);
+  r.project.rotation = [0, 45, 0];
+  expect(previewThreeD(r).reply.slices!.fieldKey).toBe(custom.fieldKey);
+});

@@ -161,8 +161,19 @@ function Viewport({ state }: { state: ThreeDUiState }) {
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const [style, setStyle] = useState<SceneStyle>('Studio');
-  const [showSlices, setShowSlices] = useState(true);
-  const [showSource, setShowSource] = useState(false);
+  const fieldKey = state.slices?.fieldKey ?? '';
+  const [sliceVisibility, setSliceVisibility] = useState({ fieldKey, visible: true });
+  // Reset only when a completed field changes, including undo back to an older field.
+  if (state.slices && sliceVisibility.fieldKey !== fieldKey)
+    setSliceVisibility({ fieldKey, visible: true });
+  const showSlices = sliceVisibility.fieldKey !== fieldKey || sliceVisibility.visible;
+  const [comparedArtifact, setComparedArtifact] = useState<WeakRef<
+    NonNullable<ThreeDUiState['artifact']>
+  > | null>(null);
+  const showSource =
+    state.preparation?.status === 'accepted' &&
+    !!state.artifact &&
+    comparedArtifact?.deref() === state.artifact;
   const [ortho, setOrtho] = useState(false);
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +218,7 @@ function Viewport({ state }: { state: ThreeDUiState }) {
     state.preparation?.status,
     showSource,
     showSlices,
+    ready,
   ]);
   const outside =
     state.artifact &&
@@ -267,15 +279,17 @@ function Viewport({ state }: { state: ThreeDUiState }) {
         <Button
           variant="outline"
           aria-pressed={showSlices}
-          onClick={() => setShowSlices(!showSlices)}
+          onClick={() => setSliceVisibility({ fieldKey, visible: !showSlices })}
         >
-          Slices
+          {showSlices ? 'Hide slices' : 'Show slices'}
         </Button>
         <Button
           variant="outline"
           disabled={state.preparation?.status !== 'accepted'}
           aria-pressed={showSource && state.preparation?.status === 'accepted'}
-          onClick={() => setShowSource(!showSource)}
+          onClick={() =>
+            setComparedArtifact(showSource || !state.artifact ? null : new WeakRef(state.artifact))
+          }
         >
           {showSource && state.preparation?.status === 'accepted'
             ? 'Show result'
@@ -317,6 +331,13 @@ function Viewport({ state }: { state: ThreeDUiState }) {
             ? 'Untreated source comparison · prepared result retained'
             : state.message}
         </span>
+        {(state.slices?.error || !showSlices) && (
+          <span>
+            {state.slices?.error
+              ? `Contours unavailable: ${state.slices.error}`
+              : 'Contours hidden · use Show slices to display them'}
+          </span>
+        )}
         <span>Drag to orbit · right-drag to pan · scroll to zoom</span>
       </div>
     </section>

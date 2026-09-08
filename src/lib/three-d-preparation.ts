@@ -27,7 +27,7 @@ export function previewThreeD(request: ThreeDRequest, cache = new ThreeDGeometry
   let geometry: ReturnType<typeof extractPlanarSlices> | null = null;
   try {
     geometry = cache.slices(base, threeDSliceField(base, settings, project), source.version);
-    reply.slices = threeDSliceOverlay(geometry, project, artifact);
+    reply.slices = threeDSliceOverlay(geometry, project, artifact, settings.axis ?? 'up');
   } catch (error) {
     reply.slices = {
       positions: new Float32Array(),
@@ -99,7 +99,12 @@ export function prepareThreeD(
       throw new Error('Manufacturing measurements are unavailable for this result.');
     }
     reply.artifact = artifact;
-    reply.slices = threeDSliceOverlay(geometry, request.project, artifact);
+    reply.slices = threeDSliceOverlay(
+      geometry,
+      request.project,
+      artifact,
+      request.settings.axis ?? 'up',
+    );
     reply.preparation = {
       status: 'accepted',
       message: 'Experimental result · geometry audits completed; not print-ready',

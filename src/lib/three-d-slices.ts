@@ -70,6 +70,7 @@ export function threeDSliceOverlay(
   geometry: ReturnType<typeof extractPlanarSlices>,
   project: ThreeDProject,
   artifact: ThreeDArtifact,
+  fieldMode = 'planar',
 ): ThreeDSlices {
   const selected = new Set(selectSliceIndices(geometry.slices.length, project.selection));
   const all: number[] = [],
@@ -90,6 +91,12 @@ export function threeDSliceOverlay(
     return V;
   };
   return {
+    fieldKey: JSON.stringify([
+      geometry.sourceRevision,
+      fieldMode,
+      geometry.field,
+      project.selection,
+    ]),
     positions: place(all),
     selected: place(chosen),
     count: geometry.slices.length,
