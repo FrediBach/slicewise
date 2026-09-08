@@ -8,6 +8,8 @@ export type PlanarSliceField = {
   /** Normal is normalized before use; levels measure mm along that unit normal. */
   normal: Vec3;
   levels: readonly number[];
+  /** Optional per-level normals for a fan of nonparallel planar slices. */
+  planeNormals?: readonly Vec3[];
 };
 
 export type SurfaceSlice = {
@@ -61,7 +63,7 @@ export function extractPlanarSlices(
   const fail = (message: string): never => {
     throw new SliceGeometryError('input', message);
   };
-  if (field.kind !== 'planar') fail('Only fixed planar fields are supported by this trial.');
+  if (field.kind !== 'planar') fail('Only planar fields are supported by this trial.');
   if (!Number.isSafeInteger(sourceRevision) || sourceRevision < 0) fail('Invalid source revision.');
   if (!Number.isFinite(toleranceMm) || toleranceMm <= 0)
     fail('Choose a positive finite slice tolerance.');
@@ -82,9 +84,22 @@ export function extractPlanarSlices(
   const length = Math.hypot(...field.normal);
   if (!length || !Number.isFinite(length)) fail('Slice direction must be nonzero and finite.');
   const normal = field.normal.map((v) => v / length) as Vec3;
+  if (field.planeNormals && field.planeNormals.length !== field.levels.length)
+    fail('Each slice level requires a plane normal.');
+  const planeNormals = field.planeNormals?.map((direction) => {
+    const magnitude = Math.hypot(...direction);
+    if (
+      direction.length !== 3 ||
+      !direction.every(Number.isFinite) ||
+      !Number.isFinite(magnitude) ||
+      !magnitude
+    )
+      fail('Slice plane normals must be finite and nonzero.');
+    return direction.map((v) => v / magnitude) as Vec3;
+  });
   const levels = [...field.levels];
-  if (levels.some((v, i) => !Number.isFinite(v) || (i > 0 && v <= levels[i - 1])))
-    fail('Slice levels must be finite and strictly increasing.');
+  if (levels.some((v, i) => !Number.isFinite(v) || (!planeNormals && i > 0 && v <= levels[i - 1])))
+    fail('Slice levels must be finite and parallel levels strictly increasing.');
   const values = new Float64Array(V.length / 3);
   let min = Infinity,
     max = -Infinity;
@@ -111,6 +126,19 @@ export function extractPlanarSlices(
   }
   let totalSegments = 0;
   const slices = levels.map((level, index): SurfaceSlice => {
+    if (planeNormals) {
+      min = Infinity;
+      max = -Infinity;
+      const direction = planeNormals[index];
+      for (let i = 0; i < values.length; i++) {
+        const value =
+          V[i * 3] * direction[0] + V[i * 3 + 1] * direction[1] + V[i * 3 + 2] * direction[2];
+        values[i] = value;
+        min = Math.min(min, value);
+        max = Math.max(max, value);
+      }
+    }
+
     const points: number[] = [],
       segments: number[] = [],
       triangles: number[] = [];
@@ -234,7 +262,7 @@ export function extractPlanarSlices(
   });
   return {
     sourceRevision,
-    field: { kind: 'planar' as const, normal, levels },
+    field: { kind: 'planar' as const, normal, levels, ...(planeNormals ? { planeNormals } : {}) },
     toleranceMm,
     truncated: false as const,
     slices,

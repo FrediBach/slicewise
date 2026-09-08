@@ -54,6 +54,48 @@ describe('integrated 3D slice and treatment preparation', () => {
     expect(b.reply.slices!.positions).not.toEqual(a.reply.slices!.positions);
     expect(b.reply.artifact!.dimensions).toEqual([40, 80, 60]);
   });
+  it.each(['up', 'x', 'y', 'custom', 'cam'] as const)(
+    'keeps divergent %s contours on their planes and refreshes cached overlays',
+    (axis) => {
+      const r = request();
+      const cache = new ThreeDGeometryCache();
+      r.settings = { axis, lines: 8, cutAz: 31, cutEl: 47, gapEase: 'sine-in' };
+      const parallel = previewThreeD(r, cache);
+      for (const divergence of [1, 40, 160]) {
+        r.settings.divergence = divergence;
+        const preview = previewThreeD(r, cache);
+        expect(preview.base).toBe(parallel.base);
+        expect(preview.reply.slices?.error).toBeUndefined();
+        expect(preview.reply.slices).toMatchObject({ count: 8, runs: 8 });
+        expect(preview.reply.slices!.fieldKey).not.toBe(parallel.reply.slices!.fieldKey);
+        expect(preview.reply.slices!.positions).not.toEqual(parallel.reply.slices!.positions);
+        const geometry = preview.geometry!;
+        for (const slice of geometry.slices) {
+          const normal = geometry.field.planeNormals![slice.index];
+          expect([...slice.closed]).toEqual([1]);
+          for (let i = 0; i < slice.points.length; i += 3) {
+            const projection = normal.reduce((sum, n, axis) => sum + n * slice.points[i + axis], 0);
+            expect(projection).toBeCloseTo(slice.level, 8);
+          }
+        }
+        r.settings.az = 160;
+        r.project.rotation = [20, 30, 40];
+        expect(previewThreeD(r, cache).geometry).toBe(geometry);
+      }
+    },
+  );
+  it.each(['inset', 'emboss'] as const)('prepares and audits divergent %s slices', (operation) => {
+    const r = request();
+    r.settings.divergence = 40;
+    r.project.treatment = operation;
+    r.project.pathToleranceMm = 0.05;
+    const reply = prepareThreeD(r, module);
+    expect(reply.preparation?.message).not.toContain('failed');
+    expect(reply.preparation?.status).toBe('accepted');
+    expect(reply.preparation?.checks?.selfIntersections).toBe('passed');
+    if (operation === 'inset') expect(reply.preparation!.volumeMm3).toBeLessThan(40 * 60 * 80);
+    else expect(reply.preparation!.volumeMm3).toBeGreaterThan(40 * 60 * 80);
+  });
   it('highlights ordered levels and retains every loop, with empty ranges explicit', () => {
     const r = request();
     r.project.selection = { mode: 'every', step: 2, offset: 1 };
@@ -111,8 +153,8 @@ describe('integrated 3D slice and treatment preparation', () => {
     r.settings.lines = 201;
     expect(previewThreeD(r).reply.slices?.error).toContain('1–200');
     r.settings.lines = 3;
-    r.settings.divergence = 10;
-    expect(previewThreeD(r).reply.slices?.error).toContain('Divergence');
+    r.settings.sliceLfo = true;
+    expect(previewThreeD(r).reply.slices?.error).toContain('slice-plane LFO');
   });
 });
 

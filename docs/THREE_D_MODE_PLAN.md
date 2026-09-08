@@ -22,6 +22,8 @@ Viewport visibility follow-up: changing a supported slice field, levels or selec
 
 Next: refine the captured geometry/profile failures and measure long-session resource behavior, then implement exact-artifact preparation/export gates and independently verified file interchange. The current coupled circular radius is an experimental parameter, not independent surface-normal width/depth. Preserve exact source/project revision association and reject incomplete validation. Independent width/depth, general surface-normal frames, file interchange, persistence and release validation remain open. The reference build volume is currently fixed and scene settings are not persisted. This milestone does not close Phase 0 or claim all Phase-1/2 gates complete. See [workspace verification](./TESTING.md) for the completed browser checks, 856 passing tests with an explicit timeout allowance, and remaining verification limits.
 
+Divergence now shares Config’s fan-plane calculation with the strict 3D extractor. Preview contours and experimental Inset/Emboss support per-slice normals, while selection order, gap easing, frozen View depth and geometry audits remain in effect. Regression tests cover all supported planar fields from 1° to 160° and audited divergent treatments; a browser check confirms eight visible rounded-cube contours at 40°.
+
 ## Implementation decision and next-session handoff
 
 Continue the integrated 3D workspace rather than spending another iteration solely extending isolated geometry benchmarks. Build the parts that are useful independently of the final treatment algorithm, then use the integrated workflow to prioritize geometry refinement. Keep construction behind the kernel/tool adapter so changing sweep strategy or kernel does not require rebuilding the workspace.
@@ -258,7 +260,7 @@ If benchmarks show unacceptable performance or robustness, stop at the kernel de
 | ----------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Height, width, depth, custom planar angle | Supported treatments                                            | Core release fixtures                                                  |
 | View depth                                | Freeze as a model-space direction                               | Camera motion must remain geometry-neutral                             |
-| Divergent planes                          | Initially unavailable for treatments                            | Per-plane framing and intersecting pattern tests                       |
+| Divergent planes                          | Supported experimental previews and treatments                  | Per-plane framing and intersecting pattern tests                       |
 | Spherical / cylindrical fields            | Follow-up release                                               | Curved paths, poles, self-collision, and width tests                   |
 | LFO-modulated fields                      | Follow-up release                                               | Non-planar sweeps and high-frequency budgets                           |
 | Geodesic / curvature / Voronoi            | Follow-up release                                               | Surface-only values, singularities, branches, and disconnected regions |

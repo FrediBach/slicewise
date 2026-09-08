@@ -136,6 +136,12 @@ describe('authored planar slice geometry', () => {
       [NaN, 0, 1],
     ] as [number, number, number][])
       expect(() => extractPlanarSlices(mesh, { ...field, normal }, 0)).toThrow(SliceGeometryError);
+    expect(() => extractPlanarSlices(mesh, { ...field, planeNormals: [] }, 0)).toThrow(
+      /plane normal/,
+    );
+    expect(() => extractPlanarSlices(mesh, { ...field, planeNormals: [[0, 0, 0]] }, 0)).toThrow(
+      /nonzero/,
+    );
     expect(() => extractPlanarSlices(mesh, { ...field, levels: [1, 0] }, 0)).toThrow(/increasing/);
     expect(() => extractPlanarSlices(mesh, { ...field, levels: Array(513).fill(0) }, 0)).toThrow(
       /budget/,

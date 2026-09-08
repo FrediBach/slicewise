@@ -1,3 +1,4 @@
+import { sliceFanGeometry, sliceFanTangent, sliceFanPlane } from './slice-fan';
 import type { ContourSettings } from './contour-engine';
 import { extractPlanarSlices, type PlanarSliceField } from './slice-geometry';
 import { selectSliceIndices } from './slice-treatment';
@@ -20,9 +21,9 @@ export function threeDSliceField(
     throw new Error(
       '3D preview supports Height, Model width/depth, Custom plane and fixed View depth. Choose a supported slice field.',
     );
-  if (settings.divergence || settings.sliceLfo || settings.spiral || settings.contourWeave)
+  if (settings.sliceLfo || settings.spiral || settings.contourWeave)
     throw new Error(
-      'Turn off Divergence, slice-plane LFO, Continuous spiral and Contour Weave in Config before preparing parallel slices.',
+      'Turn off slice-plane LFO, Continuous spiral and Contour Weave in Config before preparing planar slices.',
     );
   let normal: Triple =
     settings.axis === 'cam'
@@ -45,25 +46,37 @@ export function threeDSliceField(
   if (count < 1 || count > 200) throw new Error('Choose 1–200 design slices.');
   let min = Infinity,
     max = -Infinity;
+  const values = new Float64Array(mesh.V.length / 3);
   for (let i = 0; i < mesh.V.length; i += 3) {
     const v = mesh.V[i] * normal[0] + mesh.V[i + 1] * normal[1] + mesh.V[i + 2] * normal[2];
+    values[i / 3] = v;
     min = Math.min(min, v);
     max = Math.max(max, v);
   }
   if (!(max > min)) throw new Error('The source has no extent along this cutting direction.');
-  const levels = Array.from(
-    { length: count },
-    (_, i) =>
-      min +
-      (max - min) *
-        easeLineGap(
-          (i + 0.5) / count,
-          settings.gapEase ?? 'linear',
-          settings.easeStrength ?? 100,
-          settings.easeCenter ?? 50,
-          settings.easeCycles ?? 1,
-        ),
+  const positions = Array.from({ length: count }, (_, i) =>
+    easeLineGap(
+      (i + 0.5) / count,
+      settings.gapEase ?? 'linear',
+      settings.easeStrength ?? 100,
+      settings.easeCenter ?? 50,
+      settings.easeCycles ?? 1,
+    ),
   );
+  const divergence = Math.max(0, Math.min(160, settings.divergence || 0));
+  if (divergence) {
+    const tangent = sliceFanTangent(normal);
+    const fan = sliceFanGeometry(mesh, { values, min, max }, tangent, divergence);
+    if (!fan) throw new Error('The source has no extent for divergent slices.');
+    const planes = positions.map((position) => sliceFanPlane(normal, tangent, fan, position));
+    return {
+      kind: 'planar',
+      normal,
+      levels: planes.map((plane) => plane.level),
+      planeNormals: planes.map((plane) => plane.normal),
+    };
+  }
+  const levels = positions.map((position) => min + (max - min) * position);
   return { kind: 'planar', normal, levels };
 }
 export function threeDSliceOverlay(

@@ -29,8 +29,8 @@ export function ThreeDSurfacePanel({
       defaultOpen
     >
       <p className="gradient-note">
-        Line count, spacing and Slice field above are shared with Config. View depth uses a fixed
-        direction; camera navigation does not change the slices.
+        Line count, spacing, Divergence and Slice field above are shared with Config. View depth
+        uses a fixed direction; camera navigation does not change the slices.
       </p>
       <label className="three-d-field">
         Treatment
