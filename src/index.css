@@ -2850,3 +2850,457 @@ body.three-d-mode .topbar {
   font-size: 10px;
   text-align: center;
 }
+
+/* Instrument racks keep the full cycle below each device. */
+.sequencer-lane .sequencer-lane-body {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sequencer-lane .sequencer-lane-settings {
+  border-right: 0;
+  border-bottom: 1px solid #dde0db;
+  padding: 14px;
+}
+.sequencer-lane .sequencer-tab-panel {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sound-rack {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(170px, 0.8fr) minmax(300px, 1.6fr);
+  gap: 12px;
+}
+.sound-module {
+  min-width: 0;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #d4d8d2;
+  background: #f0f2ee;
+}
+.sound-module legend {
+  padding: 0 5px;
+  color: #646b62;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.sound-module label {
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.sound-oscillator {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 76px;
+  gap: 10px;
+  align-items: center;
+}
+.sound-oscillator > .sound-knob {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.sound-knob-row {
+  display: flex;
+  justify-content: space-around;
+  gap: 8px;
+}
+.sound-knob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.sound-knob-label,
+.sound-module-caption {
+  font-size: 9px;
+  color: #646b62;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sound-module-caption {
+  margin: 5px 0 25px;
+  text-align: center;
+}
+.sound-knob-dial {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 225deg,
+    var(--lane-color) 0deg var(--knob-fill),
+    #ced3cc var(--knob-fill) 270deg,
+    transparent 270deg
+  );
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.sound-knob-dial::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border: 1px solid #b7bdb4;
+  border-radius: 50%;
+  background: #fafbf8;
+  box-shadow: 0 2px 3px #232a2314;
+}
+.sound-knob-dial > span {
+  position: absolute;
+  inset: 9px;
+  transform: rotate(var(--knob-angle));
+}
+.sound-knob-dial > span::before {
+  content: '';
+  display: block;
+  width: 2px;
+  height: 11px;
+  margin: 0 auto;
+  background: #333c31;
+}
+.sound-knob-dial:focus-visible {
+  outline: 2px solid var(--lane-color);
+  outline-offset: 4px;
+}
+.sound-module .sound-knob-value {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  font-size: 9px;
+  text-transform: none;
+}
+.sequencer-tab-panel .sound-knob-value input {
+  width: 43px;
+  height: 23px;
+  padding: 0 2px;
+  border-color: transparent;
+  background: transparent;
+  font-size: 11px;
+  text-align: right;
+  appearance: textfield;
+}
+.sound-knob-value input::-webkit-inner-spin-button,
+.sound-knob-value input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.sequencer-tab-panel .sound-knob-value input:focus {
+  border-color: var(--lane-color);
+  background: #fff;
+}
+.sound-envelope-display {
+  display: block;
+  width: 100%;
+  height: 74px;
+  margin: -8px 0 8px;
+  color: var(--lane-color);
+}
+.sound-envelope-grid {
+  fill: none;
+  stroke: #d9ded6;
+  stroke-width: 0.7;
+}
+.sound-envelope-fill {
+  fill: currentColor;
+  opacity: 0.08;
+}
+.sound-envelope-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.sound-envelope-display circle {
+  fill: currentColor;
+}
+.sound-control-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #787f74;
+  font-size: 9px;
+}
+.sound-drum-module > label {
+  max-width: 220px;
+  margin-bottom: 12px;
+}
+.sound-drum-pads {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 6px;
+}
+.sound-drum-pads button {
+  min-height: 36px;
+  height: auto;
+  white-space: normal;
+  font-size: 9px;
+}
+.sound-drum-pads button[aria-pressed='true'] {
+  border-color: var(--lane-color);
+  box-shadow: inset 0 -3px var(--lane-color);
+  background: #e3e8df;
+}
+@media (max-width: 1100px) {
+  .sound-rack {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .sound-envelope {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 540px) {
+  .sound-rack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.sequencer-workspace {
+  flex-basis: clamp(440px, 58vh, 600px);
+}
+.sequencer-lane {
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .sequencer-workspace {
+    flex-basis: 65dvh;
+  }
+  .sequencer-workspace-nav {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .sequencer-workspace-nav p {
+    flex-basis: 100%;
+    order: 3;
+  }
+  .sequencer-tabs {
+    flex-shrink: 0;
+  }
+  .sequencer-add-lanes {
+    margin-left: 0;
+  }
+  .sequencer-lanes {
+    padding-inline: 10px;
+  }
+  .sequencer-lane .sequencer-lane-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sequencer-sequence-heading {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+}
+
+.lane-control-rack {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.85fr) minmax(250px, 1.2fr) minmax(240px, 1fr);
+  gap: 12px;
+}
+.lane-control-module {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.instrument-caption,
+.instrument-note,
+.instrument-fader-scale,
+.instrument-rhythm-summary > span {
+  color: #787f74;
+  font-size: 9px;
+}
+.instrument-caption {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.instrument-note {
+  margin: 0;
+  line-height: 1.5;
+}
+.instrument-choice {
+  display: flex;
+  gap: 4px;
+}
+.instrument-choice label {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.sequencer-tab-panel .instrument-choice input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.sequencer-lane-settings .instrument-choice label > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px;
+  border: 1px solid #c4cac0;
+  background: #f8f9f6;
+  color: #63695f;
+  font-size: 10px;
+  text-align: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.instrument-choice input:checked + span {
+  border-color: var(--lane-color);
+  box-shadow: inset 0 -2px var(--lane-color);
+  background: #e3e8df;
+  color: #292f25;
+}
+.instrument-choice input:focus-visible + span {
+  outline: 2px solid var(--lane-color);
+  outline-offset: 2px;
+}
+.instrument-fader-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.instrument-fader-heading > label {
+  color: #646b62;
+  font-size: 9px;
+  letter-spacing: 0.03em;
+}
+.instrument-value {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: #787f74;
+  font-size: 9px;
+}
+.sequencer-tab-panel .instrument-value input {
+  width: 34px;
+  height: 24px;
+  padding: 0 2px;
+  border-color: transparent;
+  background: transparent;
+  text-align: right;
+  appearance: textfield;
+  font-size: 11px;
+}
+.instrument-value input::-webkit-inner-spin-button,
+.instrument-value input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.sequencer-tab-panel .instrument-value input:focus {
+  border-color: var(--lane-color);
+  background: #fff;
+}
+.instrument-value button {
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  font-size: 12px;
+  border-color: transparent;
+  background: transparent;
+}
+.instrument-value button:hover:not(:disabled) {
+  border-color: #b7bdb4;
+}
+.sequencer-tab-panel .instrument-fader input[type='range'] {
+  display: block;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: ew-resize;
+}
+.instrument-fader input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  background: linear-gradient(
+    to right,
+    #cdd3c8 0 var(--fader-start),
+    var(--lane-color) var(--fader-start) var(--fader-end),
+    #cdd3c8 var(--fader-end) 100%
+  );
+}
+.instrument-fader input[type='range']::-moz-range-track {
+  height: 4px;
+  background: linear-gradient(
+    to right,
+    #cdd3c8 0 var(--fader-start),
+    var(--lane-color) var(--fader-start) var(--fader-end),
+    #cdd3c8 var(--fader-end) 100%
+  );
+}
+.instrument-fader input[type='range']::-webkit-slider-thumb {
+  width: 10px;
+  height: 16px;
+  margin-top: -6px;
+  border: 1px solid #90988a;
+  border-radius: 2px;
+  background: #fafbf8;
+}
+.instrument-fader input[type='range']::-moz-range-thumb {
+  width: 10px;
+  height: 16px;
+  border: 1px solid #90988a;
+  border-radius: 2px;
+  background: #fafbf8;
+}
+.instrument-fader input[type='range']:focus-visible {
+  outline: 2px solid var(--lane-color);
+  outline-offset: 2px;
+}
+.instrument-fader-scale {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+}
+.instrument-fader[data-disabled] {
+  opacity: 0.4;
+}
+.instrument-rhythm-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.instrument-rhythm-summary strong {
+  color: var(--lane-color);
+  font-size: 25px;
+  font-weight: 400;
+}
+.instrument-rhythm-summary small {
+  color: #90978a;
+  font-size: 15px;
+}
+.contour-position-display {
+  color: var(--lane-color);
+}
+.contour-position-display svg {
+  display: block;
+  width: 100%;
+  height: 84px;
+}
+.contour-position-display text {
+  fill: #63695f;
+  font-size: 10px;
+}
+.slice-window-display {
+  width: 100%;
+  height: 36px;
+  color: var(--lane-color);
+}
+@media (max-width: 1100px) {
+  .lane-control-rack {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .lane-control-rack > fieldset:last-of-type {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 540px) {
+  .lane-control-rack {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

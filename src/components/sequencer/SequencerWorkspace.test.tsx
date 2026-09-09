@@ -153,17 +153,78 @@ describe('sequencer workspace', () => {
     await user.click(screen.getByRole('tab', { name: 'Sound' }));
     await user.selectOptions(screen.getByLabelText('Contour pluck oscillator waveform'), 'square');
     fireEvent.change(screen.getByLabelText('Contour pluck envelope attack'), {
-      target: { value: '0.25' },
+      target: { value: '250' },
     });
+    fireEvent.blur(screen.getByLabelText('Contour pluck envelope attack'));
     fireEvent.change(screen.getByLabelText('Contour pluck brightness'), {
       target: { value: '80' },
     });
+
+    fireEvent.blur(screen.getByLabelText('Contour pluck brightness'));
 
     expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
       { type: 'lane-oscillator', laneId: 'melody-1', oscillator: 'square' },
       { type: 'lane-attack', laneId: 'melody-1', value: 0.25 },
       { type: 'lane-brightness', laneId: 'melody-1', value: 80 },
     ]);
+    document.removeEventListener('sequencercommand', onCommand);
+  });
+
+  it('adjusts knobs with keyboard limits without triggering transport commands', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+    await user.click(screen.getByRole('tab', { name: 'Sound' }));
+    const knob = screen.getByRole('slider', { name: 'Contour pluck envelope attack knob' });
+    fireEvent.keyDown(knob, { key: 'ArrowRight' });
+    fireEvent.keyDown(knob, { key: 'Home' });
+    fireEvent.keyDown(knob, { key: 'End' });
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'lane-attack', laneId: 'melody-1', value: 0.005 },
+      { type: 'lane-attack', laneId: 'melody-1', value: 0.001 },
+      { type: 'lane-attack', laneId: 'melody-1', value: 2 },
+    ]);
+    document.removeEventListener('sequencercommand', onCommand);
+  });
+
+  it('keeps rounded values unchanged on focus and supports cancelling or clamping drafts', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('sequencerstatechange', {
+          detail: { ...state, lanes: [{ ...state.lanes[0], attack: 0.123645 }] },
+        }),
+      ),
+    );
+    await user.click(screen.getByRole('tab', { name: 'Sound' }));
+    const input = screen.getByLabelText('Contour pluck envelope attack');
+    expect(input).toHaveValue(124);
+    await user.click(input);
+    await user.tab();
+    expect(onCommand).not.toHaveBeenCalled();
+    await user.click(input);
+    fireEvent.change(input, { target: { value: '9999' } });
+    fireEvent.keyDown(input, { key: 'Escape' });
+    await user.tab();
+    expect(input).toHaveValue(124);
+    expect(onCommand).not.toHaveBeenCalled();
+    await user.click(input);
+    fireEvent.change(input, { target: { value: '' } });
+    await user.tab();
+    expect(onCommand).not.toHaveBeenCalled();
+    await user.click(input);
+    fireEvent.change(input, { target: { value: '9999' } });
+    await user.keyboard('{Enter}');
+    expect((onCommand.mock.calls.at(-1)?.[0] as CustomEvent).detail).toEqual({
+      type: 'lane-attack',
+      laneId: 'melody-1',
+      value: 2,
+    });
     document.removeEventListener('sequencercommand', onCommand);
   });
 
@@ -242,10 +303,10 @@ describe('sequencer workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Play sequencer' }));
     await user.click(screen.getByRole('button', { name: 'Contour pluck step 1: hit, MIDI 60' }));
     await user.click(screen.getByRole('button', { name: 'Mute' }));
-    await user.selectOptions(screen.getByLabelText('Contour pluck lane type'), 'drum');
+    await user.click(screen.getByRole('radio', { name: 'Contour pluck lane type: Drum' }));
     await user.selectOptions(screen.getByLabelText('Contour pluck preset'), 'body-bass');
     await user.selectOptions(screen.getByLabelText('Contour pluck variation'), 'accent');
-    await user.selectOptions(screen.getByLabelText('Contour pluck clock divider'), '1/8');
+    await user.click(screen.getByRole('radio', { name: 'Contour pluck clock divider: 1/8' }));
     await user.selectOptions(screen.getByLabelText('MIDI export bars'), '8');
     await user.click(screen.getByRole('button', { name: 'MIDI' }));
 
@@ -297,6 +358,78 @@ describe('sequencer workspace', () => {
     document.removeEventListener('sequencerpreviewchange', onPreview);
   });
 
+  it('publishes rhythm faders and fit-cycle choices, and reflects new pulse limits', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() => document.dispatchEvent(new CustomEvent('sequencerstatechange', { detail: state })));
+    fireEvent.change(screen.getByRole('slider', { name: 'Contour pluck steps slider' }), {
+      target: { value: '8' },
+    });
+    await user.click(screen.getByRole('button', { name: 'Increase Contour pluck pulses' }));
+    await user.click(screen.getByRole('radio', { name: 'Contour pluck fit cycle: 2 bars' }));
+    expect(onCommand.mock.calls.map(([event]) => (event as CustomEvent).detail)).toEqual([
+      { type: 'lane-steps', laneId: 'melody-1', value: 8 },
+      { type: 'lane-pulses', laneId: 'melody-1', value: 3 },
+      { type: 'lane-clock-division', laneId: 'melody-1', division: 'fit-2' },
+    ]);
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('sequencerstatechange', {
+          detail: {
+            ...state,
+            lanes: [{ ...state.lanes[0], steps: 1, pulses: 1, clockDivision: 'fit-2' }],
+          },
+        }),
+      ),
+    );
+    expect(screen.getByRole('slider', { name: 'Contour pluck pulses slider' })).toHaveAttribute(
+      'max',
+      '1',
+    );
+    expect(screen.getByRole('button', { name: 'Increase Contour pluck pulses' })).toBeDisabled();
+    expect(screen.getByRole('radio', { name: 'Contour pluck fit cycle: 2 bars' })).toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: 'Contour pluck clock divider: 1/16' }),
+    ).not.toBeChecked();
+    document.removeEventListener('sequencercommand', onCommand);
+  });
+
+  it('keeps range endpoints ordered and disables warp editing for uniform travel', async () => {
+    const user = userEvent.setup();
+    const onCommand = vi.fn();
+    document.addEventListener('sequencercommand', onCommand);
+    render(<SequencerWorkspace />);
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('sequencerstatechange', {
+          detail: {
+            ...state,
+            lanes: [{ ...state.lanes[0], traversalStart: 30, traversalEnd: 60 }],
+          },
+        }),
+      ),
+    );
+    await user.click(screen.getByRole('tab', { name: 'Shape mapping' }));
+    expect(
+      screen.getByRole('slider', { name: 'Contour pluck traversal modulation amount slider' }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole('slider', { name: 'Contour pluck slice range start slider' }),
+    ).toHaveAttribute('max', '60');
+    const end = screen.getByRole('spinbutton', { name: 'Contour pluck slice range end' });
+    await user.click(end);
+    fireEvent.change(end, { target: { value: '0' } });
+    await user.keyboard('{Enter}');
+    expect((onCommand.mock.calls.at(-1)?.[0] as CustomEvent).detail).toEqual({
+      type: 'lane-traversal-end',
+      laneId: 'melody-1',
+      value: 30,
+    });
+    document.removeEventListener('sequencercommand', onCommand);
+  });
+
   it('publishes slice traversal and geometry modulation changes', async () => {
     const user = userEvent.setup();
     const onCommand = vi.fn();
@@ -306,27 +439,33 @@ describe('sequencer workspace', () => {
 
     await user.click(screen.getByRole('tab', { name: 'Shape mapping' }));
 
-    await user.selectOptions(
-      screen.getByLabelText('Contour pluck slice travel direction'),
-      'reverse',
+    await user.click(
+      screen.getByRole('radio', { name: 'Contour pluck slice travel direction: Reverse ←' }),
     );
-    fireEvent.change(screen.getByLabelText('Contour pluck slice range start'), {
+    fireEvent.change(screen.getByLabelText('Contour pluck slice range start slider'), {
       target: { value: '20' },
     });
-    fireEvent.change(screen.getByLabelText('Contour pluck slice range end'), {
+    fireEvent.change(screen.getByLabelText('Contour pluck slice range end slider'), {
       target: { value: '80' },
     });
-    fireEvent.change(screen.getByLabelText('Contour pluck position around contour'), {
+    fireEvent.change(screen.getByLabelText('Contour pluck position around contour slider'), {
       target: { value: '72' },
     });
     await user.selectOptions(
       screen.getByLabelText('Contour pluck traversal geometry modulation'),
       'roughness',
     );
-    fireEvent.change(screen.getByLabelText('Contour pluck traversal modulation amount'), {
+    act(() =>
+      document.dispatchEvent(
+        new CustomEvent('sequencerstatechange', {
+          detail: { ...state, lanes: [{ ...state.lanes[0], modulationSource: 'roughness' }] },
+        }),
+      ),
+    );
+    fireEvent.change(screen.getByLabelText('Contour pluck traversal modulation amount slider'), {
       target: { value: '-65' },
     });
-    fireEvent.change(screen.getByLabelText('Contour pluck contour influence'), {
+    fireEvent.change(screen.getByLabelText('Contour pluck contour influence slider'), {
       target: { value: '75' },
     });
 
