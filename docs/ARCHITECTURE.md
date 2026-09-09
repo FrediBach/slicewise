@@ -2,6 +2,8 @@
 
 This document describes the maintained Vite/React application under `src`. The root-level `slicewise.html` is a historical prototype and is not part of the production module graph.
 
+For a talk-focused explanation with source excerpts, line references, Mermaid diagrams, and the problems solved by the worker/WASM setup, see [Web Workers and WASM in Slicewise](./WORKERS_AND_WASM.md).
+
 ## Design goals
 
 Slicewise is organized around four constraints:
@@ -205,12 +207,14 @@ Every render request carries an explicit detached settings snapshot, quick/exact
 
 The runtime publishes the latest timing samples through the browser Performance API as `slicewise:render:queue`, `slicewise:render:worker-roundtrip`, `slicewise:render:dom-apply`, and `slicewise:render:end-to-paint`. The visible Render statistic remains the contour engine's worker computation time.
 
-There are two worker entry points:
+There are three application worker entry points and one separate developer-trial worker:
 
 - `slicer-worker.ts` for contour computation.
-- `generative-mesh-worker.ts` for implicit-surface generation.
+- `generative-mesh-worker.ts` for implicit-surface and terrain generation.
+- `three-d-worker.ts` for physical previews, explicit WASM preparation, audits, and STL/3MF packaging.
+- `three-d-feasibility-worker.ts` for the separate local geometry-kernel trial.
 
-Both return structured errors instead of throwing across the worker boundary.
+All return structured errors instead of throwing across the worker boundary. The application 3D worker loads Manifold WASM only for explicit preparation; the developer-trial worker initializes it on startup.
 
 ## Adding functionality
 
