@@ -1,4 +1,4 @@
-import type { AppState } from '../slicer';
+import type { AppState } from '../app-state';
 import type { AnimationProject } from '../animation-project';
 import type { SequencerProject } from '../sequencer-project';
 import type { ThreeDProject } from '../three-d-project';

@@ -1,5 +1,23 @@
 'use strict';
 
+import { createPresetAsset, resolvePresetAssets } from './presets/assets';
+import {
+  createWorkspaceCodecs,
+  defaultThreeDPresentation,
+  ownedSettings,
+  prepareWorkspace,
+  renderSettingsForPreset,
+  type PresetSchemaContext,
+  type PresetWorkspace,
+  type ThreeDPresentation,
+  type ReadyWorkspace,
+} from './presets/workspace';
+import { updatePreparedPreset } from './presets/sections';
+import { preparePresetSource, type SourceAssetBytes, type PreparedSource } from './presets/source';
+import type { PresetRequest } from './presets/bridge';
+import { PRESET_SECTIONS, type PresetDocument, type JsonValue } from './presets/types';
+import { appStatePresetOwnership } from './presets/inventory';
+import { BUILTIN_SOURCES } from './builtin-sources';
 import { proceduralSourceKey } from './procedural-source';
 import { isMorphColor } from './morph-parameters';
 
@@ -28,44 +46,26 @@ import {
   objectHasTransform,
 } from './object-settings';
 
-import { SLICE_RAY_CONTROLS, SLICE_RAY_DEFAULTS, sliceRaysSupported } from './slice-rays-settings';
+import { SLICE_RAY_CONTROLS, sliceRaysSupported } from './slice-rays-settings';
 
-import {
-  WEAVE_CONTROLS,
-  WEAVE_DEFAULTS,
-  WEAVE_PATTERNS,
-  WEAVE_OUTPUTS,
-} from './contour-weave-settings';
+import { WEAVE_CONTROLS, WEAVE_PATTERNS, WEAVE_OUTPUTS } from './contour-weave-settings';
 
-import { WEATHER_COLOR_CONTROLS, resolveWeatherColors } from './weather-bands';
-import { MAP_CONTROLS, MAP_DEFAULTS } from './map-settings';
+import { WEATHER_COLOR_CONTROLS } from './weather-bands';
+import { MAP_CONTROLS } from './map-settings';
 import { createColorGradient, createColorPair } from './colorPair';
 import { contourTrackPoint, type ContourSequenceSource } from './contour-features';
 import {
   type ContourMesh,
   type ContourResult,
   type ContourSettings,
-  type ContourToolpathGroup,
   type GradientStop,
   type LineIndexColor,
 } from './contour-engine';
-import { TERRAIN_CONTROLS, TERRAIN_DEFAULTS, type TerrainParams } from './generative-terrain';
-import { GEN_DEFAULTS, type GeneratedMesh, type GenerativeParams } from './generativeMesh';
-import {
-  generateHyperbolicTiling,
-  HYPERBOLIC_TILING_DEFAULTS,
-  isHyperbolicPair,
-} from './hyperbolic-tiling';
-import {
-  radialColumnDemo,
-  radishDemo,
-  roundedDemo,
-  ringTorus,
-  sphereDemo,
-  tetrapodDemo,
-  torusKnot,
-} from './demo-meshes';
-import { parseOBJ, parsePLY, parseSTL, vertexNormals, weld } from './mesh';
+import { TERRAIN_CONTROLS, type TerrainParams } from './generative-terrain';
+import { type GeneratedMesh, type GenerativeParams } from './generativeMesh';
+import { generateHyperbolicTiling, isHyperbolicPair } from './hyperbolic-tiling';
+
+import { vertexNormals, weld } from './mesh';
 import {
   initialPreviewPerformance,
   observePreviewPerformance,
@@ -88,8 +88,8 @@ import { setDisabled, setDisabledPair } from './control-state';
 import { createRenderSettingsSnapshot } from './render-settings';
 import { ParameterHistory } from './parameter-history';
 import { normalizeParameterSnapshot } from './parameter-migrations';
-import { DEFAULT_GCODE_PROFILE_ID, resolveGCodeProfile } from './gcode-profiles';
-import { defaultUunaExpressiveMotion, type UunaExpressiveMotion } from './gcode-3d-toolpaths';
+import { resolveGCodeProfile } from './gcode-profiles';
+import { type UunaExpressiveMotion } from './gcode-3d-toolpaths';
 import {
   clearSurfacePlanePreset,
   defaultSurfacePlane,
@@ -191,55 +191,14 @@ import { WebAudioEngine } from './web-audio-engine';
 import { exportSequencerMidi, sequencerMidiFilename } from './midi-sequence-export';
 import { loadSequencerProject, saveSequencerProject } from './sequencer-storage';
 
-type RawMesh = {
-  verts: Float32Array | Float64Array;
-  tris: Uint32Array;
-};
-
-type RenderMesh = ContourMesh & {
-  V: Float32Array;
-  T: Uint32Array;
-  N: Float32Array;
-  lineArt?: { offsets: Uint32Array; kind?: 'svg' | 'hyperbolic-tiling' };
-};
-type NormalizedMesh = Omit<RenderMesh, 'N'> & { N?: Float32Array };
-
-type RenderSettings = Omit<ContourSettings, 'documentTitle' | 'suppressBackground'>;
-export type AppState = RenderSettings &
-  GenerativeParams &
-  TerrainParams & {
-    mesh: RenderMesh | null;
-    name: string;
-    source: string;
-    upY: boolean;
-    svgSource: string | null;
-    svgSourceName: string;
-    svgDepth: number;
-    svgRounded: boolean;
-    svgRoundness: number;
-    svgMode: 'extrude' | 'centerline';
-    svgCenterlinePruning: number;
-    tilingP: number;
-    tilingQ: number;
-    tilingDepth: number;
-    tilingDiskScale: number;
-    exportFormat: string;
-    gcodeProfile: string;
-    gcodeAutoRotate: boolean;
-    drawFeed: number;
-    travelFeed: number;
-    optimizeTravel: boolean;
-    mergeTolerance: number;
-    penUp: number;
-    penDown: number;
-    zFeed: number;
-    uunaExpressiveMotion: UunaExpressiveMotion;
-    svg: string;
-    svgBytes: number;
-    toolpaths: ContourToolpathGroup[];
-    sequenceSource: ContourSequenceSource | null;
-    dragging: boolean;
-  };
+import {
+  createInitialAppState,
+  type AppState,
+  type RawMesh,
+  type RenderMesh,
+  type NormalizedMesh,
+} from './app-state';
+export type { AppState } from './app-state';
 
 type RenderRequest = RenderRequestOptions & {
   id: number;
@@ -313,259 +272,16 @@ const previewBackground = (
       : settings.backgroundColor;
 
 /* =================================================================== app */
-const state: AppState = {
-  mesh: null,
-  name: 'demo · torus knot',
-  source: 'knot',
-  upY: false,
-  svgSource: null,
-  svgSourceName: '',
-  svgDepth: 12,
-  svgRounded: false,
-  svgRoundness: 25,
-  svgMode: 'extrude',
-  svgCenterlinePruning: 2,
-  ...HYPERBOLIC_TILING_DEFAULTS,
-  ...GEN_DEFAULTS,
-  ...TERRAIN_DEFAULTS,
-  az: 35,
-  el: 24,
-  roll: 0,
-  zoom: 1,
-  panX: 0,
-  panY: 0,
-  lensFocalLength: 50,
-  lensPerspective: 0,
-  lensWarpExponent: 0,
-  lensDistortion: 0,
-  projectionWarpMode: 'none',
-  mobiusDirection: 0,
-  mobiusDisplacement: 0,
-  mobiusRotation: 0,
-  mobiusStrength: 100,
-  sphericalStrength: 100,
-  inversionCenterX: 0,
-  inversionCenterY: 0,
-  inversionRadius: 50,
-  inversionStrength: 100,
-  lines: 40,
-  gapEase: 'linear',
-  easeStrength: 100,
-  easeCycles: 1,
-  easeCenter: 50,
-  quality: 7,
-  svgSlicePaths: [],
-  svgSliceScale: 100,
-  svgSliceX: 0,
-  svgSliceY: 0,
-  svgSliceRotation: 0,
-  axis: 'up',
-  cutAz: 0,
-  cutEl: 90,
-  waveCenterX: 0,
-  waveCenterY: 0,
-  waveCenterZ: 0,
-  cylinderAzimuth: 0,
-  cylinderElevation: 90,
-  geodesicSeedAzimuth: 0,
-  geodesicSeedElevation: 90,
-  geodesicMode: 'single',
-  geodesicSeedBAzimuth: 0,
-  geodesicSeedBElevation: -90,
-  curvatureMethod: 'gaussian',
-  curvatureSmoothing: 2,
-  curvatureRange: 98,
-  curvatureContrast: 100,
-  curvatureIncludeZero: true,
-  divergence: 0,
-  sliceLfo: false,
-  sliceLfoAmplitude: 75,
-  sliceLfoCycles: 2,
-  sliceLfoAngle: 0,
-  sliceLfoPhase: 0,
-  sliceLfoWaveform: 'sine',
-  sliceLfoModulation: false,
-  sliceLfoModulationMode: 'amplitude',
-  sliceLfoModulationDepth: 50,
-  sliceLfoModulationCycles: 1,
-  sliceLfoModulationPhase: 0,
-  explodeAmount: 0,
-  blockGlitch: false,
-  blockGlitchCount: 3,
-  blockGlitchWidth: 18,
-  blockGlitchHeight: 6,
-  blockGlitchDisplacement: 8,
-  blockGlitchDirection: 'horizontal',
-  blockGlitchClearDestination: false,
-  blockGlitchSeed: 1,
-  scanBandGlitch: false,
-  scanBandGlitchCount: 12,
-  scanBandGlitchThickness: 55,
-  scanBandGlitchDisplacement: 6,
-  scanBandGlitchDensity: 50,
-  scanBandGlitchOrientation: 'horizontal',
-  scanBandGlitchSeed: 2,
-  staggeredSlices: false,
-  staggeredSlicesCount: 12,
-  staggeredSlicesExtent: 70,
-  staggeredSlicesDisplacement: 10,
-  staggeredSlicesOrientation: 'horizontal',
-  staggeredSlicesPattern: 'ramp',
-  staggeredSlicesSeed: 3,
-  wraparoundTear: false,
-  wraparoundTearOrientation: 'horizontal',
-  wraparoundTearPosition: 50,
-  wraparoundTearSize: 18,
-  wraparoundTearShift: 20,
-  tileShuffle: false,
-  tileShuffleRows: 4,
-  tileShuffleColumns: 4,
-  tileShuffleExtent: 80,
-  tileShuffleAffected: 50,
-  tileShuffleSeed: 4,
-  ...WEAVE_DEFAULTS,
-  ...SLICE_RAY_DEFAULTS,
-  ...OBJECT_DEFAULTS,
-  sampleAndHold: false,
-  sampleAndHoldAxis: 'y',
-  sampleAndHoldSpacing: 2,
-  sampleAndHoldLength: 4,
-  sampleAndHoldMix: 100,
-  misregistration: false,
-  misregistrationCopies: 2,
-  misregistrationOffset: 2,
-  misregistrationRotation: 0.5,
-  misregistrationScope: 'contours',
-  misregistrationColor1: '#00a7e1',
-  misregistrationColor2: '#ec008c',
-  misregistrationColor3: '#ffd400',
-  kaleidoscope: false,
-  kaleidoscopeSegments: 6,
-  kaleidoscopeRotation: 0,
-  vectorZoom1Enabled: false,
-  vectorZoom1Shape: 'rectangle',
-  vectorZoom1CenterX: 45,
-  vectorZoom1CenterY: 45,
-  vectorZoom1Width: 20,
-  vectorZoom1Height: 20,
-  vectorZoom1Corner: 'top-right',
-  vectorZoom1Size: 30,
-  vectorZoom1Margin: 14,
-  vectorZoom1Color: '#15181a',
-  vectorZoom2Enabled: false,
-  vectorZoom2Shape: 'rectangle',
-  vectorZoom2CenterX: 55,
-  vectorZoom2CenterY: 45,
-  vectorZoom2Width: 20,
-  vectorZoom2Height: 20,
-  vectorZoom2Corner: 'top-left',
-  vectorZoom2Size: 30,
-  vectorZoom2Margin: 14,
-  vectorZoom2Color: '#15181a',
-  vectorZoom3Enabled: false,
-  vectorZoom3Shape: 'circle',
-  vectorZoom3CenterX: 45,
-  vectorZoom3CenterY: 55,
-  vectorZoom3Width: 20,
-  vectorZoom3Height: 20,
-  vectorZoom3Corner: 'bottom-right',
-  vectorZoom3Size: 30,
-  vectorZoom3Margin: 14,
-  vectorZoom3Color: '#15181a',
-  vectorZoom4Enabled: false,
-  vectorZoom4Shape: 'circle',
-  vectorZoom4CenterX: 55,
-  vectorZoom4CenterY: 55,
-  vectorZoom4Width: 20,
-  vectorZoom4Height: 20,
-  vectorZoom4Corner: 'bottom-left',
-  vectorZoom4Size: 30,
-  vectorZoom4Margin: 14,
-  vectorZoom4Color: '#15181a',
-  spiral: false,
-  hide: true,
-  sil: true,
-  sw: 0.35,
-  lineWeightMode: 'uniform',
-  lineWeightInterval: 5,
-  lineWeightAmount: 100,
-  color: '#15181a',
-  backgroundColor: '#ffffff',
-  pw: 210,
-  ph: 210,
-  margin: 14,
-  clipToArtboard: true,
-  maskEnabled: false,
-  maskOutline: false,
-  maskRoundness: 100,
-  maskScaleX: 100,
-  maskScaleY: 100,
-  maskOffsetX: 0,
-  maskOffsetY: 0,
-  maskLfo1Amplitude: 0,
-  maskLfo1Cycles: 3,
-  maskLfo1Phase: 0,
-  maskLfo1Waveform: 0,
-  maskLfo2Amplitude: 0,
-  maskLfo2Cycles: 5,
-  maskLfo2Phase: 90,
-  maskLfo2Waveform: 0,
-  bg: true,
-  gradientEnabled: false,
-  gradientColors: 6,
-  gradientStops: [
-    { position: 0, color: '#ef4444' },
-    { position: 0.2, color: '#f59e0b' },
-    { position: 0.4, color: '#84cc16' },
-    { position: 0.6, color: '#06b6d4' },
-    { position: 0.8, color: '#3b82f6' },
-    { position: 1, color: '#8b5cf6' },
-  ],
-  lineIndexColorEnabled: false,
-  lineIndexColors: [{ index: 1, color: '#ef4444', series: 'single', reverse: false }],
-  weatherBands: false,
-  ...resolveWeatherColors({}),
-  halftone: false,
-  halftoneSize: 2.4,
-  halftoneContrast: 75,
-  halftoneCycles: 2,
-  chroma: false,
-  chromaAmount: 1.5,
-  humanizer: false,
-  humanizerAmount: 30,
-  yarnCurl: false,
-  yarnCutPercent: 15,
-  yarnCurlSize: 100,
-  blueprint: false,
-  blueprintStyle: 'blue',
-  topographicMap: false,
-  ...MAP_DEFAULTS,
-  morphEnabled: false,
-  morphSteps: 4,
-  morphTargets: {},
-  morphSecondEnabled: false,
-  morphStepsY: 4,
-  morphTargets2: {},
-  exportFormat: 'svg',
-  gcodeProfile: DEFAULT_GCODE_PROFILE_ID,
-  gcodeAutoRotate: true,
-  drawFeed: 3000,
-  travelFeed: 6000,
-  optimizeTravel: true,
-  mergeTolerance: 0.15,
-  penUp: 0,
-  penDown: -3,
-  zFeed: 2000,
-  uunaExpressiveMotion: defaultUunaExpressiveMotion(),
-  svg: '',
-  svgBytes: 0,
-  toolpaths: [],
-  sequenceSource: null,
-  dragging: false,
-};
+const state = createInitialAppState();
 const dynamicState = state as unknown as Record<string, unknown>;
 
 if (typeof document !== 'undefined') {
+  let presetTransaction = false;
+  let presetAnimationIndependent = false;
+  let originalSourceFile: SourceAssetBytes | null = null;
+  let sourceReadPending = false;
+  let sourceLoadVersion = 0;
+
   function setControlPairDisabled(id: string, disabled: boolean, reason = ''): void {
     setDisabledPair($<HTMLInputElement>(id), $<HTMLInputElement>(id + 'N'), disabled, reason);
     const row = document.getElementById(id + 'Control');
@@ -779,6 +495,7 @@ if (typeof document !== 'undefined') {
     else requestAnimationFrame(dispatchRender);
   }
   function requestRender(options: RenderRequestOptions): number | null {
+    if (presetTransaction) return null;
     // Preserve a queued final-quality request; otherwise only the latest input
     // matters. This coalesces pointer and slider events while the worker is busy.
     const quality = coalesceRenderQuality(options.quality, options.purpose, queuedRender);
@@ -1084,6 +801,9 @@ if (typeof document !== 'undefined') {
     }
   }
   function loadHyperbolicTiling(announce = true): void {
+    sourceLoadVersion++;
+    sourceReadPending = false;
+    presetAnimationIndependent = false;
     state.source = 'hyperbolic-tiling';
     state.svgSource = null;
     state.svgSourceName = '';
@@ -1103,26 +823,11 @@ if (typeof document !== 'undefined') {
 
   let rawCache: RawMesh | null = null; // keep the parsed-but-unoriented mesh so "up axis" can flip live
   const demoCache = new Map<string, RawMesh>();
-  type DemoDefinition = { name: string; create: () => RawMesh };
-  const demos: Record<string, DemoDefinition> = {
-    knot: { name: 'demo · torus knot', create: () => torusKnot() },
-    ripple: { name: 'demo · ripple sphere', create: () => sphereDemo('ripple') },
-    cube: { name: 'demo · rounded cube', create: () => sphereDemo('cube') },
-    pyramid: { name: 'demo · rounded pyramid', create: () => roundedDemo('pyramid') },
-    'twin-balls': { name: 'demo · twin balls', create: () => roundedDemo('twin-balls') },
-    pebble: { name: 'demo · pebble', create: () => roundedDemo('pebble') },
-    'rounded-cylinder': {
-      name: 'demo · rounded cylinder',
-      create: () => roundedDemo('rounded-cylinder'),
-    },
-    diamond: { name: 'demo · soft diamond', create: () => sphereDemo('diamond') },
-    torus: { name: 'demo · ring torus', create: () => ringTorus() },
-    twist: { name: 'demo · twisted bloom', create: () => radialColumnDemo('twist') },
-    hourglass: { name: 'demo · hourglass', create: () => radialColumnDemo('hourglass') },
-    tetrapod: { name: 'demo · tetrapod', create: () => tetrapodDemo() },
-    radish: { name: 'demo · radish', create: () => radishDemo() },
-  };
+  const demos = BUILTIN_SOURCES;
   function loadDemo(id: string, announce = true): void {
+    sourceLoadVersion++;
+    sourceReadPending = false;
+    presetAnimationIndependent = false;
     const demo = demos[id];
     if (!demo) return;
     if (!demoCache.has(id)) demoCache.set(id, demo.create());
@@ -1140,66 +845,76 @@ if (typeof document !== 'undefined') {
     if (announce) toast('Loaded ' + demo.name.replace('demo · ', ''));
   }
   function loadFile(file: File): void {
-    const ext = (file.name.split('.').pop() || '').toLowerCase();
+    const version = ++sourceLoadVersion;
+    sourceReadPending = true;
     const reader = new FileReader();
     reader.onload = async () => {
+      if (version !== sourceLoadVersion) return;
       try {
-        let raw: RawMesh;
-        if (ext === 'svg') {
-          const text = new TextDecoder().decode(new Uint8Array(reader.result as ArrayBuffer));
-          state.svgSource = text;
-          state.svgSourceName = file.name;
-          state.source = 'upload';
-          cancelGeneration();
-          setSelectValue('demo', 'upload');
-          state.upY = false;
-          $('upZ').setAttribute('aria-pressed', 'true');
-          $('upY').setAttribute('aria-pressed', 'false');
-          syncSourceControls();
-          if (state.svgMode === 'centerline') {
-            const centerlines = await globalThis.slicewiseParseSVGCenterlines!(
-              text,
-              state.svgCenterlinePruning,
-            );
-            setCenterlineView();
-            setCenterlines(centerlines, file.name);
-            toast('Loaded ' + file.name + ' as a centreline');
-            return;
-          }
-          raw = await globalThis.slicewiseParseSVG!(
-            text,
-            state.svgDepth,
-            state.svgRounded,
-            state.svgRoundness,
-          );
-        } else if (ext === 'stl') raw = parseSTL(reader.result as ArrayBuffer);
-        else if (ext === 'obj')
-          raw = parseOBJ(new TextDecoder().decode(new Uint8Array(reader.result as ArrayBuffer)));
-        else if (ext === 'ply') raw = parsePLY(reader.result as ArrayBuffer);
-        else throw new Error('Unsupported format: .' + ext + ' — use STL, OBJ, PLY or SVG');
-        if (!raw.tris.length) throw new Error('No triangles found in ' + file.name);
-        if (ext !== 'svg') {
-          state.svgSource = null;
-          state.svgSourceName = '';
-        }
-        rawCache = raw;
-        state.source = 'upload';
+        const extension = file.name.split('.').pop()?.toLowerCase();
+        const settings = {
+          ...state,
+          source: 'upload',
+          upY: extension === 'obj' || extension === 'ply',
+        };
+        const asset = { name: file.name, bytes: new Uint8Array(reader.result as ArrayBuffer) };
+        const prepared = await preparePresetSource(settings, asset, {
+          svg: (...args) => globalThis.slicewiseParseSVG!(...args),
+          centerlines: (...args) => globalThis.slicewiseParseSVGCenterlines!(...args),
+          generated: async () => {
+            throw new Error('An uploaded file cannot use a generator.');
+          },
+        });
+        if (version !== sourceLoadVersion) return;
+        if (
+          settings.svgMode !== state.svgMode ||
+          settings.svgDepth !== state.svgDepth ||
+          settings.svgRounded !== state.svgRounded ||
+          settings.svgRoundness !== state.svgRoundness ||
+          settings.svgCenterlinePruning !== state.svgCenterlinePruning
+        )
+          throw new Error('Source options changed while loading. Please choose the file again.');
         cancelGeneration();
+        presetAnimationIndependent = false;
+        originalSourceFile = asset;
+        rawCache = prepared.raw;
+        state.source = 'upload';
+        state.upY = settings.upY;
+        state.svgSource = prepared.svg;
+        state.svgSourceName = prepared.svg ? file.name : '';
+        state.name = file.name;
+        state.mesh = prepared.mesh;
         setSelectValue('demo', 'upload');
-        // OBJ and PLY usually ship Y-up; STL is almost always Z-up
-        const guessY = ext === 'obj' || ext === 'ply';
-        state.upY = guessY;
-        $('upZ').setAttribute('aria-pressed', String(!guessY));
-        $('upY').setAttribute('aria-pressed', String(guessY));
+        $('upZ').setAttribute('aria-pressed', String(!state.upY));
+        $('upY').setAttribute('aria-pressed', String(state.upY));
+        if (prepared.mesh.lineArt) setCenterlineView();
         syncSourceControls();
-        setMesh(raw, file.name);
+        syncWeaveControls();
+        sendMeshToWorker(prepared.mesh);
+        $('mName').textContent = file.name;
+        $('mName').title = '';
+        $('mTris').textContent = (
+          prepared.mesh.lineArt
+            ? prepared.mesh.lineArt.offsets.length - 1
+            : prepared.mesh.T.length / 3
+        ).toLocaleString();
+        $('mUnits').textContent = prepared.mesh.lineArt ? 'centreline paths' : 'triangles';
+        $('mErr').hidden = true;
+        redraw(false);
+        markPresetDirty();
         toast('Loaded ' + file.name);
-      } catch (e) {
-        showError(errorMessage(e));
+      } catch (error) {
+        if (version === sourceLoadVersion) showError(errorMessage(error));
+      } finally {
+        if (version === sourceLoadVersion) sourceReadPending = false;
       }
     };
-    reader.onerror = () =>
-      showError("Could not read that file — check it isn't open in another program");
+    reader.onerror = () => {
+      if (version === sourceLoadVersion) {
+        sourceReadPending = false;
+        showError('Could not read that source file.');
+      }
+    };
     reader.readAsArrayBuffer(file);
   }
 
@@ -1280,6 +995,9 @@ if (typeof document !== 'undefined') {
     generationTimer = setTimeout(dispatchGeneration, delay);
   }
   function loadGenerative(announce = true, source: 'generative' | 'terrain' = 'generative'): void {
+    sourceLoadVersion++;
+    sourceReadPending = false;
+    presetAnimationIndependent = false;
     state.source = source;
     state.svgSource = null;
     state.svgSourceName = '';
@@ -3020,6 +2738,7 @@ if (typeof document !== 'undefined') {
     });
     bed.addEventListener('pointermove', (e) => {
       if (!state.dragging) return;
+      markPresetDirty();
       const dx = e.clientX - sx,
         dy = e.clientY - sy;
       if (mode === 'pan') {
@@ -3102,6 +2821,7 @@ if (typeof document !== 'undefined') {
       (e) => {
         e.preventDefault();
         if (isAnimationModeActive() && !animationGestureEditable()) return;
+        markPresetDirty();
         const current = interactiveGestureSettings();
         const z = clamp(current.zoom * (e.deltaY > 0 ? 0.94 : 1.06), 0.2, 3);
         const zoom = Math.round(z * 100) / 100;
@@ -3321,7 +3041,7 @@ if (typeof document !== 'undefined') {
     'morphEnabled',
     'morphSecondEnabled',
   ];
-  const parameterHistory = new ParameterHistory<ContourSettings>({ limit: 100 });
+  let parameterHistory = new ParameterHistory<ContourSettings>({ limit: 100 });
   let parameterHistoryTimer = 0,
     restoringParameters = false;
   function cloneParameterSnapshot(): ContourSettings {
@@ -3436,11 +3156,14 @@ if (typeof document !== 'undefined') {
         },
       }),
     );
-    if (state.source === 'hyperbolic-tiling') buildHyperbolicTiling();
+    if (presetTransaction) {
+      /* The prepared source is installed once by preset restore. */
+    } else if (state.source === 'hyperbolic-tiling') buildHyperbolicTiling();
     else if (previousProceduralKey !== proceduralSourceKey(settingsSnapshot())) queueGeneration(0);
     else redraw(false);
     restoringParameters = false;
     updateHistoryButtons();
+    markPresetDirty();
   }
   function moveParameterHistory(offset: number): void {
     if (threeDMode) {
@@ -4985,7 +4708,7 @@ if (typeof document !== 'undefined') {
   function lockConfigControls(): void {
     animationLockedControls.clear();
     for (const control of document.querySelectorAll<LockableControl>(
-      '.rail input, .rail select, .rail button',
+      '.rail input:not(.preset-control), .rail select:not(.preset-control), .rail button:not(.preset-control)',
     ))
       animationLockedControls.set(control, { disabled: control.disabled, title: control.title });
     syncAnimationControlLocks();
@@ -5347,7 +5070,8 @@ if (typeof document !== 'undefined') {
     if (storedProject) animationProject = storedProject;
     const needsProject =
       !animationProject ||
-      JSON.stringify(animationProject.baseSettings) !== JSON.stringify(animationConfigSnapshot);
+      (!presetAnimationIndependent &&
+        JSON.stringify(animationProject.baseSettings) !== JSON.stringify(animationConfigSnapshot));
     if (needsProject) {
       const reducedMotion =
         window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -6281,6 +6005,471 @@ if (typeof document !== 'undefined') {
     clearTimeout(toastT);
     toastT = setTimeout(() => t.classList.remove('show'), 1900);
   }
+
+  /* --------------------------------------------------------- portable presets */
+  let workspaceRevision = 0;
+  let activePreset: ReadyWorkspace | null = null;
+  let presetUndo: PresetDocument | null = null;
+  let presetOperation = false;
+  let threeDPresentation = defaultThreeDPresentation();
+  let presetContext: PresetSchemaContext | null = null;
+  const markPresetDirty = () => {
+    if (presetTransaction) return;
+    workspaceRevision++;
+    document.dispatchEvent(new CustomEvent('presetdirty'));
+  };
+  for (const name of ['input', 'change', 'click'] as const)
+    document.addEventListener(
+      name,
+      (event) => {
+        const target = event.target;
+        if (
+          target instanceof Element &&
+          !target.closest('[data-preset-panel]') &&
+          target.closest('.rail, .workspace')
+        )
+          markPresetDirty();
+      },
+      true,
+    );
+  for (const name of [
+    'morphchange',
+    'gradientchange',
+    'lineindexcolorschange',
+    'randomlockchange',
+    'threedprojectchange',
+    'animationcommand',
+    'sequencercommand',
+    'animationmodechange',
+  ])
+    document.addEventListener(name, markPresetDirty);
+  document.addEventListener('threedpresentationchange', (event) => {
+    threeDPresentation = structuredClone((event as CustomEvent<ThreeDPresentation>).detail);
+    markPresetDirty();
+  });
+  document.addEventListener('threedpresentationrequest', (event) => {
+    (event as CustomEvent<{ value?: ThreeDPresentation }>).detail.value =
+      structuredClone(threeDPresentation);
+  });
+  function presetSchemaContext(): PresetSchemaContext {
+    if (presetContext) return presetContext;
+    const ids = new Map(historyPairs.map(([id, key]) => [key, id]));
+    const controls: PresetSchemaContext['controls'] = {};
+    for (const key of Object.keys(appStatePresetOwnership)) {
+      const id = ids.get(key as keyof ContourSettings) ?? key;
+      const element = document.getElementById(id + 'N') ?? document.getElementById(id);
+      if (element instanceof HTMLInputElement) {
+        controls[key] = {
+          min: element.min ? Number(element.min) : undefined,
+          max: element.max ? Number(element.max) : undefined,
+        };
+      } else if (element instanceof HTMLSelectElement)
+        controls[key] = { options: Array.from(element.options, (option) => option.value) };
+    }
+    presetContext = {
+      controls,
+      animationParameters,
+      sourceIds: [...Object.keys(demos), 'generative', 'terrain', 'hyperbolic-tiling', 'upload'],
+      profileIds: Array.from(
+        $<HTMLSelectElement>('gcodeProfile').options,
+        (option) => option.value,
+      ),
+      randomLockIds: Array.from(
+        document.querySelectorAll<HTMLElement>('[data-random-lock-id]'),
+        (element) => element.dataset.randomLockId!,
+      ),
+    };
+    return presetContext;
+  }
+  function currentThreeDSourceId(mesh = state.mesh!, settings = state): string {
+    const normalization = (mesh as ContourMesh & { normalization?: SourceNormalization })
+      .normalization;
+    const imported = settings.source === 'upload' && !settings.svgSource && !!normalization;
+    return `${sourceIdentity(mesh, normalization)}-${imported}-${settings.upY}`;
+  }
+  async function capturePortablePreset(includeSource = true): Promise<PresetDocument> {
+    if (!state.mesh || sourceReadPending)
+      throw new Error('Wait for the source file to finish loading.');
+    const revision = workspaceRevision;
+    const sourceVersion = sourceLoadVersion;
+    const captured = { ...state, ...(animationMode ? animationConfigSnapshot : {}) };
+    let animation = animationProject ? structuredClone(animationProject) : null;
+    if (!animation && !animationStorageLoaded)
+      animation = await loadAnimationProject(
+        animationProjectId,
+        renderSettingsForPreset(captured),
+        animationParameters,
+      );
+    if (animation) animation.baseSettings = renderSettingsForPreset(animation.baseSettings);
+    const project =
+      threeDProject?.sourceId === currentThreeDSourceId()
+        ? threeDProject
+        : (threeDProjects.get(currentThreeDSourceId()) ?? null);
+    const physical = project ? structuredClone(project) : null;
+    if (physical) {
+      delete (physical as Partial<ThreeDProject>).sourceId;
+      delete (physical as Partial<ThreeDProject>).sizeConfirmed;
+    }
+    const assets: PresetDocument['assets'] = {};
+    let assetId: string | null = null;
+    if (captured.source === 'upload') {
+      if (!originalSourceFile)
+        throw new Error('Reopen the uploaded source file before saving a portable preset.');
+      const asset = await createPresetAsset(
+        originalSourceFile.bytes,
+        originalSourceFile.name,
+        originalSourceFile.name.toLowerCase().endsWith('.svg')
+          ? 'image/svg+xml'
+          : 'application/octet-stream',
+        includeSource,
+      );
+      assetId = asset.id;
+      assets[assetId] = asset.asset;
+    }
+    const workspace: PresetWorkspace = {
+      source: { settings: ownedSettings(captured, 'source'), assetId, generatorRevision: 1 },
+      drawing: {
+        settings: ownedSettings(captured, 'drawing'),
+        paperPreset: $('paperPreset').value,
+        paperOrientation: selectedPaperOrientation(),
+      },
+      animation: { project: animation },
+      sequencer: {
+        project: structuredClone(
+          !sequencerStorageLoaded ? (loadSequencerProject() ?? sequencerProject) : sequencerProject,
+        ),
+        exportBars: sequencerExportBars,
+      },
+      threeD: { project: physical, presentation: structuredClone(threeDPresentation) },
+      export: { settings: ownedSettings(captured, 'export') },
+      authoring: { randomLocks: Array.from(randomLocks).sort() },
+    };
+    const mode: WorkspaceMode = threeDMode
+      ? '3d'
+      : animationMode
+        ? 'animation'
+        : sequencerMode
+          ? 'sequencer'
+          : 'config';
+    const now = new Date().toISOString();
+    let document: PresetDocument;
+    if (activePreset) {
+      document = updatePreparedPreset(
+        activePreset,
+        workspace as unknown as Record<string, JsonValue>,
+        createWorkspaceCodecs(presetSchemaContext()),
+        new Set(),
+      ).document;
+      // Keep opaque assets as well as the currently authored source.
+      document.assets = { ...document.assets, ...assets };
+      document.entryMode = mode;
+    } else
+      document = {
+        format: 'slicewise-preset',
+        formatVersion: 1,
+        id: crypto.randomUUID(),
+        metadata: { name: state.name, description: '', tags: [], createdAt: now, updatedAt: now },
+        createdWith: { appVersion: '1.0.0' },
+        entryMode: mode,
+        sections: Object.fromEntries(
+          PRESET_SECTIONS.map((name) => [
+            name,
+            { version: 1, requiredFeatures: [], data: workspace[name] as unknown as JsonValue },
+          ]),
+        ),
+        assets,
+      };
+    if (!includeSource)
+      for (const asset of Object.values(document.assets)) asset.content = { kind: 'external' };
+    if (revision !== workspaceRevision || sourceVersion !== sourceLoadVersion)
+      throw new Error('The workspace changed while saving. Please try again.');
+    return prepareWorkspace(document, presetSchemaContext()).document;
+  }
+  function syncPresetAuxiliaryControls(): void {
+    for (const [key, owner] of Object.entries(appStatePresetOwnership)) {
+      if (owner !== 'source' && owner !== 'export') continue;
+      const value = dynamicState[key];
+      for (const id of [key, key + 'N']) {
+        const control = document.getElementById(id);
+        if (control instanceof HTMLInputElement) {
+          if (control.type === 'checkbox') control.checked = Boolean(value);
+          else if (typeof value === 'string' || typeof value === 'number')
+            control.value = String(value);
+        } else if (control instanceof HTMLSelectElement && typeof value === 'string')
+          setSelectValue(id, value);
+      }
+    }
+    setSelectValue('demo', state.source);
+    $('upZ').setAttribute('aria-pressed', String(!state.upY));
+    $('upY').setAttribute('aria-pressed', String(state.upY));
+    const expressive = state.uunaExpressiveMotion;
+    const numbers: Record<string, number> = {
+      uunaExpressiveContactZ: expressive.contactZ,
+      uunaExpressiveMaximumPressDepth: expressive.maximumPressDepth,
+      uunaExpressiveLeadIn: expressive.leadIn,
+      uunaExpressiveLeadOut: expressive.leadOut,
+      uunaExpressiveModulationDepth: expressive.modulationDepth * 100,
+      uunaExpressiveModulationPeriod: expressive.modulationPeriod,
+      uunaExpressiveModulationPhase: expressive.modulationPhase,
+      uunaExpressiveCurvatureRelief: expressive.curvatureRelief * 100,
+      uunaExpressiveNibWidth: expressive.nibWidth,
+      uunaExpressivePenAngle: expressive.penAngle,
+      uunaExpressiveTiltDirection: expressive.tiltDirection,
+    };
+    for (const [id, value] of Object.entries(numbers)) setSurfacePair(id, value);
+    for (const [id, value] of Object.entries({
+      uunaExpressiveMotionEnabled: expressive.enabled,
+      uunaExpressiveTipCompensation: expressive.tipCompensation,
+      uunaExpressivePreserveDirection: expressive.preserveStrokeDirection,
+      uunaExpressiveLineWeightPressure: expressive.lineWeightPressure,
+    }))
+      $(id).checked = value;
+    setSelectValue('uunaExpressiveMode', expressive.mode);
+    syncSurfacePairValues(currentSurfacePlane());
+    $('gcodeProfileNote').textContent = resolveGCodeProfile(state.gcodeProfile).note;
+    $('gcodeControls').hidden = state.exportFormat !== 'gcode';
+    $('exportLabel').textContent = state.exportFormat === 'gcode' ? 'Export G-code' : 'Export SVG';
+    $('copy').setAttribute(
+      'aria-label',
+      state.exportFormat === 'gcode' ? 'Copy G-code' : 'Copy SVG markup',
+    );
+    syncSourceControls();
+    syncTravelOptimization();
+    syncExpressiveMotionControls();
+  }
+  async function installPreset(
+    ready: ReadyWorkspace,
+    source: PreparedSource,
+    asset: SourceAssetBytes | null,
+  ): Promise<void> {
+    presetTransaction = true;
+    try {
+      animationModeTransition++;
+      leaveAnimationMode();
+      leaveSequencerMode();
+      leaveThreeDMode();
+      clearTimeout(animationSaveTimer);
+      clearTimeout(sequencerSaveTimer);
+      clearTimeout(svgRebuildTimer);
+      cancelGeneration();
+      sourceLoadVersion++;
+      sourceReadPending = false;
+      const workspace = ready.workspace;
+      Object.assign(
+        state,
+        createInitialAppState(),
+        workspace.source.settings,
+        workspace.drawing.settings,
+        workspace.export.settings,
+      );
+      state.mesh = source.mesh;
+      rawCache = source.raw;
+      state.svgSource = source.svg;
+      originalSourceFile = asset;
+      queuedRender = null;
+      clearTimeout(renderTimer);
+      sendMeshToWorker(source.mesh);
+      restoreParameterSnapshot(renderSettingsForPreset(state));
+      // Export/source controls restore directly, without profile-change or upload side effects.
+      syncPresetAuxiliaryControls();
+      setSelectValue('paperPreset', workspace.drawing.paperPreset);
+      setSelectValue('paperOrientation', workspace.drawing.paperOrientation);
+      $('mName').textContent = state.name;
+      $('mName').title = '';
+      $('mTris').textContent = (
+        source.mesh.lineArt ? source.mesh.lineArt.offsets.length - 1 : source.mesh.T.length / 3
+      ).toLocaleString();
+      $('mUnits').textContent = source.mesh.lineArt ? 'paths' : 'triangles';
+      $('mErr').hidden = true;
+      randomLocks.clear();
+      for (const id of workspace.authoring.randomLocks) randomLocks.add(id);
+      document.dispatchEvent(
+        new CustomEvent('randomlockbulk', { detail: { locks: [...randomLocks] } }),
+      );
+      document.dispatchEvent(new CustomEvent('randomlockrestore'));
+      animationProject = workspace.animation.project
+        ? structuredClone(workspace.animation.project)
+        : null;
+      animationConfigSnapshot = null;
+      animationHistory = null;
+      animationStorageLoaded = true;
+      presetAnimationIndependent = true;
+      animationFrameCache.clear();
+      sequencerProject = structuredClone(workspace.sequencer.project);
+      sequencerStorageLoaded = true;
+      sequencerExportBars = workspace.sequencer.exportBars;
+      sequencerSource = null;
+      sequencerSequences.clear();
+      threeDProjects.clear();
+      threeDProject = null;
+      threeDMesh = null;
+      threeDSource = null;
+      if (workspace.threeD.project) {
+        const id = currentThreeDSourceId();
+        threeDProject = {
+          ...structuredClone(workspace.threeD.project),
+          sourceId: id,
+          sizeConfirmed: false,
+        };
+        threeDProjects.set(id, threeDProject);
+      }
+      threeDPresentation = structuredClone(workspace.threeD.presentation);
+      document.dispatchEvent(
+        new CustomEvent('threedpresentationrestore', { detail: threeDPresentation }),
+      );
+      clearTimeout(parameterHistoryTimer);
+      parameterHistory = new ParameterHistory<ContourSettings>({ limit: 100 });
+      parameterHistory.commit(cloneParameterSnapshot());
+      updateHistoryButtons();
+    } finally {
+      presetTransaction = false;
+    }
+    if (ready.mode === '3d') enterThreeDMode();
+    else if (ready.mode === 'animation') await enterAnimationMode();
+    else if (ready.mode === 'sequencer') enterSequencerMode();
+    publishAnimationState();
+    publishSequencerState();
+    redraw(false);
+  }
+  async function applyPortablePreset(
+    input: PresetDocument,
+    undo = false,
+    signal?: AbortSignal,
+  ): Promise<PresetDocument> {
+    signal?.throwIfAborted();
+    if (serialStreaming || serialHeld || animationExporting || sourceReadPending)
+      throw new Error(
+        'Finish the current source load, video export, or machine operation before loading a preset.',
+      );
+    const revision = workspaceRevision;
+    const ready = prepareWorkspace(input, presetSchemaContext());
+    const resolved = await resolvePresetAssets(ready.document, async (id) => {
+      if (
+        originalSourceFile &&
+        `sha256-${await (await import('./presets/assets')).sha256(originalSourceFile.bytes)}` === id
+      )
+        return originalSourceFile.bytes;
+      return null;
+    });
+    signal?.throwIfAborted();
+    const id = ready.workspace.source.assetId;
+    const asset = id ? { name: ready.document.assets[id].name, bytes: resolved.get(id)! } : null;
+    const source = await preparePresetSource(ready.workspace.source.settings, asset, {
+      svg: (...args) => globalThis.slicewiseParseSVG!(...args),
+      centerlines: (...args) => globalThis.slicewiseParseSVGCenterlines!(...args),
+      generated: (settings) =>
+        new Promise((resolve, reject) => {
+          const worker = new Worker(new URL('./generative-mesh-worker.ts', import.meta.url), {
+            type: 'module',
+          });
+          const timer = setTimeout(() => {
+            worker.terminate();
+            reject(new Error('Source generation timed out.'));
+          }, 120_000);
+          const finish = () => {
+            clearTimeout(timer);
+            signal?.removeEventListener('abort', abort);
+            worker.terminate();
+          };
+          const abort = () => {
+            finish();
+            reject(new DOMException('Preset loading cancelled.', 'AbortError'));
+          };
+          signal?.addEventListener('abort', abort, { once: true });
+          if (signal?.aborted) {
+            abort();
+            return;
+          }
+          worker.addEventListener('error', () => {
+            finish();
+            reject(new Error('Source generation failed.'));
+          });
+          worker.addEventListener('message', (event: MessageEvent) => {
+            finish();
+            if (event.data.type === 'error') reject(new Error(event.data.message));
+            else
+              resolve({
+                verts: new Float32Array(event.data.positions),
+                tris: new Uint32Array(event.data.indices),
+              });
+          });
+          worker.postMessage({
+            type: 'generate',
+            id: 1,
+            source: settings.source,
+            params: settings,
+          });
+        }),
+    });
+    if (revision !== workspaceRevision)
+      throw new Error('The workspace changed while preparing this preset. Please load it again.');
+    signal?.throwIfAborted();
+    const checkpoint = await capturePortablePreset(true);
+    signal?.throwIfAborted();
+    if (serialStreaming || serialHeld || animationExporting || sourceReadPending)
+      throw new Error(
+        'Finish the current source load, video export, or machine operation before loading a preset.',
+      );
+    const previous = prepareWorkspace(checkpoint, presetSchemaContext());
+    const previousSource: PreparedSource = {
+      mesh: state.mesh!,
+      raw: rawCache,
+      svg: state.svgSource,
+    };
+    const previousAsset = originalSourceFile;
+    try {
+      await installPreset(ready, source, asset);
+    } catch (error) {
+      await installPreset(previous, previousSource, previousAsset);
+      throw error;
+    }
+    activePreset = ready;
+    presetUndo = undo ? null : checkpoint;
+    workspaceRevision++;
+    document.dispatchEvent(
+      new CustomEvent('presetloaded', { detail: { canUndo: presetUndo !== null } }),
+    );
+    if (animationProject) scheduleAnimationSave();
+    try {
+      saveSequencerProject(sequencerProject);
+    } catch {
+      /* Local presets remain authoritative. */
+    }
+    return ready.document;
+  }
+  document.addEventListener('presetrequest', (event) => {
+    const detail = (event as CustomEvent<PresetRequest>).detail;
+    if (!detail) return;
+    if (presetOperation) {
+      detail.result = Promise.reject(new Error('A preset operation is already in progress.'));
+      return;
+    }
+    presetOperation = true;
+    detail.result = (async () => {
+      if (detail.command === 'capture')
+        return capturePortablePreset(detail.includeSource !== false);
+      if (detail.command === 'undo') {
+        if (!presetUndo) throw new Error('There is no preset load to undo.');
+        return applyPortablePreset(presetUndo, true, detail.signal);
+      }
+      if (!detail.document) throw new Error('No preset was supplied.');
+      if (detail.command === 'validate') {
+        const ready = prepareWorkspace(detail.document, presetSchemaContext());
+        await resolvePresetAssets({
+          ...ready.document,
+          assets: Object.fromEntries(
+            Object.entries(ready.document.assets).filter(
+              ([, asset]) => asset.content.kind === 'embedded',
+            ),
+          ),
+        });
+        return ready.document;
+      }
+      return applyPortablePreset(detail.document, false, detail.signal);
+    })().finally(() => {
+      presetOperation = false;
+    });
+  });
 
   /* boot with the demo knot so the tool works before anything is uploaded */
   commitParameterHistory();

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "presets": [
+    {
+      "id": "6e1c5089-468c-45d2-8ff1-6a1c59482100",
+      "name": "Torus line study",
+      "description": "A clean ring torus with evenly spaced contours.",
+      "tags": ["contours", "torus"],
+      "mode": "config",
+      "file": "torus-study.slicewise-preset.json",
+      "sha256": "f309877dd74fbe1084a1c1ad31c4791ae8414f5278b5caaa83d95d7ed16f2773"
+    },
+    {
+      "id": "6e1c5089-468c-45d2-8ff1-6a1c59482101",
+      "name": "Orbit study",
+      "description": "A four-second camera orbit around a torus knot.",
+      "tags": ["motion", "camera"],
+      "mode": "animation",
+      "file": "orbit-study.slicewise-preset.json",
+      "sha256": "3e16f666e535a6e413ff53dd5e5d2375a2a578c792771d62adbe597baa72c8e2"
+    },
+    {
+      "id": "6e1c5089-468c-45d2-8ff1-6a1c59482102",
+      "name": "Contour rhythm",
+      "description": "A melodic contour phrase with a synthesized kick.",
+      "tags": ["music", "rhythm"],
+      "mode": "sequencer",
+      "file": "contour-rhythm.slicewise-preset.json",
+      "sha256": "5e26dc88d013a19ada98db58da24a5ab238d72b5cecabfff019400053786a22d"
+    },
+    {
+      "id": "6e1c5089-468c-45d2-8ff1-6a1c59482103",
+      "name": "Torus print study",
+      "description": "A 100 mm torus ready for an explicit sizing confirmation.",
+      "tags": ["3d", "torus"],
+      "mode": "3d",
+      "file": "torus-print-study.slicewise-preset.json",
+      "sha256": "8046df89e2734297e5a6853743b5ea03e6c0ff5f8ed84e61921536dc587df310"
+    }
+  ]
+}

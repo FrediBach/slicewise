@@ -15,6 +15,7 @@ const scene = vi.hoisted(() => ({
   dispose: vi.fn(),
   view: vi.fn(),
   projection: vi.fn(),
+  restoreCamera: vi.fn(),
   direction: vi.fn(() => [0, 0, 1]),
 }));
 vi.mock('../../lib/three-d-scene', () => ({ createThreeDScene: () => scene }));
@@ -107,4 +108,44 @@ it('updates the print volume and outside warning without changing the object', a
   fireEvent.click(screen.getByRole('button', { name: 'Fit' }));
   expect(scene.view).toHaveBeenLastCalledWith('Fit');
   expect(scene.setArtifact).toHaveBeenLastCalledWith(value.artifact);
+});
+
+it('restores preset style, projection and camera and publishes presentation edits', async () => {
+  const camera = {
+    position: [100, -200, 120],
+    target: [0, 0, 50],
+    zoom: 1.5,
+    frameRadius: 75,
+    fittingVolume: false,
+  };
+  const saved = { style: 'Inspect', orthographic: true, camera };
+  const request = (event: Event) => {
+    (event as CustomEvent).detail.value = saved;
+  };
+  const changed = vi.fn();
+  document.addEventListener('threedpresentationrequest', request);
+  document.addEventListener('threedpresentationchange', changed);
+  const view = render(<ThreeDWorkspace />);
+  publish(state());
+  await waitFor(() => expect(scene.restoreCamera).toHaveBeenCalledWith(camera));
+  expect(screen.getByRole('button', { name: 'Inspect' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: 'Orthographic' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Print' }));
+  expect(changed.mock.lastCall![0].detail).toMatchObject({
+    style: 'Print',
+    orthographic: true,
+    camera,
+  });
+  act(() =>
+    document.dispatchEvent(
+      new CustomEvent('threedpresentationrestore', {
+        detail: { ...saved, style: 'Studio', orthographic: false },
+      }),
+    ),
+  );
+  expect(scene.projection).toHaveBeenLastCalledWith(false);
+  expect(screen.getByRole('button', { name: 'Studio' })).toHaveAttribute('aria-pressed', 'true');
+  view.unmount();
+  document.removeEventListener('threedpresentationrequest', request);
+  document.removeEventListener('threedpresentationchange', changed);
 });

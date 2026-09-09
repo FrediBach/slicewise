@@ -2,7 +2,8 @@ import { PRINTER_PRESETS, printerPreset } from '../../lib/three-d-printer-preset
 import { DEFAULT_BUILD_VOLUME, buildVolumeOverruns } from '../../lib/three-d-build-volume';
 import { PhysicalNumberInput } from './PhysicalNumberInput';
 import { ThreeDSurfacePanel } from './ThreeDSurfacePanel';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { defaultThreeDPresentation, type ThreeDPresentation } from '../../lib/presets/workspace';
 import { Button } from '../ui/button';
 import { Section } from '../ui/section';
 import {
@@ -216,12 +217,24 @@ export function ThreeDPanel() {
   );
 }
 function Viewport({ state }: { state: ThreeDUiState }) {
+  const [initialPresentation] = useState(() => {
+    const detail: { value?: ThreeDPresentation } = {};
+    document.dispatchEvent(new CustomEvent('threedpresentationrequest', { detail }));
+    return detail.value ?? defaultThreeDPresentation();
+  });
+  const presentation = useRef(initialPresentation);
+  const publishPresentation = useCallback((patch: Partial<ThreeDPresentation>) => {
+    presentation.current = { ...presentation.current, ...patch };
+    document.dispatchEvent(
+      new CustomEvent('threedpresentationchange', { detail: presentation.current }),
+    );
+  }, []);
   const host = useRef<HTMLDivElement>(null);
   const adapter = useRef<ReturnType<typeof createThreeDScene> | null>(null);
   const current = useRef(state);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
-  const [style, setStyle] = useState<SceneStyle>('Studio');
+  const [style, setStyle] = useState<SceneStyle>(initialPresentation.style);
   const fieldKey = state.slices?.fieldKey ?? '';
   const [sliceVisibility, setSliceVisibility] = useState({ fieldKey, visible: true });
   // Reset only when a completed field changes, including undo back to an older field.
@@ -235,17 +248,22 @@ function Viewport({ state }: { state: ThreeDUiState }) {
     state.preparation?.status === 'accepted' &&
     !!state.artifact &&
     comparedArtifact?.deref() === state.artifact;
-  const [ortho, setOrtho] = useState(false);
+  const [ortho, setOrtho] = useState(initialPresentation.orthographic);
   useEffect(() => {
     let cancelled = false;
     import('../../lib/three-d-scene')
       .then(({ createThreeDScene }) => {
         if (cancelled || !host.current) return;
         try {
-          adapter.current = createThreeDScene(host.current);
-          adapter.current.style('Studio');
+          adapter.current = createThreeDScene(host.current, (camera) =>
+            publishPresentation({ camera }),
+          );
+          adapter.current.style(presentation.current.style);
           adapter.current.setArtifact(current.current.artifact);
           adapter.current.slices(current.current.slices ?? null);
+          const savedCamera = initialPresentation.camera;
+          adapter.current.projection(initialPresentation.orthographic);
+          if (savedCamera) adapter.current.restoreCamera?.(savedCamera);
           setReady(true);
         } catch {
           setError('3D rendering is unavailable. Enable WebGL or try another browser.');
@@ -259,6 +277,19 @@ function Viewport({ state }: { state: ThreeDUiState }) {
       adapter.current?.dispose();
       adapter.current = null;
     };
+  }, [initialPresentation, publishPresentation]);
+  useEffect(() => {
+    const restore = (event: Event) => {
+      const value = (event as CustomEvent<ThreeDPresentation>).detail;
+      presentation.current = value;
+      setStyle(value.style);
+      setOrtho(value.orthographic);
+      adapter.current?.style(value.style);
+      adapter.current?.projection(value.orthographic);
+      if (value.camera) adapter.current?.restoreCamera?.(value.camera);
+    };
+    document.addEventListener('threedpresentationrestore', restore);
+    return () => document.removeEventListener('threedpresentationrestore', restore);
   }, []);
   useEffect(() => {
     current.current = state;
@@ -304,6 +335,7 @@ function Viewport({ state }: { state: ThreeDUiState }) {
               onClick={() => {
                 setStyle(mode);
                 adapter.current?.style(mode);
+                publishPresentation({ style: mode });
               }}
             >
               {mode}
@@ -328,6 +360,7 @@ function Viewport({ state }: { state: ThreeDUiState }) {
             onClick={() => {
               setOrtho(!ortho);
               adapter.current?.projection(!ortho);
+              publishPresentation({ orthographic: !ortho });
             }}
           >
             {ortho ? 'Orthographic' : 'Perspective'}

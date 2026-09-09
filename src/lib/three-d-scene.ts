@@ -6,7 +6,12 @@ export type ReferenceView = 'Fit' | 'Fit build volume' | 'Front' | 'Side' | 'Top
 export type SceneStyle = 'Studio' | 'Inspect' | 'Print';
 
 /** Display-only adapter. Physical placement is already baked into the artifact. */
-export function createThreeDScene(host: HTMLElement) {
+export function createThreeDScene(
+  host: HTMLElement,
+  onCameraChange?: (
+    camera: NonNullable<import('./presets/workspace').ThreeDPresentation['camera']>,
+  ) => void,
+) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setClearColor('#e8e4df');
@@ -125,13 +130,36 @@ export function createThreeDScene(host: HTMLElement) {
     controls.update();
     draw();
   };
-  controls.addEventListener('change', draw);
+  const captureCamera = () => ({
+    position: camera.position.toArray(),
+    target: controls.target.toArray(),
+    zoom: camera.zoom,
+    frameRadius,
+    fittingVolume,
+  });
+  const cameraChanged = () => {
+    draw();
+    if (initialized) onCameraChange?.(captureCamera());
+  };
+  controls.addEventListener('change', cameraChanged);
   const observer = new ResizeObserver(resize);
   observer.observe(host);
   resize();
   const doubleClick = () => view('Fit');
   host.addEventListener('dblclick', doubleClick);
   return {
+    restoreCamera(value: NonNullable<import('./presets/workspace').ThreeDPresentation['camera']>) {
+      initialized = true;
+      frameRadius = value.frameRadius;
+      fittingVolume = value.fittingVolume;
+      camera.position.fromArray(value.position);
+      controls.target.fromArray(value.target);
+      camera.zoom = value.zoom;
+      camera.lookAt(controls.target);
+      resize();
+      controls.update();
+      draw();
+    },
     buildVolume(size?: Triple) {
       const bounds = buildVolumeBounds(size);
       box.box.min.set(...bounds.min);
@@ -199,7 +227,7 @@ export function createThreeDScene(host: HTMLElement) {
       disposed = true;
       observer.disconnect();
       host.removeEventListener('dblclick', doubleClick);
-      controls.removeEventListener('change', draw);
+      controls.removeEventListener('change', cameraChanged);
       controls.dispose();
       mesh.geometry.dispose();
       material.dispose();

@@ -12,6 +12,8 @@ import {
 export interface PresetFileHandle {
   readonly kind: 'file';
   readonly name: string;
+  requestPermission?(options: { mode: 'readwrite' }): Promise<PermissionState>;
+  isSameEntry?(other: PresetFileHandle): Promise<boolean>;
   getFile(): Promise<File>;
   createWritable(): Promise<{
     write(data: string): Promise<void>;
@@ -62,7 +64,9 @@ export function presetFilename(name: string): string {
 }
 
 export function isPickerCancellation(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError';
+  return (
+    typeof error === 'object' && error !== null && 'name' in error && error.name === 'AbortError'
+  );
 }
 
 /** Call directly from the click handler; capture/encode only after this resolves. */

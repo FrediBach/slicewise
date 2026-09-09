@@ -55,7 +55,9 @@ Prefer Node for geometry and serialization tests: it starts faster and makes acc
 
 ## What to test
 
-Portable preset foundations can be checked with `npm test -- src/lib/presets`. Tests cover structural envelope round trips for all workspace modes, resource and non-JSON guards, explicit migrations, required-feature checks, retained unknown fields, ID-based array merging, source-byte integrity, and parameter ownership. File tests use small structural native-handle doubles to verify write/close failures, retries, queued snapshots, external changes, picker invocation, permission handling, duplicate file identities, and bounded directory traversal. These tests do not establish complete runtime parameter capture/restore or native browser picker behavior; those integrations are still pending.
+Portable presets can be checked with `npm test -- src/lib/presets src/lib/preset-runtime.test.tsx src/lib/preset-examples.test.tsx src/components/panels/PresetsPanel.test.tsx`. Tests cover bounded documents, migrations, unknown-data retention, ownership, byte integrity, source reconstruction, original mesh units, failed writes, external edits, folder scanning, duplicate names, rename recovery, picker cancellation, edits during saving, and example attribution. Runtime tests exercise complete capture/restore, disabled parameters, independent Config/Animation state, physical dimensions, invalid input rejection, cancellation, and full-workspace undo. Catalog tests verify every file's digest and identity and load it through the same runtime as local presets.
+
+Native pickers, permission persistence, actual disk conflicts, and WebGL camera restoration still require a manual browser pass. Automated handles and jsdom cannot establish native behavior. For that pass, save and reopen uploaded mesh/SVG and generated sources, reconnect a remembered folder after reload, edit an open file externally, duplicate/rename/delete folder entries, cancel loading, switch through all modes, and check camera/style/projection and undo.
 
 Prioritize observable contracts and failure-prone transformations:
 
