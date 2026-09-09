@@ -4,8 +4,7 @@ import { Clipboard, Dices, Download, Redo2, Rotate3d, Undo2 } from 'lucide-react
 import { Button } from './components/ui/button';
 import { RandomLockActions } from './components/controls/FormControls';
 import { SourcePanel } from './components/panels/SourcePanel';
-import { SnapshotsPanel } from './components/panels/SnapshotsPanel';
-import { PresetsPanel } from './components/panels/PresetsPanel';
+import { SavedStatesPanel } from './components/panels/SavedStatesPanel';
 import { MorphPanel } from './components/panels/MorphPanel';
 import { ObjectPanel } from './components/panels/ObjectPanel';
 import { ViewPanel } from './components/panels/ViewPanel';
@@ -59,10 +58,7 @@ export default function App() {
             <p>Move from source geometry to precise, plotter-ready output one stage at a time.</p>
           </div>
 
-          <PresetsPanel />
-          <div className="drawing-only">
-            <SnapshotsPanel />
-          </div>
+          <SavedStatesPanel />
           <SourcePanel />
           <ObjectPanel />
           <div className="drawing-only">

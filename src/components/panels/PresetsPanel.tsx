@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
-import { Section } from '../ui/section';
 import { requestPreset } from '../../lib/presets/bridge';
 import { createPresetAsset } from '../../lib/presets/assets';
 import { duplicatePreset, serializePreset } from '../../lib/presets/document';
@@ -260,445 +259,438 @@ export function PresetsPanel() {
   };
   return (
     <div data-preset-panel>
-      <Section
-        title="Presets"
-        defaultOpen={false}
-        description="Save complete workspaces to your local files, or start from an example."
-      >
-        <div className="preset-tabs segmented" role="group" aria-label="Preset library">
-          <Button
-            className="preset-control"
-            variant="outline"
-            aria-pressed={tab === 'local'}
-            onClick={() => setTab('local')}
-          >
-            Local
-          </Button>
-          <Button
-            className="preset-control"
-            variant="outline"
-            aria-pressed={tab === 'examples'}
-            onClick={() => setTab('examples')}
-          >
-            Examples
-          </Button>
-        </div>
-        <div className="preset-fields">
-          <label>
-            Preset name
-            <input
-              className="preset-control"
-              disabled={busy}
-              value={name}
-              maxLength={200}
-              onChange={(event) => edit(setName, event.target.value)}
-            />
-          </label>
-          <label>
-            Description
-            <input
-              className="preset-control"
-              disabled={busy}
-              value={description}
-              maxLength={16384}
-              onChange={(event) => edit(setDescription, event.target.value)}
-            />
-          </label>
-          <label>
-            Tags, separated by commas
-            <input
-              className="preset-control"
-              disabled={busy}
-              value={tags}
-              onChange={(event) => edit(setTags, event.target.value)}
-            />
-          </label>
-          <label className="preset-include">
-            <input
-              type="checkbox"
-              className="preset-control"
-              disabled={busy}
-              checked={includeSource}
-              onChange={(event) => setIncludeSource(event.target.checked)}
-            />
-            Include source files
-          </label>
-        </div>
-        <div className="preset-actions preset-actions--workspace">
-          <Button
-            className="preset-control"
-            disabled={busy || !supported}
-            onClick={() => save(false)}
-          >
-            {loaded?.example ? 'Save local copy' : 'Save preset'}
-          </Button>
-          <Button
-            className="preset-control"
-            variant="outline"
-            disabled={busy || !supported}
-            onClick={() => save(true)}
-          >
-            Save as copy
-          </Button>
-          <Button
-            className="preset-control"
-            variant="outline"
-            disabled={busy || !supported}
-            onClick={() => {
-              if (allowLoad())
-                run(async () => {
-                  const [handle] = await pickPresetFiles(pickerApi());
-                  if (handle) await loadHandle(handle);
-                });
-            }}
-          >
-            Open file
-          </Button>
-          <Button
-            className="preset-control"
-            variant="outline"
-            disabled={busy || !canUndo}
-            onClick={() =>
-              run(async () => {
-                const document = await requestPreset({ command: 'undo' });
-                adopt({ document, session: null, example: false });
-                setDirty(true);
-                setStatus('Previous workspace restored.');
-              })
-            }
-          >
-            Undo preset load
-          </Button>
-          {loaded?.session && (
-            <Button
-              className="preset-control"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                if (allowLoad()) run(() => loadHandle(loaded!.session!.handle));
-              }}
-            >
-              Reload file
-            </Button>
-          )}
-        </div>
-        {preparing && (
-          <Button
-            className="preset-control"
-            variant="outline"
-            onClick={() => loadAbort.current?.abort()}
-          >
-            Cancel loading
-          </Button>
-        )}
-        {!supported && (
-          <p className="snapshot-status">
-            Local presets need a browser with File System Access support. Examples remain available.
-          </p>
-        )}
-        <p
-          className={`snapshot-status${operationError ? ' preset-status--error' : ''}`}
-          role="status"
+      <div className="preset-tabs segmented" role="group" aria-label="Preset library">
+        <Button
+          className="preset-control"
+          variant="outline"
+          aria-pressed={tab === 'local'}
+          onClick={() => setTab('local')}
         >
-          {busy
-            ? 'Working on preset…'
-            : status || (dirty ? 'Unsaved changes' : loaded ? 'Preset loaded' : 'No preset loaded')}
-        </p>
-        {dirty && status && !busy && <p className="snapshot-status">Unsaved changes</p>}
-        {pending && (
-          <div className="preset-dependencies">
-            {Object.entries(pending.document.assets)
-              .filter(([, asset]) => asset.content.kind === 'external')
-              .map(([id, asset]) => (
-                <Button
-                  className="preset-control"
-                  variant="outline"
-                  key={id}
-                  disabled={busy || !supported}
-                  onClick={() =>
-                    run(async () => {
-                      const picker = window as unknown as {
-                        showOpenFilePicker(options: object): Promise<PresetFileHandle[]>;
-                      };
-                      const [handle] = await picker.showOpenFilePicker({ multiple: false });
-                      if (!handle) return;
-                      const file = await handle.getFile();
-                      if (file.size !== asset.byteLength)
-                        throw new Error('That source file has a different size.');
-                      const resolved = await createPresetAsset(
-                        new Uint8Array(await file.arrayBuffer()),
-                        asset.name,
-                        asset.mediaType,
-                      );
-                      if (resolved.id !== id)
-                        throw new Error('That file does not match the preset’s source.');
-                      const next = { ...pending, document: structuredClone(pending.document) };
-                      next.document.assets[id] = resolved.asset;
-                      setPending(next);
-                      await apply(next);
-                    })
-                  }
-                >
-                  Locate {asset.name}
-                </Button>
-              ))}
-            <Button
-              className="preset-control"
-              variant="outline"
-              disabled={busy}
-              onClick={() => setPending(null)}
-            >
-              Cancel opening
-            </Button>
-          </div>
-        )}
-        <div className="preset-filters">
+          Local
+        </Button>
+        <Button
+          className="preset-control"
+          variant="outline"
+          aria-pressed={tab === 'examples'}
+          onClick={() => setTab('examples')}
+        >
+          Examples
+        </Button>
+      </div>
+      <div className="preset-fields">
+        <label>
+          Preset name
           <input
             className="preset-control"
-            aria-label="Search presets"
-            placeholder="Search names and tags"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            disabled={busy}
+            value={name}
+            maxLength={200}
+            onChange={(event) => edit(setName, event.target.value)}
           />
-          <select
+        </label>
+        <label>
+          Description
+          <input
             className="preset-control"
-            aria-label="Filter preset mode"
-            value={mode}
-            onChange={(event) => setMode(event.target.value)}
-          >
-            <option value="all">All modes</option>
-            {['config', 'animation', 'sequencer', '3d'].map((item) => (
-              <option key={item} value={item}>
-                {item === '3d' ? '3D' : item[0].toUpperCase() + item.slice(1)}
-              </option>
-            ))}
-          </select>
-          <select
+            disabled={busy}
+            value={description}
+            maxLength={16384}
+            onChange={(event) => edit(setDescription, event.target.value)}
+          />
+        </label>
+        <label>
+          Tags, separated by commas
+          <input
             className="preset-control"
-            aria-label="Sort presets"
-            value={sort}
-            onChange={(event) => setSort(event.target.value)}
+            disabled={busy}
+            value={tags}
+            onChange={(event) => edit(setTags, event.target.value)}
+          />
+        </label>
+        <label className="preset-include">
+          <input
+            type="checkbox"
+            className="preset-control"
+            disabled={busy}
+            checked={includeSource}
+            onChange={(event) => setIncludeSource(event.target.checked)}
+          />
+          Include source files
+        </label>
+      </div>
+      <div className="preset-actions preset-actions--workspace">
+        <Button
+          className="preset-control"
+          disabled={busy || !supported}
+          onClick={() => save(false)}
+        >
+          {loaded?.example ? 'Save local copy' : 'Save preset'}
+        </Button>
+        <Button
+          className="preset-control"
+          variant="outline"
+          disabled={busy || !supported}
+          onClick={() => save(true)}
+        >
+          Save as copy
+        </Button>
+        <Button
+          className="preset-control"
+          variant="outline"
+          disabled={busy || !supported}
+          onClick={() => {
+            if (allowLoad())
+              run(async () => {
+                const [handle] = await pickPresetFiles(pickerApi());
+                if (handle) await loadHandle(handle);
+              });
+          }}
+        >
+          Open file
+        </Button>
+        <Button
+          className="preset-control"
+          variant="outline"
+          disabled={busy || !canUndo}
+          onClick={() =>
+            run(async () => {
+              const document = await requestPreset({ command: 'undo' });
+              adopt({ document, session: null, example: false });
+              setDirty(true);
+              setStatus('Previous workspace restored.');
+            })
+          }
+        >
+          Undo preset load
+        </Button>
+        {loaded?.session && (
+          <Button
+            className="preset-control"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              if (allowLoad()) run(() => loadHandle(loaded!.session!.handle));
+            }}
           >
-            <option value="name">Name</option>
-            <option value="updated">Recently saved</option>
-          </select>
-        </div>
-        {tab === 'local' ? (
-          <>
-            <div className="preset-actions">
+            Reload file
+          </Button>
+        )}
+      </div>
+      {preparing && (
+        <Button
+          className="preset-control"
+          variant="outline"
+          onClick={() => loadAbort.current?.abort()}
+        >
+          Cancel loading
+        </Button>
+      )}
+      {!supported && (
+        <p className="snapshot-status">
+          Local presets need a browser with File System Access support. Examples remain available.
+        </p>
+      )}
+      <p
+        className={`snapshot-status${operationError ? ' preset-status--error' : ''}`}
+        role="status"
+      >
+        {busy
+          ? 'Working on preset…'
+          : status || (dirty ? 'Unsaved changes' : loaded ? 'Preset loaded' : 'No preset loaded')}
+      </p>
+      {dirty && status && !busy && <p className="snapshot-status">Unsaved changes</p>}
+      {pending && (
+        <div className="preset-dependencies">
+          {Object.entries(pending.document.assets)
+            .filter(([, asset]) => asset.content.kind === 'external')
+            .map(([id, asset]) => (
               <Button
                 className="preset-control"
                 variant="outline"
-                disabled={busy || !pickerApi().showDirectoryPicker}
-                onClick={chooseFolder}
+                key={id}
+                disabled={busy || !supported}
+                onClick={() =>
+                  run(async () => {
+                    const picker = window as unknown as {
+                      showOpenFilePicker(options: object): Promise<PresetFileHandle[]>;
+                    };
+                    const [handle] = await picker.showOpenFilePicker({ multiple: false });
+                    if (!handle) return;
+                    const file = await handle.getFile();
+                    if (file.size !== asset.byteLength)
+                      throw new Error('That source file has a different size.');
+                    const resolved = await createPresetAsset(
+                      new Uint8Array(await file.arrayBuffer()),
+                      asset.name,
+                      asset.mediaType,
+                    );
+                    if (resolved.id !== id)
+                      throw new Error('That file does not match the preset’s source.');
+                    const next = { ...pending, document: structuredClone(pending.document) };
+                    next.document.assets[id] = resolved.asset;
+                    setPending(next);
+                    await apply(next);
+                  })
+                }
               >
-                {folder ? 'Change folder' : 'Choose preset folder'}
+                Locate {asset.name}
               </Button>
-              {folder && (
-                <>
+            ))}
+          <Button
+            className="preset-control"
+            variant="outline"
+            disabled={busy}
+            onClick={() => setPending(null)}
+          >
+            Cancel opening
+          </Button>
+        </div>
+      )}
+      <div className="preset-filters">
+        <input
+          className="preset-control"
+          aria-label="Search presets"
+          placeholder="Search names and tags"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select
+          className="preset-control"
+          aria-label="Filter preset mode"
+          value={mode}
+          onChange={(event) => setMode(event.target.value)}
+        >
+          <option value="all">All modes</option>
+          {['config', 'animation', 'sequencer', '3d'].map((item) => (
+            <option key={item} value={item}>
+              {item === '3d' ? '3D' : item[0].toUpperCase() + item.slice(1)}
+            </option>
+          ))}
+        </select>
+        <select
+          className="preset-control"
+          aria-label="Sort presets"
+          value={sort}
+          onChange={(event) => setSort(event.target.value)}
+        >
+          <option value="name">Name</option>
+          <option value="updated">Recently saved</option>
+        </select>
+      </div>
+      {tab === 'local' ? (
+        <>
+          <div className="preset-actions">
+            <Button
+              className="preset-control"
+              variant="outline"
+              disabled={busy || !pickerApi().showDirectoryPicker}
+              onClick={chooseFolder}
+            >
+              {folder ? 'Change folder' : 'Choose preset folder'}
+            </Button>
+            {folder && (
+              <>
+                <Button
+                  className="preset-control"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    run(async () => {
+                      if (await presetFolderPermission(folder, 'read', true)) await refresh(folder);
+                      else throw new Error('Folder access was not granted.');
+                    })
+                  }
+                >
+                  Refresh / reconnect
+                </Button>
+                <Button
+                  className="preset-control"
+                  variant="outline"
+                  disabled={busy || !supported}
+                  onClick={() =>
+                    run(async () => {
+                      const handles = await pickPresetFiles(pickerApi(), true);
+                      const destination = await writableFolder();
+                      let imported = 0;
+                      const failures: string[] = [];
+                      for (const handle of handles) {
+                        try {
+                          const { document } = await PresetFileSession.open(handle);
+                          await requestPreset({ command: 'validate', document });
+                          await copyPresetToFolder(destination, document);
+                          imported++;
+                        } catch (error) {
+                          failures.push(`${handle.name}: ${String(error)}`);
+                        }
+                      }
+                      await refresh(destination);
+                      setStatus(
+                        `Imported ${imported} presets.${failures.length ? ` ${failures.join(' ')}` : ''}`,
+                      );
+                    })
+                  }
+                >
+                  Import files
+                </Button>
+              </>
+            )}
+          </div>
+          {folder && <p className="snapshot-status">Folder: {folder.name}</p>}
+          <ul className="snapshot-list" aria-label="Local presets">
+            {local.map((entry) => (
+              <li key={entry.path}>
+                <div className="snapshot-copy">
+                  <strong>{entry.metadata?.name ?? entry.path}</strong>
+                  <span>{entry.path}</span>
+                  {entry.error && <span>{entry.error}</span>}
+                </div>
+                <div className="preset-actions">
+                  <Button
+                    className="preset-control"
+                    variant="outline"
+                    disabled={busy || !!entry.error}
+                    onClick={() => {
+                      if (allowLoad()) run(() => loadHandle(entry.handle));
+                    }}
+                  >
+                    Load
+                  </Button>
+                  <Button
+                    className="preset-control"
+                    variant="outline"
+                    disabled={busy || !!entry.error}
+                    onClick={() =>
+                      run(async () => {
+                        const destination = await writableFolder();
+                        const { document } = await PresetFileSession.open(entry.handle);
+                        await copyPresetToFolder(
+                          destination,
+                          duplicatePreset(
+                            document,
+                            crypto.randomUUID(),
+                            new Date().toISOString(),
+                            `${document.metadata.name} copy`,
+                          ),
+                        );
+                        await refresh(destination);
+                      })
+                    }
+                  >
+                    Duplicate
+                  </Button>
+                  <Button
+                    className="preset-control"
+                    variant="outline"
+                    disabled={busy || !!entry.error}
+                    onClick={() => {
+                      const next = window.prompt('New preset name', entry.metadata?.name);
+                      if (next?.trim())
+                        run(async () => {
+                          await writableFolder();
+                          const renamed = await renamePresetFile(
+                            entry.directory,
+                            entry.handle,
+                            next.trim(),
+                          );
+                          if (
+                            loaded?.session &&
+                            (await sameFile(loaded.session.handle, entry.handle))
+                          ) {
+                            setLoaded({ ...loaded, ...(await PresetFileSession.open(renamed)) });
+                            setName(next.trim());
+                          }
+                          await refresh(folder!);
+                        });
+                    }}
+                  >
+                    Rename
+                  </Button>
                   <Button
                     className="preset-control"
                     variant="outline"
                     disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        if (await presetFolderPermission(folder, 'read', true))
-                          await refresh(folder);
-                        else throw new Error('Folder access was not granted.');
-                      })
-                    }
+                    onClick={() => {
+                      if (
+                        window.confirm(`Delete ${entry.path}? This may not use the system trash.`)
+                      )
+                        run(async () => {
+                          await writableFolder();
+                          await entry.directory.removeEntry(entry.handle.name);
+                          if (
+                            loaded?.session &&
+                            (await sameFile(loaded.session.handle, entry.handle))
+                          ) {
+                            setLoaded({ ...loaded, session: null });
+                            setDirty(true);
+                          }
+                          await refresh(folder!);
+                        });
+                    }}
                   >
-                    Refresh / reconnect
+                    Delete
                   </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {!local.length && (
+            <p className="snapshot-empty">
+              {folder
+                ? 'No matching presets in this folder.'
+                : 'Choose a folder to browse and organize local presets.'}
+            </p>
+          )}
+        </>
+      ) : (
+        <>
+          {exampleError && (
+            <div role="status">
+              {exampleError}
+              <Button
+                className="preset-control"
+                disabled={busy}
+                onClick={() =>
+                  run(async () => {
+                    setExamples(await listExamplePresets());
+                    setExampleError('');
+                  })
+                }
+              >
+                Retry examples
+              </Button>
+            </div>
+          )}
+          <ul className="snapshot-list" aria-label="Example presets">
+            {examples
+              .filter((example) => matches(example.name, example.tags, example.mode))
+              .map((example) => (
+                <li key={example.id}>
+                  <div className="snapshot-copy">
+                    <strong>{example.name}</strong>
+                    <span>{example.description}</span>
+                  </div>
                   <Button
                     className="preset-control"
                     variant="outline"
-                    disabled={busy || !supported}
-                    onClick={() =>
-                      run(async () => {
-                        const handles = await pickPresetFiles(pickerApi(), true);
-                        const destination = await writableFolder();
-                        let imported = 0;
-                        const failures: string[] = [];
-                        for (const handle of handles) {
-                          try {
-                            const { document } = await PresetFileSession.open(handle);
-                            await requestPreset({ command: 'validate', document });
-                            await copyPresetToFolder(destination, document);
-                            imported++;
-                          } catch (error) {
-                            failures.push(`${handle.name}: ${String(error)}`);
-                          }
-                        }
-                        await refresh(destination);
-                        setStatus(
-                          `Imported ${imported} presets.${failures.length ? ` ${failures.join(' ')}` : ''}`,
+                    disabled={busy}
+                    onClick={() => {
+                      if (allowLoad())
+                        run(async () =>
+                          apply({
+                            document: await loadExamplePreset(example),
+                            session: null,
+                            example: true,
+                          }),
                         );
-                      })
-                    }
+                    }}
                   >
-                    Import files
+                    Use example
                   </Button>
-                </>
-              )}
-            </div>
-            {folder && <p className="snapshot-status">Folder: {folder.name}</p>}
-            <ul className="snapshot-list" aria-label="Local presets">
-              {local.map((entry) => (
-                <li key={entry.path}>
-                  <div className="snapshot-copy">
-                    <strong>{entry.metadata?.name ?? entry.path}</strong>
-                    <span>{entry.path}</span>
-                    {entry.error && <span>{entry.error}</span>}
-                  </div>
-                  <div className="preset-actions">
-                    <Button
-                      className="preset-control"
-                      variant="outline"
-                      disabled={busy || !!entry.error}
-                      onClick={() => {
-                        if (allowLoad()) run(() => loadHandle(entry.handle));
-                      }}
-                    >
-                      Load
-                    </Button>
-                    <Button
-                      className="preset-control"
-                      variant="outline"
-                      disabled={busy || !!entry.error}
-                      onClick={() =>
-                        run(async () => {
-                          const destination = await writableFolder();
-                          const { document } = await PresetFileSession.open(entry.handle);
-                          await copyPresetToFolder(
-                            destination,
-                            duplicatePreset(
-                              document,
-                              crypto.randomUUID(),
-                              new Date().toISOString(),
-                              `${document.metadata.name} copy`,
-                            ),
-                          );
-                          await refresh(destination);
-                        })
-                      }
-                    >
-                      Duplicate
-                    </Button>
-                    <Button
-                      className="preset-control"
-                      variant="outline"
-                      disabled={busy || !!entry.error}
-                      onClick={() => {
-                        const next = window.prompt('New preset name', entry.metadata?.name);
-                        if (next?.trim())
-                          run(async () => {
-                            await writableFolder();
-                            const renamed = await renamePresetFile(
-                              entry.directory,
-                              entry.handle,
-                              next.trim(),
-                            );
-                            if (
-                              loaded?.session &&
-                              (await sameFile(loaded.session.handle, entry.handle))
-                            ) {
-                              setLoaded({ ...loaded, ...(await PresetFileSession.open(renamed)) });
-                              setName(next.trim());
-                            }
-                            await refresh(folder!);
-                          });
-                      }}
-                    >
-                      Rename
-                    </Button>
-                    <Button
-                      className="preset-control"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => {
-                        if (
-                          window.confirm(`Delete ${entry.path}? This may not use the system trash.`)
-                        )
-                          run(async () => {
-                            await writableFolder();
-                            await entry.directory.removeEntry(entry.handle.name);
-                            if (
-                              loaded?.session &&
-                              (await sameFile(loaded.session.handle, entry.handle))
-                            ) {
-                              setLoaded({ ...loaded, session: null });
-                              setDirty(true);
-                            }
-                            await refresh(folder!);
-                          });
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
                 </li>
               ))}
-            </ul>
-            {!local.length && (
-              <p className="snapshot-empty">
-                {folder
-                  ? 'No matching presets in this folder.'
-                  : 'Choose a folder to browse and organize local presets.'}
-              </p>
-            )}
-          </>
-        ) : (
-          <>
-            {exampleError && (
-              <div role="status">
-                {exampleError}
-                <Button
-                  className="preset-control"
-                  disabled={busy}
-                  onClick={() =>
-                    run(async () => {
-                      setExamples(await listExamplePresets());
-                      setExampleError('');
-                    })
-                  }
-                >
-                  Retry examples
-                </Button>
-              </div>
-            )}
-            <ul className="snapshot-list" aria-label="Example presets">
-              {examples
-                .filter((example) => matches(example.name, example.tags, example.mode))
-                .map((example) => (
-                  <li key={example.id}>
-                    <div className="snapshot-copy">
-                      <strong>{example.name}</strong>
-                      <span>{example.description}</span>
-                    </div>
-                    <Button
-                      className="preset-control"
-                      variant="outline"
-                      disabled={busy}
-                      onClick={() => {
-                        if (allowLoad())
-                          run(async () =>
-                            apply({
-                              document: await loadExamplePreset(example),
-                              session: null,
-                              example: true,
-                            }),
-                          );
-                      }}
-                    >
-                      Use example
-                    </Button>
-                  </li>
-                ))}
-            </ul>
-          </>
-        )}
-      </Section>
+          </ul>
+        </>
+      )}
     </div>
   );
 }

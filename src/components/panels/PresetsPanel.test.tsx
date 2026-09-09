@@ -44,7 +44,6 @@ beforeEach(() => {
 });
 function openPanel() {
   render(<PresetsPanel />);
-  fireEvent.click(screen.getByText('Presets'));
 }
 it('opens the native picker before capture and keeps edits made during a write unsaved', async () => {
   let finish!: () => void;

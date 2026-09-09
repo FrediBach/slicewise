@@ -8,7 +8,6 @@ import {
   type ParameterSnapshot,
 } from '../../lib/parameter-snapshots';
 import { Button } from '../ui/button';
-import { Section } from '../ui/section';
 
 type CapturedParameters = {
   parameters: ContourSettings;
@@ -120,7 +119,7 @@ export function SnapshotsPanel() {
   };
 
   return (
-    <Section title="Snapshots" description="Save and return to named parameter states.">
+    <>
       <div className="snapshot-create">
         <label htmlFor="snapshotName">Snapshot name</label>
         <div className="snapshot-create-row">
@@ -188,6 +187,6 @@ export function SnapshotsPanel() {
       ) : (
         <p className="snapshot-empty">No saved snapshots yet.</p>
       )}
-    </Section>
+    </>
   );
 }

@@ -3415,3 +3415,37 @@ body.three-d-mode .topbar {
   gap: 6px;
   margin: 10px 0;
 }
+
+.saved-state-tabs {
+  margin-bottom: 12px;
+}
+.saved-state-tabs button {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 6px 10px;
+}
+.saved-state-tabs button[aria-selected='true'] {
+  background: var(--ink);
+  color: white;
+}
+.saved-state-description,
+.snapshot-mode-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-family: Manrope, sans-serif;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.saved-state-description strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.snapshot-mode-note {
+  display: none;
+}
+body.three-d-mode .snapshot-mode-note,
+body.animation-mode .snapshot-mode-note {
+  display: block;
+}
