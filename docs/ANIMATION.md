@@ -34,6 +34,8 @@ Rules are deterministic:
 - missing registered values fall back to the frozen base setting;
 - times before or after the keyframe range use the nearest endpoint.
 
+Registered parameters include generative mesh and terrain numeric settings, SVG cutting-path placement, divergence, effect seeds, map settings, and effect colours. Generated sources are resolved in the contour worker for each evaluated frame before Object deformation, using the frozen source kind and up-axis correction. Resolution is integer-valued; seeds hold until the next keyframe.
+
 Evaluation clones the base settings and always clears `morphEnabled`, `morphSecondEnabled`, `morphTargets`, and `morphTargets2`. It never mutates the project or Config state.
 
 ## Playback and rendering

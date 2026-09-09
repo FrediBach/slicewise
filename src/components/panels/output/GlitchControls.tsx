@@ -73,7 +73,6 @@ export function GlitchControls() {
             max="9999"
             step="1"
             value="1"
-            morphable={false}
             randomizable
             disabled
             disabledReason="Turn on Block glitch to edit this parameter."
@@ -155,7 +154,6 @@ export function GlitchControls() {
             max="9999"
             step="1"
             value="2"
-            morphable={false}
             randomizable
             disabled
             disabledReason="Turn on Scan-band glitch to edit this parameter."

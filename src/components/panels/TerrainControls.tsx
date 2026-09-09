@@ -12,8 +12,8 @@ export function TerrainControls() {
             min={String(control.min)}
             max={String(control.max)}
             step={String(control.step)}
+            randomizable={false}
             value={TERRAIN_DEFAULTS[control.id]}
-            morphable={false}
           />
         ))}
         <p className="gradient-note">

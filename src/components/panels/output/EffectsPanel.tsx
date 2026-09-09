@@ -104,7 +104,6 @@ export function EffectsPanel() {
                 label={label}
                 defaultValue={defaultValue}
                 swatchId={`${id}Swatch`}
-                morphable={false}
                 disabled
                 disabledReason="Turn on Weather-map bands to edit this colour."
               />

@@ -78,7 +78,6 @@ export function StaggeredSliceControls() {
           max="9999"
           step="1"
           value="3"
-          morphable={false}
           randomizable
           disabled
           disabledReason="Choose Seeded irregular to edit this parameter."

@@ -122,7 +122,6 @@ export function VectorZoomControls() {
                 label="Guide colour"
                 defaultValue="#15181a"
                 swatchId={`${prefix}ColorSwatch`}
-                morphable={false}
                 disabled
                 disabledReason={reason}
               />

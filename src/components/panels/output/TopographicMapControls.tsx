@@ -33,7 +33,6 @@ export function TopographicMapControls() {
                   step="1"
                   value={value}
                   unit={id.endsWith('Scale') ? '%' : ''}
-                  morphable={false}
                   randomizable
                   disabled
                   disabledReason="Turn on Topographic map to edit this parameter."

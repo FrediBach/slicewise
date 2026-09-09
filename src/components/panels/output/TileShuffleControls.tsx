@@ -56,7 +56,6 @@ export function TileShuffleControls() {
           max="9999"
           step="1"
           value="4"
-          morphable={false}
           randomizable
           disabled
           disabledReason="Turn on Tile shuffle to edit this parameter."

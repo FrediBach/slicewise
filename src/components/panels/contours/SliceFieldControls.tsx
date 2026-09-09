@@ -67,7 +67,6 @@ export function SliceFieldControls() {
           step="1"
           value="100"
           unit="%"
-          morphable={false}
         />
         <ValueControl
           id="svgSliceX"
@@ -77,7 +76,6 @@ export function SliceFieldControls() {
           step="1"
           value="0"
           unit="% radius"
-          morphable={false}
         />
         <ValueControl
           id="svgSliceY"
@@ -87,7 +85,6 @@ export function SliceFieldControls() {
           step="1"
           value="0"
           unit="% radius"
-          morphable={false}
         />
         <ValueControl
           id="svgSliceRotation"
@@ -97,7 +94,6 @@ export function SliceFieldControls() {
           step="1"
           value="0"
           unit="°"
-          morphable={false}
         />
         <p className="gradient-note">
           Paths extend through the model. Divergence widens them from the near side along the
@@ -294,7 +290,6 @@ export function SliceFieldControls() {
         step="1"
         value="0"
         unit="°"
-        morphable={false}
         randomizable
       />
       <SliceLfoControls />

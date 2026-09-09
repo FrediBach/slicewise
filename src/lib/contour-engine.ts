@@ -1,5 +1,8 @@
 'use strict';
 
+import { isMorphColor } from './morph-parameters';
+import { resolveProceduralMesh, type ProceduralSettings } from './procedural-source';
+
 import { sliceFanGeometry, sliceFanTangent, sliceFanPlane } from './slice-fan';
 
 import { easeLineGap } from './slice-spacing';
@@ -115,6 +118,7 @@ type MorphValue = number | string;
 type MorphTargets = Record<string, MorphValue>;
 
 export interface ContourMesh {
+  proceduralKey?: string;
   /** Preserve authored faces instead of reconstructing a smooth surface from normals. */
   preserveSurface?: boolean;
   /** Set only for the dedicated square terrain source in its original Z-up orientation. */
@@ -140,6 +144,7 @@ export interface LineIndexColor {
 
 export interface ContourSettings
   extends
+    ProceduralSettings,
     Partial<ObjectSettings>,
     Partial<MapSettings>,
     Partial<SliceRaySettings>,
@@ -2651,6 +2656,7 @@ function computeContourInstance(
   settings: ContourSettings,
   quick: boolean,
 ): InternalContourResult {
+  mesh = resolveProceduralMesh(mesh, settings);
   if (mesh.lineArt) return computeLineArtInstance(mesh, settings, quick);
   const t0 = performance.now();
   mesh = deformMesh(mesh, settings);
@@ -3503,7 +3509,7 @@ export function computeContours(
   const hexColor = /^#[0-9a-f]{6}$/i;
   const validTargets = (targets: MorphTargets): Array<[string, MorphValue]> =>
     Object.entries(targets || {}).filter(([key, value]) =>
-      key === 'color' || key === 'weaveColor'
+      isMorphColor(key)
         ? hexColor.test(String(value)) &&
           hexColor.test(String((settings as unknown as Record<string, unknown>)[key]))
         : Number.isFinite(Number(value)) &&
@@ -3543,13 +3549,18 @@ export function computeContours(
       const amountX = stepsX === 1 ? 0 : x / (stepsX - 1);
       const amountY = stepsY === 1 ? 0 : y / (stepsY - 1);
       const instance: ContourSettings = { ...settings, suppressBackground: true };
-      if (results.length && instance.topographicMap) instance.topographicMap = false;
+      if (
+        results.length &&
+        instance.topographicMap &&
+        ![...targetKeys].some((key) => key.startsWith('map'))
+      )
+        instance.topographicMap = false;
       const dynamicInstance = instance as unknown as Record<string, unknown>;
       const dynamicSettings = settings as unknown as Record<string, unknown>;
       for (const key of targetKeys) {
         const targetX = targetsXByKey.get(key),
           targetY = targetsYByKey.get(key);
-        if (key === 'color' || key === 'weaveColor') {
+        if (isMorphColor(key)) {
           const startColor = (String(dynamicSettings[key]).slice(1).match(/../g) ?? []).map(
             (value) => parseInt(value, 16),
           );

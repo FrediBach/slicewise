@@ -21,7 +21,7 @@ export const TERRAIN_DEFAULTS: TerrainParams = {
   terrainRes: 160,
 };
 
-// Also defines the UI bounds; source parameters are deliberately not morphable.
+// Shared UI bounds for source edits, morph targets, and animation.
 export const TERRAIN_CONTROLS = [
   { id: 'terrainSeed', label: 'Terrain seed', min: 0, max: 9999, step: 1 },
   { id: 'terrainRelief', label: 'Vertical relief', min: 5, max: 100, step: 1, unit: '%' },

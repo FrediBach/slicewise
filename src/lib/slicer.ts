@@ -1,5 +1,8 @@
 'use strict';
 
+import { proceduralSourceKey } from './procedural-source';
+import { isMorphColor } from './morph-parameters';
+
 import { threeDStlFilename, threeDModelFilename } from './three-d-export';
 import { printerPreset } from './three-d-printer-presets';
 import { validBuildVolume } from './three-d-build-volume';
@@ -944,6 +947,7 @@ if (typeof document !== 'undefined') {
           lineArtOffsets: offsets?.buffer,
           lineArtKind: mesh.lineArt?.kind,
           terrain: mesh.terrain === true,
+          proceduralKey: mesh.proceduralKey,
           preserveSurface: mesh.preserveSurface === true,
         },
       },
@@ -963,6 +967,12 @@ if (typeof document !== 'undefined') {
           V[i + 2] = y;
         }
       }
+      m.proceduralKey = proceduralSourceKey({
+        ...state,
+        proceduralSource:
+          state.source === 'generative' || state.source === 'terrain' ? state.source : undefined,
+        proceduralUpY: state.upY,
+      });
       m.terrain = state.source === 'terrain' && !state.upY;
       m.N = vertexNormals(m.V, m.T);
       state.mesh = m as RenderMesh;
@@ -1624,6 +1634,7 @@ if (typeof document !== 'undefined') {
     id: string,
     key: keyof Omit<GenerativeParams, 'genField'> | keyof TerrainParams,
   ): void {
+    morphKeyById.set(id, key);
     const slider = $(id),
       number = $(id + 'N');
     setDisabledPair(slider, number, slider.disabled);
@@ -1678,11 +1689,7 @@ if (typeof document !== 'undefined') {
     const key = morphKeyById.get(id);
     if (!key) return;
     const targets = dimension === 2 ? state.morphTargets2 : state.morphTargets;
-    if (
-      active &&
-      (key === 'color' || key === 'weaveColor') &&
-      /^#[0-9a-f]{6}$/i.test(String(value))
-    )
+    if (active && isMorphColor(key) && /^#[0-9a-f]{6}$/i.test(String(value)))
       targets[key] = String(value);
     else if (active && Number.isFinite(Number(value))) targets[key] = Number(value);
     else delete targets[key];
@@ -3120,6 +3127,8 @@ if (typeof document !== 'undefined') {
 
   /* ------------------------------------------------ parameter history */
   const historyPairs: ReadonlyArray<readonly [string, keyof ContourSettings]> = [
+    ...generativeKeys.map((id): [string, keyof ContourSettings] => [id, id]),
+    ...TERRAIN_CONTROLS.map(({ id }): [string, keyof ContourSettings] => [id, id]),
     ['az', 'az'],
     ['el', 'el'],
     ['rl', 'roll'],
@@ -3340,6 +3349,7 @@ if (typeof document !== 'undefined') {
   function restoreParameterSnapshot(snapshot: ContourSettings): void {
     restoringParameters = true;
     clearTimeout(parameterHistoryTimer);
+    const previousProceduralKey = proceduralSourceKey(settingsSnapshot());
     const restored = normalizeParameterSnapshot(snapshot);
     Object.assign(state, restored);
     for (const [id, key] of historyPairs) {
@@ -3347,6 +3357,7 @@ if (typeof document !== 'undefined') {
       $(id + 'N').value = String(dynamicState[key]);
     }
     for (const id of historySelects) setSelectValue(id, String(dynamicState[id]));
+    setSelectValue('genField', state.genField);
     for (const id of historyChecks) $(id).checked = Boolean(dynamicState[id]);
     $('color').value = state.color;
     $('colorHex').value = state.color;
@@ -3426,6 +3437,7 @@ if (typeof document !== 'undefined') {
       }),
     );
     if (state.source === 'hyperbolic-tiling') buildHyperbolicTiling();
+    else if (previousProceduralKey !== proceduralSourceKey(settingsSnapshot())) queueGeneration(0);
     else redraw(false);
     restoringParameters = false;
     updateHistoryButtons();
@@ -4028,6 +4040,10 @@ if (typeof document !== 'undefined') {
   type LockableControl = HTMLInputElement | HTMLSelectElement | HTMLButtonElement;
 
   const integerAnimationSettings = new Set([
+    'genRes',
+    'terrainRes',
+    'lineWeightInterval',
+    ...MAP_CONTROLS.map(({ id }) => id),
     'lines',
     'quality',
     'easeCycles',
@@ -4043,11 +4059,17 @@ if (typeof document !== 'undefined') {
     'kaleidoscopeSegments',
     'gradientColors',
   ]);
+  for (const input of document.querySelectorAll<HTMLInputElement>(
+    '.color-row input[type="color"]',
+  )) {
+    if (isMorphColor(input.id) && Object.hasOwn(state, input.id))
+      morphKeyById.set(input.id, input.id);
+  }
   const animationParameters: AnimationParameterDescriptor[] = [];
   for (const [controlId, settingKey] of morphKeyById) {
     if (!document.querySelector(`#${controlId}Control .morph-toggle`)) continue;
     const input = document.getElementById(controlId + 'N') as HTMLInputElement | null;
-    const color = controlId === 'color' || controlId === 'weaveColor';
+    const color = isMorphColor(settingKey);
     animationParameters.push({
       controlId,
       settingKey: settingKey as keyof ContourSettings & string,
@@ -4931,7 +4953,7 @@ if (typeof document !== 'undefined') {
         $<HTMLInputElement>(descriptor.controlId).value = color;
         $<HTMLInputElement>(descriptor.controlId + 'Hex').value = color;
         const swatch = document.getElementById(
-          descriptor.controlId === 'weaveColor' ? 'weaveColorSwatch' : 'swatch',
+          descriptor.controlId === 'color' ? 'swatch' : `${descriptor.controlId}Swatch`,
         );
         if (swatch) swatch.style.background = color;
       } else {

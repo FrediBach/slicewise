@@ -1,3 +1,4 @@
+import { proceduralSettingKeys } from './procedural-source';
 import { OBJECT_AXES, OBJECT_CONTROLS, OBJECT_GROUPS } from './object-settings';
 import { SLICE_RAY_CONTROLS } from './slice-rays-settings';
 import { WEAVE_CONTROLS } from './contour-weave-settings';
@@ -10,6 +11,8 @@ type RuntimeOnlySetting =
 export type RenderSettingKey = Exclude<keyof ContourSettings, RuntimeOnlySetting>;
 export type RenderSettingsSource = Omit<ContourSettings, 'documentTitle' | 'suppressBackground'> & {
   name: string;
+  source?: string;
+  upY?: boolean;
 };
 
 /**
@@ -17,6 +20,7 @@ export type RenderSettingsSource = Omit<ContourSettings, 'documentTitle' | 'supp
  * check makes additions to ContourSettings deliberate at this boundary.
  */
 export const renderSettingKeys = [
+  ...proceduralSettingKeys,
   'objectEnabled',
   ...OBJECT_GROUPS.map(({ id }) => id),
   ...OBJECT_AXES,
@@ -252,6 +256,9 @@ export function createRenderSettingsSnapshot(source: RenderSettingsSource): Cont
   const entries = renderSettingKeys.map((key) => [key, source[key]] as const);
   const snapshot = Object.fromEntries(entries) as unknown as ContourSettings;
   snapshot.svgSlicePaths = source.svgSlicePaths?.map((path) => [...path]);
+  snapshot.proceduralSource =
+    source.source === 'generative' || source.source === 'terrain' ? source.source : undefined;
+  snapshot.proceduralUpY = source.upY ?? source.proceduralUpY;
   snapshot.documentTitle = source.name;
   snapshot.morphTargets = { ...source.morphTargets };
   snapshot.morphTargets2 = { ...source.morphTargets2 };

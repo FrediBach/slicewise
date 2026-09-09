@@ -95,8 +95,8 @@ export function SourcePanel() {
             min="0"
             max="9999"
             step="1"
+            randomizable={false}
             value={GEN_DEFAULTS.genSeed}
-            morphable={false}
           />
           <ValueControl
             id="genBlend"
@@ -104,9 +104,9 @@ export function SourcePanel() {
             min="0"
             max="100"
             step="1"
+            randomizable={false}
             value={GEN_DEFAULTS.genBlend}
             unit="%"
-            morphable={false}
           />
           <ValueControl
             id="genFreq"
@@ -114,8 +114,8 @@ export function SourcePanel() {
             min="0.5"
             max="8"
             step="0.1"
+            randomizable={false}
             value={GEN_DEFAULTS.genFreq}
-            morphable={false}
           />
           <ValueControl
             id="genAniso"
@@ -123,9 +123,9 @@ export function SourcePanel() {
             min="-100"
             max="100"
             step="1"
+            randomizable={false}
             value={GEN_DEFAULTS.genAniso}
             unit="%"
-            morphable={false}
           />
           <ValueControl
             id="genIso"
@@ -133,8 +133,8 @@ export function SourcePanel() {
             min="-1.4"
             max="1.4"
             step="0.01"
+            randomizable={false}
             value={GEN_DEFAULTS.genIso}
-            morphable={false}
           />
           <ValueControl
             id="genTwist"
@@ -142,9 +142,9 @@ export function SourcePanel() {
             min="-180"
             max="180"
             step="1"
+            randomizable={false}
             value={GEN_DEFAULTS.genTwist}
             unit="°"
-            morphable={false}
           />
           <ValueControl
             id="genNoise"
@@ -152,9 +152,9 @@ export function SourcePanel() {
             min="0"
             max="100"
             step="1"
+            randomizable={false}
             value={GEN_DEFAULTS.genNoise}
             unit="%"
-            morphable={false}
           />
           <ValueControl
             id="genRes"
@@ -162,8 +162,8 @@ export function SourcePanel() {
             min="32"
             max="192"
             step="1"
+            randomizable={false}
             value={GEN_DEFAULTS.genRes}
-            morphable={false}
           />
           <p className="gradient-note">
             The mesh rebuilds live. Higher resolutions are smoother but take longer to generate.

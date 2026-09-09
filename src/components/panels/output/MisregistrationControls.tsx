@@ -62,7 +62,6 @@ export function MisregistrationControls() {
           label="Copy 1 colour"
           defaultValue="#00a7e1"
           swatchId="misregistrationColor1Swatch"
-          morphable={false}
           disabled
           disabledReason={reason}
         />
@@ -71,7 +70,6 @@ export function MisregistrationControls() {
           label="Copy 2 colour"
           defaultValue="#ec008c"
           swatchId="misregistrationColor2Swatch"
-          morphable={false}
           disabled
           disabledReason={reason}
         />
@@ -80,7 +78,6 @@ export function MisregistrationControls() {
           label="Copy 3 colour"
           defaultValue="#ffd400"
           swatchId="misregistrationColor3Swatch"
-          morphable={false}
           disabled
           disabledReason={reason}
         />

@@ -40,6 +40,8 @@ lib/slicer.ts ── preview / clipboard / download
 
 Generative meshes and terrain use a separate path: `slicer.ts` sends source-discriminated parameters to `generative-mesh-worker.ts`, which calls `generativeMesh.ts` for implicit solids or `generative-terrain.ts` for square height fields and transfers typed-array buffers back to the main thread. Uploaded SVG artwork is parsed lazily through `svg-mesh.ts`. It can become an extruded mesh or scale-axis centreline polylines; centreline points and run offsets are transferred to the contour worker as typed arrays.
 
+`procedural-source.ts` resolves generative mesh and terrain settings before each contour instance's Object deformation. Render snapshots carry the source kind, up-axis correction and scalar generator parameters. Installed meshes carry a parameter signature so unchanged settings reuse the original mesh; changed morph instances and animation frames generate, weld, normalize and rebuild normals in the contour worker. A weak per-source LRU retains at most three variants within 64 MiB of geometry buffers. Animation edits never run the main-thread source installation path, preserving Config geometry and mesh versions. Source numeric settings participate in parameter history and timeline persistence. SVG import options and categorical tiling topology remain fixed source operations.
+
 ## Module responsibilities
 
 ### React layer
