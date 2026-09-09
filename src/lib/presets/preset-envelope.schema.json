@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Slicewise preset envelope version 1",
+  "description": "Transport envelope only. Each standard section also requires its mode-specific schema and semantic validation before application. Resource budgets, asset digests, reserved keys at every depth, and cross-field relationships are enforced by the runtime codec.",
+  "type": "object",
+  "required": [
+    "format",
+    "formatVersion",
+    "id",
+    "metadata",
+    "createdWith",
+    "entryMode",
+    "sections",
+    "assets"
+  ],
+  "properties": {
+    "format": { "const": "slicewise-preset" },
+    "formatVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/uuid" },
+    "metadata": {
+      "type": "object",
+      "required": ["name", "description", "tags", "createdAt", "updatedAt"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200, "pattern": "\\S" },
+        "description": { "type": "string", "maxLength": 16384 },
+        "tags": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/label" }
+        },
+        "createdAt": { "$ref": "#/$defs/timestamp" },
+        "updatedAt": { "$ref": "#/$defs/timestamp" },
+        "author": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "\\S" },
+        "license": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "\\S" },
+        "derivedFrom": { "$ref": "#/$defs/uuid" }
+      },
+      "additionalProperties": true
+    },
+    "createdWith": {
+      "type": "object",
+      "required": ["appVersion"],
+      "properties": {
+        "appVersion": { "$ref": "#/$defs/label" },
+        "build": { "$ref": "#/$defs/label" }
+      },
+      "additionalProperties": true
+    },
+    "entryMode": { "$ref": "#/$defs/identifier" },
+    "sections": {
+      "type": "object",
+      "maxProperties": 64,
+      "required": ["source", "drawing", "animation", "sequencer", "threeD", "export", "authoring"],
+      "propertyNames": { "$ref": "#/$defs/identifier" },
+      "additionalProperties": { "$ref": "#/$defs/section" }
+    },
+    "assets": {
+      "type": "object",
+      "maxProperties": 32,
+      "propertyNames": { "pattern": "^sha256-[a-f0-9]{64}$" },
+      "additionalProperties": { "$ref": "#/$defs/asset" }
+    },
+    "extensions": { "type": "object" }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "label": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "\\S" },
+    "identifier": { "type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$" },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "section": {
+      "type": "object",
+      "required": ["version", "requiredFeatures", "data"],
+      "properties": {
+        "version": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "requiredFeatures": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/identifier" }
+        },
+        "data": {}
+      },
+      "additionalProperties": true
+    },
+    "asset": {
+      "type": "object",
+      "required": ["mediaType", "name", "byteLength", "sha256", "content"],
+      "properties": {
+        "mediaType": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_.+-]+/[a-zA-Z0-9_.+-]+$"
+        },
+        "name": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "\\S" },
+        "byteLength": { "type": "integer", "minimum": 0, "maximum": 33554432 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "content": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "encoding", "data"],
+              "properties": {
+                "kind": { "const": "embedded" },
+                "encoding": { "const": "base64" },
+                "data": { "type": "string", "maxLength": 44739244, "contentEncoding": "base64" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "const": "external" } }
+            }
+          ]
+        }
+      },
+      "additionalProperties": true
+    }
+  }
+}

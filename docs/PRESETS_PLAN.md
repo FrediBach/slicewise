@@ -1,6 +1,6 @@
 # Portable presets plan
 
-Status: proposed design; no preset runtime or file API changes implemented.
+Status: implementation started. The transport envelope/schema, bounded codec, section migration/projection framework, unknown-data merging, asset hashing/encoding, parameter ownership inventory, and native file session/folder-scanning adapters are implemented and tested under `src/lib/presets/`. Mode-specific schemas/defaults, complete runtime capture/restore, source-byte retention on upload, handle persistence, the Local/Examples UI, and bundled examples remain pending. No preset import/export actions are exposed in the application yet.
 
 ## Scope and recommendation
 
@@ -155,3 +155,23 @@ Acceptance tests must cover:
 - Shared local/example import behavior, local-copy attribution, and validation of the complete bundled catalog.
 
 Run relevant unit/runtime/component tests and the project's full verification commands for implementation. Manually exercise pickers, permissions across reloads, folder operations, and each mode in a supporting browser; jsdom alone cannot verify native filesystem behavior.
+
+## Foundation implementation notes
+
+The envelope schema is `src/lib/presets/preset-envelope.schema.json`. It describes the transport, not valid runtime settings; a structurally valid document is not yet safe to apply. `preparePreset` requires explicit validating codecs for all seven standard sections, even if their modes are inactive. Unfamiliar sections are preserved during inspection; full preparation accepts them only when explicitly uninitialized (`data: null`) with no required features. The absence of declared requirements alone cannot establish that unfamiliar settings are inactive. There are deliberately no permissive production codecs until each mode has a complete parameter schema and restore adapter. Migration callbacks own version-specific defaults; application defaults must not be used implicitly.
+
+The initial budgets are 96 MiB per JSON file, 32 MiB per source asset, 64 MiB total decoded assets, 32 assets, 64 sections, 32 nesting levels, and 500,000 JSON nodes. Ordinary strings are limited to 1 MiB; embedded base64 strings have their own asset-derived bound. Asset resolution verifies canonical base64, actual byte lengths, and SHA-256 before returning detached bytes. No asset URL is fetched. Folder scanning is limited to 5,000 filesystem entries, eight nested levels, and 256 MiB read per scan. These are transport limits; mode codecs must enforce geometry, keyframe, lane, and parameter limits separately.
+
+Unknown object fields are retained against a previous supported projection so explicitly deleted known fields stay deleted. Arrays with stable IDs merge by ID across reordering; duplicate IDs or omitted unsupported members block editing. Arrays without IDs are replaced as complete values. Their section codecs must either model stable identity or block edits if unknown item fields would otherwise be lost. This constraint needs to be addressed for gradient stops and other positional compound arrays before full runtime integration.
+
+`inventory.ts` checks ownership of every current `AppState` key and every top-level Animation, Sequencer, and 3D project key at compile time. It reuses the exhaustive render-setting catalog and treats nested projects as owned structures. It does not claim to validate or capture their values yet. Remaining state outside these types must be integrated explicitly:
+
+- Config versus Animation's frozen Config snapshot and independent animation base settings.
+- Original imported mesh bytes, current SVG bytes, source revisions/normalization, and source identity remapping.
+- Paper preset/orientation controls, whose labels currently live in the DOM; square artboards need explicit orientation.
+- Randomization locks, which live outside `AppState`, and migrated control IDs.
+- `sequencerExportBars`, which lives outside the musical project.
+- 3D presentation style, orthographic projection, and inspection camera owned by the React/scene adapter. Artifact-relative comparisons, validation results, and visibility tied to a transient field key need separate transient classification.
+- Machine plane compensation values already live inside `uunaExpressiveMotion`; the saved machine-plane library remains separate. The 3D `sizeConfirmed` acknowledgement is transient and must be re-established for a restored source, while authored dimensions/units are preserved.
+
+`PresetFileSession` owns the digest baseline and serialized write queue for one open file. A caller must reuse that session for edits to the same file and perform domain preparation before saving authored runtime data. Metadata-only scanning keeps duplicate UUIDs separate by relative path and releases full documents after indexing. The file adapter handles storage; the forthcoming UI owns prompts, dirty-state presentation, timestamps/UUID creation, copy/rename/delete workflows, and user-gesture permission requests. Native picker behavior has not yet been manually exercised through application UI.

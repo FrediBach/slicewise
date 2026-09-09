@@ -55,6 +55,8 @@ Prefer Node for geometry and serialization tests: it starts faster and makes acc
 
 ## What to test
 
+Portable preset foundations can be checked with `npm test -- src/lib/presets`. Tests cover structural envelope round trips for all workspace modes, resource and non-JSON guards, explicit migrations, required-feature checks, retained unknown fields, ID-based array merging, source-byte integrity, and parameter ownership. File tests use small structural native-handle doubles to verify write/close failures, retries, queued snapshots, external changes, picker invocation, permission handling, duplicate file identities, and bounded directory traversal. These tests do not establish complete runtime parameter capture/restore or native browser picker behavior; those integrations are still pending.
+
 Prioritize observable contracts and failure-prone transformations:
 
 - Parsers: accepted variants, triangulation, malformed input, and useful errors.

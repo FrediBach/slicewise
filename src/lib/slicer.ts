@@ -205,7 +205,7 @@ type RenderMesh = ContourMesh & {
 type NormalizedMesh = Omit<RenderMesh, 'N'> & { N?: Float32Array };
 
 type RenderSettings = Omit<ContourSettings, 'documentTitle' | 'suppressBackground'>;
-type AppState = RenderSettings &
+export type AppState = RenderSettings &
   GenerativeParams &
   TerrainParams & {
     mesh: RenderMesh | null;
